@@ -6,14 +6,15 @@ import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, write
 import { join } from 'node:path';
 
 // The napi CLI builds with an explicit --target, so Cargo's output is under
-// target/<triple>/release.
+// <target dir>/<triple>/release, where the target dir honours CARGO_TARGET_DIR.
 const TRIPLES = {
   'linux-x64': 'x86_64-unknown-linux-gnu',
   'darwin-arm64': 'aarch64-apple-darwin',
   'win32-x64': 'x86_64-pc-windows-msvc',
 };
 const triple = TRIPLES[`${process.platform}-${process.arch}`];
-const recorded = join('target', triple ?? 'unsupported', 'release', 'oxgl-angle-dir');
+const targetDir = process.env.CARGO_TARGET_DIR || 'target';
+const recorded = join(targetDir, triple ?? 'unsupported', 'release', 'oxgl-angle-dir');
 if (!existsSync(recorded)) {
   console.error(`stage-angle: ${recorded} not found; build the native addon first (npm run build:native).`);
   process.exit(1);

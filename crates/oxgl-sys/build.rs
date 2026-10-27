@@ -88,6 +88,9 @@ fn run() -> Result<()> {
         cached_or_downloaded(&url, &sha256)?
     };
     check_layout(&bundle, platform)?;
+    // Re-run (and re-download if needed) when the bundle directory is deleted
+    // or changes, so the recorded path never goes stale.
+    println!("cargo::rerun-if-changed={}", bundle.display());
 
     let profile_dir = PathBuf::from(var("OUT_DIR")?)
         .ancestors()

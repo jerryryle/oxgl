@@ -202,6 +202,9 @@ def main() -> None:
             if path.suffix == ".TOC" or path.is_symlink():
                 continue
             shutil.copy(path, symbols / path.name)
+            pdb = path.with_name(f"{path.name}.pdb")  # Windows debug symbols, e.g. libGLESv2.dll.pdb
+            if pdb.exists():
+                shutil.copy(pdb, symbols / pdb.name)
             shutil.copy(path, stage / "lib" / path.name)
             strip(stage / "lib" / path.name, platform)
             libs.append(stage / "lib" / path.name)
