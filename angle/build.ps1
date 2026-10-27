@@ -24,6 +24,8 @@ function Fetch {
   if (-not (Test-Path "$work\depot_tools")) { Invoke-Checked git clone https://chromium.googlesource.com/chromium/tools/depot_tools "$work\depot_tools" }
   Invoke-Checked git -C "$work\depot_tools" fetch --quiet origin
   Invoke-Checked git -C "$work\depot_tools" checkout --quiet $depotToolsCommit
+  # Normally done by depot_tools' self-update, which is disabled to keep the pin.
+  Invoke-Checked cmd /c "$work\depot_tools\bootstrap\win_tools.bat"
   # Only the pinned commit is needed, so fetch it alone rather than all history.
   if (-not (Test-Path "$work\angle\.git")) {
     Invoke-Checked git init --quiet "$work\angle"
