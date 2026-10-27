@@ -1,32 +1,67 @@
 schema: spec-driven
 
-# Project context (optional)
-# Add only constraints that should guide OpenSpec artifacts and workflows.
-# Include constraints an agent cannot infer by reading the code.
-# Keep general project documentation and discoverable codebase facts out.
-# Example:
-#   context: |
-#     Designs and tasks must cover Windows, macOS, and Linux
-#     Write all artifacts in Spanish
+# Project-wide context inherited by every OpenSpec artifact and workflow.
+context: |
+  Product: oxgl, a fully standards-compliant WebGL 1 and WebGL 2 implementation
+  for Node.js. It must behave exactly as a browser's WebGL does, run headless,
+  and fall back to a software renderer when no GPU is available. Memory leaks,
+  crashes, and undefined behavior are not acceptable.
 
-# Per-artifact rules (optional)
-# Add custom rules for specific artifacts.
-# Example:
-#   rules:
-#     proposal:
-#       - Keep proposals under 500 words
-#       - Always state what is out of scope
-#     tasks:
-#       - Break tasks into chunks of max 2 hours
+  Stack and architecture:
+  - Rust for all implementation code; napi-rs for the Node binding (N-API,
+    ABI-stable, prebuilt binaries per platform).
+  - ANGLE is the rendering backend via EGL and GLES. Backend selection happens
+    at EGL display creation: Vulkan, Metal, or D3D11 for GPU; SwiftShader for the
+    software fallback. Contexts are headless (pbuffer or surfaceless); no window
+    system may be required.
+  - Cargo workspace with three crates:
+    - oxgl-sys: all FFI (ANGLE, plus minimal Node-API typed-array access behind a
+      `node` feature). The ONLY crate allowed unsafe code.
+    - oxgl-core: safe layer owning contexts, handles, validation, and error
+      state. #![forbid(unsafe_code)].
+    - oxgl-node: napi-rs binding. #![forbid(unsafe_code)] except where napi-rs
+      macros require otherwise (any exemption is scoped and justified).
+  - A JS/TS package at the repo root, published to npm as `oxgl`, with types
+    matching the WebGL IDL.
+  - Target platforms: Linux x64, macOS arm64, Windows x64.
 
-# Per-operation guidance (optional)
-# Add advisory guidance for how apply and archive work should be conducted.
-# This is separate from artifact rules above.
-# Example:
-#   operations:
-#     apply:
-#       guidance:
-#         - Keep test summaries concise
-#     archive:
-#       guidance:
-#         - Summarize the archive outcome before finishing
+  Safety rules (non-negotiable; every design and task must honor them):
+  - Every unsafe block has a `// SAFETY:` comment; #![deny(unsafe_op_in_unsafe_fn)].
+  - No unwrap, expect, or panic in non-test code. Errors map to WebGL error
+    semantics (getError, context loss) or to JS exceptions where the WebGL spec
+    requires them.
+  - WebGL objects are generational handles in a slotmap, never raw pointers.
+    JS finalizers enqueue GL deletion; the owning context drains the queue on
+    its thread. Destroying or losing a context invalidates all of its handles.
+  - Never retain pointers into JS ArrayBuffers beyond the duration of a call.
+  - Clippy pedantic in CI, warnings as errors.
+
+  Licensing: oxgl is BSD-3-Clause. Every dependency bundled into a distributed
+  artifact must carry an allowlisted permissive license (see the licensing
+  spec), and its license and NOTICE texts ship with the package in
+  THIRD_PARTY_NOTICES.
+
+  Tooling: always invoke OpenSpec as `npx openspec` (pinned devDependency),
+  never a bare `openspec` command or a global install.
+
+  Spec conventions:
+  - Capabilities mirror the WebGL specification (e.g. context-creation,
+    buffers, textures, shaders-programs, framebuffers, drawing, extensions,
+    context-loss), plus non-spec capabilities: backend-selection, node-api,
+    and project infrastructure (workspace, continuous-integration, angle-distribution).
+  - Where behavior is defined by the Khronos WebGL 1.0 / 2.0 or OpenGL ES
+    2.0 / 3.0 specifications, requirements cite the relevant spec section
+    (e.g. "WebGL 1.0 §5.14.11") rather than restating it, and scenarios
+    reference the matching Khronos WebGL conformance test (path under
+    sdk/tests/conformance or conformance2) when one exists.
+
+rules:
+  proposal:
+    - State what is explicitly out of scope and which extension points are left for later work.
+  specs:
+    - Cite the Khronos spec section for any spec-defined behavior instead of restating it.
+    - Reference matching Khronos conformance tests in scenarios when they exist.
+  design:
+    - Explain how the design honors each safety rule it touches (unsafe confinement, no panics, handle model, ArrayBuffer lifetime).
+  tasks:
+    - Include a verification task (tests, clippy pedantic) for each implementation group.
