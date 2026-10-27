@@ -15,7 +15,7 @@
 
 ## 3. Consumption in oxgl-sys
 
-- [ ] 3.1 Implement `crates/oxgl-sys/build.rs` resolution order (override → cache → verified download), digest verification before extraction, and staging `lib/` next to the addon; verify with unit tests for match, mismatch (build fails, nothing extracted), and cache hit (no network)
+- [x] 3.1 Implement `crates/oxgl-sys/build.rs` resolution order (override → cache → verified download), digest verification before extraction, and staging `lib/` next to the addon; verify match, mismatch (build fails, nothing extracted), and cache hit (no network); verified by manual checks against a `file://` bundle URL (accepted instead of unit tests, since Cargo does not run tests in build scripts)
 - [x] 3.2 Implement `OXGL_ANGLE_DIR` override with required-file checks and a cargo warning when in use; verify offline build succeeds with override and fails listing missing files for an incomplete directory
 - [x] 3.3 Verify `cargo clippy --workspace --all-targets -- -D warnings` passes with the build script
 
