@@ -1,0 +1,10 @@
+{
+  "name": "oxgl",
+  "private": true,
+  "scripts": {
+    "openspec": "openspec"
+  },
+  "devDependencies": {
+    "@fission-ai/openspec": "1.15.0"
+  }
+}
