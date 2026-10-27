@@ -79,7 +79,7 @@ The project license is **BSD-3-Clause**. It matches ANGLE, the core dependency, 
 |---|---|
 | ANGLE (and Chromium `base`-derived code it builds) | BSD-3-Clause |
 | SwiftShader, Vulkan loader, SPIRV-Tools, abseil | Apache-2.0 |
-| LLVM / Subzero inside SwiftShader, Chromium's bundled libc++ | Apache-2.0 WITH LLVM-exception |
+| LLVM inside SwiftShader, Chromium's bundled libc++, llvm-libc | Apache-2.0 WITH LLVM-exception, plus NCSA and Spencer-94 for LLVM's legacy and regex code |
 | zlib, xxhash | Zlib, BSD-2-Clause |
 | Rust crates: napi-rs, libloading, slotmap and the Rust standard library | MIT, ISC, Zlib, MIT OR Apache-2.0 |
 

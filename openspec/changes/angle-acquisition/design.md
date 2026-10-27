@@ -43,7 +43,7 @@ chromium_branch = "chromium/NNNN"   # informational: which stable branch the com
 bundle_version = "angle-NNNN.<n>"   # release tag; <n> increments for rebuilds of the same branch
 
 [platform.linux-x64]
-url    = "https://github.com/<org>/oxgl/releases/download/angle-NNNN.n/angle-linux-x64.tar.zst"
+url    = "https://github.com/<org>/oxgl/releases/download/angle-NNNN.n/angle-linux-x64.tar.xz"
 sha256 = "<64-hex>"
 # ... macos-arm64, windows-x64
 ```
@@ -65,11 +65,11 @@ licenses/  ANGLE (BSD-3), SwiftShader (Apache-2.0), LLVM/Subzero, Vulkan loader,
 BUILD_INFO.json  commit, branch, gn args, clang revision, SDK versions, glibc max symbol version (Linux), file digests
 ```
 
-Compressed with zstd; debug symbols in a sibling `-symbols` asset.
+Compressed with xz (Python's standard library writes it, and the pure-Rust `lzma-rs` reads it, so neither side needs a native zstd); debug symbols in a sibling `-symbols` asset.
 
 ### Consumption by `oxgl-sys`
 
-`build.rs` resolves the bundle in this order: `OXGL_ANGLE_DIR` → cache (`$CARGO_HOME/oxgl-angle/<sha256>/`, or `OXGL_ANGLE_CACHE`) → download from the pinned URL. It verifies SHA-256 before extracting, then exposes the include path for bindgen (in `headless-context`) and copies `lib/` next to the built `.node` file.
+`build.rs` resolves the bundle in this order: `OXGL_ANGLE_DIR` → cache (`$CARGO_HOME/oxgl-angle/<sha256>/`, or `OXGL_ANGLE_CACHE`) → download from the pinned URL with `curl` (no HTTP/TLS crates in the build script, so no TLS-roots license issue). It verifies SHA-256 before extracting, then exposes the include path for bindgen (in `headless-context`) and records the bundle path in `target/<profile>/oxgl-angle-dir`. `npm run build` (`scripts/stage-angle.mjs`) then copies `lib/` to `dist/angle/` next to the built `.node` file and writes `dist/THIRD_PARTY_NOTICES`: the committed Rust-crate notices plus the license texts of every bundle component. A build script can't know where napi-rs puts the addon, so staging happens in the npm build.
 
 ANGLE is **loaded at runtime by absolute path** (via `libloading` inside `oxgl-sys`), not linked at build time. The loader takes the bundle directory explicitly: the Node addon passes the directory next to the `.node` file, and Rust tests in any workspace crate (including `cargo test` and the ASan job, where no addon exists) get the staged directory from `oxgl_sys::test_support::bundle_dir()`. That function exists only with oxgl-sys's `test-support` feature, enabled through dev-dependencies, and is the only code that reads the build-time path (`cargo:rustc-env` from `build.rs`), so release binaries never embed the build machine's path. The production loader has no fallback, and the system library search path is never used. Reasons: avoids picking up a system `libEGL` (glvnd on Linux) or a different ANGLE already loaded in the process; avoids rpath/install-name/DLL-search-path differences across platforms; lets a missing library surface as a coded JS error instead of a dlopen failure at `require` time. GLES entry points are resolved through `eglGetProcAddress`. This adds `unsafe` only in `oxgl-sys`, as the rules require.
 

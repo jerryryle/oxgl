@@ -14,7 +14,7 @@ oxgl SHALL be licensed under BSD-3-Clause. The repository root SHALL contain the
 - **THEN** each declares `BSD-3-Clause`, and `LICENSE` contains the BSD 3-Clause text naming Jerry Ryle as copyright holder
 
 ### Requirement: Bundled dependency licenses are compatible
-Every dependency compiled, linked, or copied into a distributed artifact (the native addon, the JS package, the ANGLE bundle) SHALL carry a license on the project's allowlist: `BSD-3-Clause`, `BSD-2-Clause`, `MIT`, `ISC`, `Zlib`, `Apache-2.0`, `Apache-2.0 WITH LLVM-exception`, `BSL-1.0`, or `Unicode-3.0`. Any other license, including any copyleft license, SHALL fail the build's license check until the allowlist is changed in a reviewed change.
+Every dependency compiled, linked, or copied into a distributed artifact (the native addon, the JS package, the ANGLE bundle) SHALL carry a license on the project's allowlist: `BSD-3-Clause`, `BSD-2-Clause`, `MIT`, `ISC`, `Zlib`, `Apache-2.0`, `Apache-2.0 WITH LLVM-exception`, `BSL-1.0`, `Unicode-3.0`, `NCSA`, or `Spencer-94`. Any other license, including any copyleft license, SHALL fail the build's license check until the allowlist is changed in a reviewed change.
 
 #### Scenario: Copyleft crate rejected
 - **WHEN** a dependency licensed only under `GPL-3.0` or `LGPL-2.1` is added to a crate that ships in the addon

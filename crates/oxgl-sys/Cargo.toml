@@ -9,3 +9,9 @@ publish.workspace = true
 
 [lints]
 workspace = true
+
+[build-dependencies]
+lzma-rs = "0.3.0"
+sha2 = "0.11.1"
+tar = "0.4.46"
+toml = "1.1.8"
