@@ -1,10 +1,20 @@
-# Builds the oxgl ANGLE bundles from the revision in angle/pin.toml and uploads
-# them to a draft release. Run manually after editing the pin; then copy the
+# Builds the oxgl ANGLE bundles from the revision in angle/pin.toml.
+# On pull requests that touch the recipe it builds, checks and smoke-tests all
+# three platforms and keeps the bundles as run artifacts. Run manually
+# (workflow_dispatch) to also upload them to a draft release, then copy the
 # printed digests into angle/pin.toml (see angle/README.md).
 name: angle-build
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - "angle/**"
+      - ".github/workflows/angle-build.yml"
+
+concurrency:
+  group: angle-build-${{ github.ref }}
+  cancel-in-progress: true
 
 permissions:
   contents: read
@@ -82,6 +92,8 @@ jobs:
 
   release:
     needs: build
+    # Releases are only created by a deliberate manual run, never by a PR.
+    if: github.event_name == 'workflow_dispatch'
     runs-on: ubuntu-24.04
     permissions:
       contents: write

@@ -77,9 +77,11 @@ OXGL_ANGLE_DIR=~/.cache/oxgl/angle-build/dist/angle-macos-arm64 npm run build
 1. Pick the ANGLE commit Chrome stable ships (chromiumdash.appspot.com lists it
    under the release's hashes) and set `angle_commit`, `chromium_branch`, and a
    new `bundle_version` in `pin.toml`. Optionally bump `depot_tools_commit`.
-2. Run the `angle-build` workflow (Actions → angle-build → Run workflow). It
-   builds and smoke-tests all three platforms and creates a draft release
-   named after `bundle_version`, with the digests in its summary.
+2. Open a PR with the pin change: `angle-build` runs automatically and builds,
+   checks and smoke-tests all three platforms. After it merges, run
+   `angle-build` by hand from `main` (Actions → angle-build → Run workflow); that
+   run creates a draft release named after `bundle_version`, with the digests
+   in its summary.
 3. Copy each platform's URL and sha256 into `pin.toml`, run
    `python3 angle/scripts/check_pin.py`, and open a PR; CI builds against the
    new bundles.
