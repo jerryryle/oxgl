@@ -1,0 +1,26 @@
+[package]
+name = "oxgl-node"
+description = "Node-API binding for oxgl (napi-rs)."
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+publish.workspace = true
+
+[lib]
+crate-type = ["cdylib"]
+# A Node addon's test harness would reference Node-API symbols that only exist
+# inside node, so its tests run under Node instead (see test/).
+test = false
+doctest = false
+
+[dependencies]
+napi = { version = "3.15.0", default-features = false, features = ["napi9"] }
+napi-derive = "3.6.13"
+oxgl-core = { path = "../oxgl-core" }
+
+[build-dependencies]
+napi-build = "2.6.0"
+
+[lints]
+workspace = true
