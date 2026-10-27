@@ -60,10 +60,36 @@ jobs:
       - name: Build bundle (Linux, macOS)
         if: runner.os != 'Windows'
         run: angle/build.sh all ${{ matrix.platform }}
+      - name: Fetch ANGLE (Windows)
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: angle/build.ps1 fetch
+      - name: Install the Windows SDK the pinned Chromium build requires
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          # Chromium pins an exact SDK (SDK_VERSION in build/vs_toolchain.py), which
+          # the runner image may not ship; add it as a Visual Studio component.
+          $toolchain = Get-Content "$env:OXGL_ANGLE_WORK\angle\build\vs_toolchain.py" -Raw
+          $sdk = [regex]::Match($toolchain, "SDK_VERSION = '([0-9.]+)'").Groups[1].Value
+          if (-not $sdk) { throw 'SDK_VERSION not found in build/vs_toolchain.py' }
+          $include = "${env:ProgramFiles(x86)}\Windows Kits\10\Include\$sdk\um"
+          if (Test-Path $include) { "Windows SDK $sdk already installed"; exit 0 }
+          $component = "Microsoft.VisualStudio.Component.Windows11SDK.$($sdk.Split('.')[2])"
+          $vswhere = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vswhere.exe"
+          $vs = & $vswhere -latest -property installationPath
+          $installer = "${env:ProgramFiles(x86)}\Microsoft Visual Studio\Installer\vs_installer.exe"
+          "Installing $component into $vs"
+          $p = Start-Process -FilePath $installer -Wait -PassThru -ArgumentList @(
+            'modify', '--installPath', "`"$vs`"", '--add', $component, '--quiet', '--norestart', '--nocache')
+          if ($p.ExitCode -notin 0, 3010) { throw "vs_installer exited with $($p.ExitCode)" }
+          if (-not (Test-Path $include)) { throw "Windows SDK $sdk headers not found after install: $include" }
       - name: Build bundle (Windows)
         if: runner.os == 'Windows'
         shell: pwsh
-        run: angle/build.ps1 all
+        run: |
+          angle/build.ps1 build
+          angle/build.ps1 bundle
 
       - name: Smoke test (Linux, macOS)
         if: runner.os != 'Windows'
