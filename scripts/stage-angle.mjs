@@ -2,18 +2,25 @@
 // native addon (dist/angle/), and writes dist/THIRD_PARTY_NOTICES: the Rust
 // crate notices from THIRD_PARTY_NOTICES followed by the license texts of
 // every ANGLE bundle component.
+import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, readFileSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 // The napi CLI builds with an explicit --target, so Cargo's output is under
-// <target dir>/<triple>/release, where the target dir honours CARGO_TARGET_DIR.
+// <target dir>/<triple>/release. Cargo resolves the target dir from
+// CARGO_TARGET_DIR, build.target-dir in its config files, or the default, so
+// ask it rather than guessing.
 const TRIPLES = {
   'linux-x64': 'x86_64-unknown-linux-gnu',
   'darwin-arm64': 'aarch64-apple-darwin',
   'win32-x64': 'x86_64-pc-windows-msvc',
 };
 const triple = TRIPLES[`${process.platform}-${process.arch}`];
-const targetDir = process.env.CARGO_TARGET_DIR || 'target';
+const metadata = execFileSync('cargo', ['metadata', '--format-version', '1', '--no-deps'], {
+  encoding: 'utf8',
+  stdio: ['ignore', 'pipe', 'inherit'],
+});
+const targetDir = JSON.parse(metadata).target_directory;
 const recorded = join(targetDir, triple ?? 'unsupported', 'release', 'oxgl-angle-dir');
 if (!existsSync(recorded)) {
   console.error(`stage-angle: ${recorded} not found; build the native addon first (npm run build:native).`);
