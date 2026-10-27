@@ -34,10 +34,12 @@ fetch() {
   git -C "$work/depot_tools" checkout --quiet "$depot_tools_commit"
   "$work/depot_tools/ensure_bootstrap"   # normally done by self-update, which is disabled
 
+  # Only the pinned commit is needed, so fetch it alone rather than all history.
   if [[ ! -d "$work/angle/.git" ]]; then
-    git clone https://chromium.googlesource.com/angle/angle "$work/angle"
+    git init --quiet "$work/angle"
+    git -C "$work/angle" remote add origin https://chromium.googlesource.com/angle/angle
   fi
-  git -C "$work/angle" fetch --quiet origin "$angle_commit"
+  git -C "$work/angle" fetch --quiet --depth 1 origin "$angle_commit"
   git -C "$work/angle" checkout --quiet --force "$angle_commit"
   (cd "$work/angle" && python3 scripts/bootstrap.py && gclient sync -D --force --no-history --jobs 16)
 }

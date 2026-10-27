@@ -45,8 +45,11 @@ def fail(message: str) -> None:
     sys.exit(f"bundle: {message}")
 
 
-def run(*args: str, cwd: Path | None = None) -> str:
-    return subprocess.run(args, cwd=cwd, check=True, capture_output=True, text=True).stdout
+def run(program: str, *args: str, cwd: Path | None = None) -> str:
+    # shutil.which honours PATHEXT, so depot_tools' gn.bat is found on Windows,
+    # where subprocess alone only resolves .exe files.
+    executable = shutil.which(program) or program
+    return subprocess.run([executable, *args], cwd=cwd, check=True, capture_output=True, text=True).stdout
 
 
 def sha256(path: Path) -> str:
@@ -136,7 +139,14 @@ def collect_licenses(src: Path, out: Path, stage: Path) -> list[dict[str, str]]:
             problems.append(f"{rel}: license text not found {missing}")
             continue
         for text in texts:
-            shutil.copy(text, licenses_dir / f"{name}.{text.name}")
+            # Named by relative path: a component may list several files with the
+            # same basename (src/LICENSE, src/third_party/x/LICENSE).
+            base = REPO if text.is_relative_to(REPO) else src
+            flat = text.relative_to(base).as_posix().replace("/", "__")
+            target = licenses_dir / f"{name}.{flat}"
+            if target.exists():
+                fail(f"license file name collision: {target.name}")
+            shutil.copy(text, target)
         components.append({"name": name, "path": rel, "license": spdx})
     if problems:
         fail("license check failed:\n  " + "\n  ".join(problems))

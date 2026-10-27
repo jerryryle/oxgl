@@ -70,6 +70,14 @@ fn run() -> Result<()> {
 
     let bundle = if let Some(dir) = env::var_os("OXGL_ANGLE_DIR") {
         let dir = PathBuf::from(dir);
+        // Cargo runs build scripts from the package directory, so a relative
+        // path would not mean what the caller intended.
+        if dir.is_relative() {
+            return Err(format!(
+                "OXGL_ANGLE_DIR must be an absolute path, got {}",
+                dir.display()
+            ));
+        }
         println!(
             "cargo::warning=using ANGLE bundle from OXGL_ANGLE_DIR={}",
             dir.display()
@@ -143,9 +151,12 @@ fn cached_or_downloaded(url: &str, expected: &str) -> Result<PathBuf> {
     }
     fs::create_dir_all(&root).map_err(|e| format!("cannot create {}: {e}", root.display()))?;
 
+    // Concurrent builds (rust-analyzer next to a terminal build, say) share this
+    // cache, so temporary paths are per process and only renames publish.
+    let pid = std::process::id();
     let archive = root.join(format!("{expected}.tar.xz"));
     if !archive.exists() {
-        let partial = root.join(format!("{expected}.tar.xz.part"));
+        let partial = root.join(format!("{expected}.tar.xz.{pid}.part"));
         let status = Command::new("curl")
             .args([
                 "--fail",
@@ -163,7 +174,12 @@ fn cached_or_downloaded(url: &str, expected: &str) -> Result<PathBuf> {
         if !status.success() {
             return Err(format!("downloading {url} failed ({status})"));
         }
-        fs::rename(&partial, &archive).map_err(|e| format!("cannot finish download: {e}"))?;
+        if let Err(e) = fs::rename(&partial, &archive) {
+            let _ = fs::remove_file(&partial);
+            if !archive.exists() {
+                return Err(format!("cannot finish download: {e}"));
+            }
+        }
     }
 
     let bytes =
@@ -181,7 +197,7 @@ fn cached_or_downloaded(url: &str, expected: &str) -> Result<PathBuf> {
         ));
     }
 
-    let staging = root.join(format!("{expected}.extracting"));
+    let staging = root.join(format!("{expected}.{pid}.extracting"));
     let _ = fs::remove_dir_all(&staging);
     let mut tar_bytes = Vec::new();
     lzma_rs::xz_decompress(&mut BufReader::new(Cursor::new(bytes)), &mut tar_bytes)
@@ -191,9 +207,18 @@ fn cached_or_downloaded(url: &str, expected: &str) -> Result<PathBuf> {
         .map_err(|e| format!("cannot extract the ANGLE bundle: {e}"))?;
     fs::write(staging.join(".complete"), expected)
         .map_err(|e| format!("cannot mark the ANGLE bundle complete: {e}"))?;
+    if dir.join(".complete").exists() {
+        // Another build finished first; its copy is identical.
+        let _ = fs::remove_dir_all(&staging);
+        return Ok(dir);
+    }
     let _ = fs::remove_dir_all(&dir);
-    fs::rename(&staging, &dir)
-        .map_err(|e| format!("cannot move the ANGLE bundle into the cache: {e}"))?;
+    if let Err(e) = fs::rename(&staging, &dir) {
+        let _ = fs::remove_dir_all(&staging);
+        if !dir.join(".complete").exists() {
+            return Err(format!("cannot move the ANGLE bundle into the cache: {e}"));
+        }
+    }
     Ok(dir)
 }
 

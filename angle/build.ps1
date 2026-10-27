@@ -24,8 +24,12 @@ function Fetch {
   if (-not (Test-Path "$work\depot_tools")) { Invoke-Checked git clone https://chromium.googlesource.com/chromium/tools/depot_tools "$work\depot_tools" }
   Invoke-Checked git -C "$work\depot_tools" fetch --quiet origin
   Invoke-Checked git -C "$work\depot_tools" checkout --quiet $depotToolsCommit
-  if (-not (Test-Path "$work\angle\.git")) { Invoke-Checked git clone https://chromium.googlesource.com/angle/angle "$work\angle" }
-  Invoke-Checked git -C "$work\angle" fetch --quiet origin $angleCommit
+  # Only the pinned commit is needed, so fetch it alone rather than all history.
+  if (-not (Test-Path "$work\angle\.git")) {
+    Invoke-Checked git init --quiet "$work\angle"
+    Invoke-Checked git -C "$work\angle" remote add origin https://chromium.googlesource.com/angle/angle
+  }
+  Invoke-Checked git -C "$work\angle" fetch --quiet --depth 1 origin $angleCommit
   Invoke-Checked git -C "$work\angle" checkout --quiet --force $angleCommit
   Push-Location "$work\angle"
   try {

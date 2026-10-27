@@ -98,9 +98,15 @@ jobs:
           tag="$(angle/scripts/pin.sh bundle_version)"
           commit="$(angle/scripts/pin.sh angle_commit)"
           (cd bundles && sha256sum ./*.tar.xz | tee SHA256SUMS)
-          gh release create "$tag" bundles/*.tar.xz bundles/SHA256SUMS \
-            --draft --title "ANGLE bundle $tag" \
-            --notes "ANGLE $commit built by angle/build.sh. Digests are in SHA256SUMS; copy them into angle/pin.toml."
+          if gh release view "$tag" >/dev/null 2>&1; then
+            # Re-run at the same pin (e.g. to restore a deleted asset).
+            gh release upload "$tag" bundles/*.tar.xz bundles/SHA256SUMS --clobber
+          else
+            # Tag the commit whose recipe built these bundles, not the default branch.
+            gh release create "$tag" bundles/*.tar.xz bundles/SHA256SUMS \
+              --draft --target "$GITHUB_SHA" --title "ANGLE bundle $tag" \
+              --notes "ANGLE $commit built by angle/build.sh at ${GITHUB_SHA}. Digests are in SHA256SUMS; copy them into angle/pin.toml."
+          fi
           {
             echo "### ANGLE bundle digests ($tag)"
             echo '```'
