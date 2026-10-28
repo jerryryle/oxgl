@@ -51,7 +51,9 @@ build() {
   out="$(out_dir "$platform")"
   mkdir -p "$out"
   cat "$here/args/common.gn" "$here/args/$platform.gn" > "$out/args.gn"
-  (cd "$work/angle" && gn gen "$out" && autoninja -C "$out" $(cat "$here/args/targets.txt"))
+  (cd "$work/angle" && gn gen "$out")
+  python3 "$here/scripts/bundle.py" --preflight "$platform" "$out" "$work/angle"
+  (cd "$work/angle" && autoninja -C "$out" $(cat "$here/args/targets.txt"))
 }
 
 bundle() {

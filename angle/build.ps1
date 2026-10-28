@@ -47,6 +47,7 @@ function Build {
   Push-Location "$work\angle"
   try {
     Invoke-Checked gn.bat gen $out
+    Invoke-Checked python "$here\scripts\bundle.py" --preflight $platform $out "$work\angle"
     Invoke-Checked autoninja.bat -C $out @targets
   } finally { Pop-Location }
 }

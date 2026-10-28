@@ -2,6 +2,12 @@
 """Assembles, checks and archives an oxgl ANGLE bundle from a finished build.
 
     bundle.py <platform> <out-dir> <angle-src> <dist-dir> <bundle-version> <angle-commit>
+    bundle.py --preflight <platform> <out-dir> <angle-src>
+
+--preflight runs only the checks that need no compiled output (required GN
+args, component licenses), right after `gn gen`, so they fail before the
+long compile instead of after it.
+
 
 Produces <dist-dir>/angle-<platform>.tar.xz (stripped libraries, headers,
 licenses, BUILD_INFO.json) and angle-<platform>-symbols.tar.xz (unstripped
@@ -19,6 +25,7 @@ import shutil
 import subprocess
 import sys
 import tarfile
+import tempfile
 import tomllib
 from pathlib import Path
 
@@ -181,9 +188,22 @@ def archive(directory: Path, target: Path) -> None:
             tar.add(path, arcname=path.relative_to(directory), recursive=False)
 
 
+def preflight(platform: str, out: Path, src: Path) -> None:
+    effective_args(src, out, platform)
+    with tempfile.TemporaryDirectory() as scratch:
+        collect_licenses(src, out, Path(scratch))
+    print(f"preflight passed for {platform}")
+
+
 def main() -> None:
+    if len(sys.argv) == 5 and sys.argv[1] == "--preflight":
+        platform, out, src = sys.argv[2:]
+        if platform not in LIB_PATTERNS:
+            fail(f"unknown platform {platform}")
+        preflight(platform, Path(out), Path(src))
+        return
     if len(sys.argv) != 7:
-        fail(__doc__.strip().splitlines()[2].strip())
+        fail("usage:\n" + "\n".join(__doc__.strip().splitlines()[2:4]))
     platform, out, src, dist, version, commit = sys.argv[1:]
     out, src, dist = Path(out), Path(src), Path(dist)
     if platform not in LIB_PATTERNS:

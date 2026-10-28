@@ -35,6 +35,8 @@ Bundles are `angle-<platform>.tar.xz`; unstripped libraries are in
 missing, a required backend is not enabled, a linked component's license is
 missing or not on the allowlist in `deny.toml`, or (Linux) a library links
 X11/xcb/Wayland or needs glibc newer than 2.31.
+The GN-arg and license checks also run right after `gn gen`
+(`bundle.py --preflight`), so they fail before the compile rather than after it.
 
 ## How oxgl-sys finds a bundle
 
