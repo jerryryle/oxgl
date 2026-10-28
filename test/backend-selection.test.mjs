@@ -70,12 +70,14 @@ async function runWorker(override) {
   const worker = new Worker(new URL('./fixtures/backend-worker.mjs', import.meta.url), {
     workerData: { override },
   });
-  const [message] = await once(worker, 'message');
-  await once(worker, 'exit');
+  // Listen for both before awaiting either: a worker that posts and exits
+  // quickly has its message drained and 'exit' emitted in one synchronous
+  // step, before an `await` on 'message' could register the 'exit' listener.
+  const [[message]] = await Promise.all([once(worker, 'message'), once(worker, 'exit')]);
   return message;
 }
 
-test('override set inside a worker', async () => {
+test('override set inside a worker', { timeout: 30_000 }, async () => {
   const result = await runWorker('software');
   assert.ok(result.ok, result.message);
   assert.deepEqual(result.pixel, [0, 255, 0, 255]);
