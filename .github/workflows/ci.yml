@@ -97,9 +97,6 @@ jobs:
       - run: npm run lint:js
       - run: cargo test --workspace --exclude oxgl-node --locked
       - run: npm run build
-      # TEMP-DIAG: remove before merge (task 2.4).
-      - name: LOAD alignment of the addon
-        run: for f in dist/*.node; do echo "$f"; readelf -lW "$f" | grep LOAD; done
       - run: npm test
         env:
           OXGL_BACKEND: software
