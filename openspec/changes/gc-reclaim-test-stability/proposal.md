@@ -25,7 +25,7 @@ None.
 
 ### Modified Capabilities
 
-- `context-creation`: the "Garbage-collected contexts release resources" requirement's scenario "Dropped contexts are reclaimed" changes how growth is measured. The requirement text itself is unchanged.
+- `context-creation`: the "Garbage-collected contexts release resources" requirement's scenario "Dropped contexts are reclaimed" changes how growth is measured, and the requirement gains an accepted-trade-off paragraph. Its normative sentence is unchanged.
 
 ## Impact
 
