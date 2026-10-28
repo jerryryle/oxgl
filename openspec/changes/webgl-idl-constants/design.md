@@ -16,7 +16,7 @@ The conformance runner (`conformance/page.mjs`, `contextSource()`) evaluates `di
 
 ### Tables generated from the Khronos IDL, checked in
 
-`scripts/webgl-constants.mjs` fetches `specs/latest/1.0/webgl.idl` and `specs/latest/2.0/webgl2.idl` from `KhronosGroup/WebGL` at the commit in `conformance/suite.json`. It collects the `const <type> NAME = value;` members of the `WebGLRenderingContextBase` and `WebGL2RenderingContextBase` mixins and writes `src/generated/webgl-constants.ts` with two `as const` tables: `WEBGL1_CONSTANTS` (297 entries) and `WEBGL2_CONSTANTS` (the WebGL 1 entries plus 262, 559 in all). The header names the source commit.
+`scripts/webgl-constants.mjs` fetches `specs/latest/1.0/webgl.idl` and `specs/latest/2.0/webgl2.idl` from `KhronosGroup/WebGL` at the commit in `conformance/suite.json`. It collects the `const <type> NAME = value;` members of the `WebGLRenderingContextBase` and `WebGL2RenderingContextBase` mixins and writes `src/generated/webgl-constants.ts` with two `as const` tables: `WEBGL1_CONSTANTS` (297 entries) and `WEBGL2_ONLY_CONSTANTS` (262 entries). The file then exports `WEBGL2_CONSTANTS = { ...WEBGL1_CONSTANTS, ...WEBGL2_ONLY_CONSTANTS }` (559 in all), so each shared constant is written once. The header names the source commit.
 
 - *Why the suite commit:* the conformance pages that check constants (`constants-and-properties*.html`) come from the same commit, so tables and tests cannot disagree.
 - *Why not hand-written:* transcribing 559 values is error-prone, and the IDL is the normative list (WebGL 1.0 §5.14, WebGL 2.0 §3.7).
@@ -25,7 +25,7 @@ The conformance runner (`conformance/page.mjs`, `contextSource()`) evaluates `di
 
 Values are emitted as the IDL writes them (hex stays hex). `INVALID_INDEX` is `0xFFFFFFFF` and `TIMEOUT_IGNORED` (`GLint64`) is `-1`. Both are plain JS numbers, per the WebIDL conversion of a constant's value.
 
-Licensing: the tables hold constant names and numeric values (interface facts, which the spec requires implementations to expose verbatim) and copy no IDL text. Any notice the IDL's MIT-style licence would still require goes into the generated file's header, and `npm run lint:licenses` must stay green.
+Licensing: the IDL files are under the Khronos MIT-style licence, which asks that its notice accompany copies of the Materials. The tables copy the IDL's constant names and values, so the generated file's header reproduces the IDL's copyright and permission notice verbatim. `tsc` keeps comments, so the notice ships in `dist/generated/webgl-constants.js` and travels with the copied material. No `THIRD_PARTY_NOTICES` entry is needed: that file lists bundled crates and libraries, and this is source carrying its own notice.
 
 ### Each class gets its own set; attributes unchanged
 
@@ -33,11 +33,16 @@ Licensing: the tables hold constant names and numeric values (interface facts, w
 
 ### Types derived from the tables
 
-The per-constant `declare static` and `declare` lines and `ConstantsDeclared` are removed. The instance side uses interface merging with the class (`interface WebGLRenderingContext extends Readonly<typeof WEBGL1_CONSTANTS> {}`). The static side is typed as the constructor intersected with the table type. The emitted `.d.ts` must declare every constant with its literal type on both sides. `test/types.ts` checks this, including that a WebGL 2-only constant is absent from `WebGLRenderingContext`. If the static typing would change how `context.ts` exports the classes (for example to `export const`), the runner's `export class` rewrite is updated in the same task.
+The per-constant `declare static` and `declare` lines and `ConstantsDeclared` are removed. A class declaration cannot have its static side widened by a type, so each class is defined unexported (for example `class WebGLRenderingContextImpl extends ContextBase {}`). It is then exported as a typed constant with a same-named type alias:
+
+- `export const WebGLRenderingContext: typeof WebGLRenderingContextImpl & WebGL1Constants`
+- `export type WebGLRenderingContext = WebGLRenderingContextImpl & WebGL1Constants`
+
+Here `WebGL1Constants` is `Readonly<typeof WEBGL1_CONSTANTS>`; WebGL 2 follows the same pattern. The runtime `name` of each class stays `WebGLRenderingContext` / `WebGL2RenderingContext`, because `webgl-test-utils.js` keys its enum cache by `name`. `createContext`'s overloads return the aliases, and `src/index.ts` re-exports both the value and the type, so `import { WebGLRenderingContext }` still works as both. The emitted `.d.ts` must declare every constant with its literal type on both sides. `test/types.ts` checks this, including that a WebGL 2-only constant is absent from `WebGLRenderingContext` and that `gl instanceof WebGLRenderingContext` still narrows. The conformance loader's `export class` rewrite becomes an `export const` rewrite (next section).
 
 ### Conformance loader inlines the generated module
 
-`contextSource()` reads `dist/generated/webgl-constants.js`, strips its `export` keywords, prepends it to the context body and removes the matching import. Its guard still rejects any other import or export, so the loader still cannot silently diverge from the published module graph.
+`contextSource()` reads `dist/generated/webgl-constants.js`, strips its `export` keywords, prepends it to the context body and removes the matching import. It also rewrites `export const` as well as `export class`/`export function` in `dist/context.js`. Its guard still rejects any other import or export, so the loader still cannot silently diverge from the published module graph.
 
 ### One requirement instead of three
 

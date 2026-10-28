@@ -28,5 +28,5 @@
 - **THEN** its load-time `glEnumToString` self-checks, which read `WebGLRenderingContext.RGBA` and `WebGLRenderingContext.POINTS`, complete without throwing
 
 #### Scenario: Declarations
-- **WHEN** `test/types.ts` is type-checked
-- **THEN** `WebGLRenderingContext.RGBA`, `gl1.RGBA` and `gl2.READ_BUFFER` have their literal types, and reading `READ_BUFFER` from `WebGLRenderingContext` or a WebGL 1 context is a type error
+- **WHEN** TypeScript code reads constants from the classes and from contexts returned by `createContext({ width: 1, height: 1 })` (WebGL 1) and `createContext({ width: 1, height: 1, webgl2: true })` (WebGL 2)
+- **THEN** `WebGLRenderingContext.RGBA`, the WebGL 1 context's `RGBA` and the WebGL 2 context's `READ_BUFFER` have their literal types, and reading `READ_BUFFER` from `WebGLRenderingContext` or from the WebGL 1 context is a type error

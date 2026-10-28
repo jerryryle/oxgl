@@ -29,11 +29,11 @@ None.
 
 ## Impact
 
-- `src/context.ts`: the `CONSTANTS` table and per-constant `declare` lines are replaced by the generated tables. Each class gets its own set.
+- `src/context.ts`: the `CONSTANTS` table and per-constant `declare` lines are replaced by the generated tables. Each class gets its own set. The two classes are exported as typed constants with matching type aliases, so `src/index.ts`'s re-exports and the conformance loader's rewrite change with them.
 - New `src/generated/webgl-constants.ts` and `scripts/webgl-constants.mjs`.
 - `conformance/page.mjs`: `contextSource()` inlines the generated module.
 - `conformance/expectations.txt`: most entries change reason or disappear. `conformance/context/constants-and-properties.html` and `conformance2/context/constants-and-properties-2.html` are expected to pass.
-- Public API: about 550 new read-only numeric properties on each context class and its instances. They only add to the API; no existing value changes. `WebGL2RenderingContext` starts exposing WebGL 2-only constants that the current table lacks.
+- Public API: new read-only numeric properties on the context classes and their instances, 285 on `WebGLRenderingContext` and 547 on `WebGL2RenderingContext`. They only add to the API; no existing value changes. `WebGL2RenderingContext` starts exposing WebGL 2-only constants that the current table lacks.
 - No native code changes and no new dependencies.
 
 ## Out of Scope
