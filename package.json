@@ -35,7 +35,7 @@
     "build:ts": "tsc -p tsconfig.json",
     "lint": "npm run lint:rust && npm run lint:js && npm run lint:licenses",
     "lint:rust": "cargo fmt --check && cargo clippy --workspace --all-targets --locked -- -D warnings",
-    "lint:js": "eslint . && tsc -p tsconfig.json --noEmit",
+    "lint:js": "eslint . && tsc -p tsconfig.json --noEmit && tsc -p test/tsconfig.json",
     "lint:licenses": "cargo deny check licenses && node scripts/notices.mjs --check",
     "notices": "node scripts/notices.mjs",
     "test": "node --test \"test/**/*.test.mjs\""

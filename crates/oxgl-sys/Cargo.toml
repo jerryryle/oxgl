@@ -7,12 +7,28 @@ rust-version.workspace = true
 license.workspace = true
 publish.workspace = true
 
+[features]
+# Node-API typed-array access (`napi_view`), enabled only by oxgl-node so the
+# Rust test executables never link Node-API symbols.
+node = ["dep:napi"]
+# `test_support::bundle_dir()`, the staged bundle path for Rust tests.
+test-support = []
+
+[dependencies]
+libloading = "0.9.0"
+napi = { version = "3.15.0", default-features = false, features = ["napi9"], optional = true }
+
 [lints]
 workspace = true
 
 [build-dependencies]
+bindgen = { version = "0.73.2", default-features = false, features = ["runtime"] }
 lzma-rs = "0.3.0"
 serde_json = "1.0.154"
 sha2 = "0.11.1"
 tar = "0.4.46"
 toml = "1.1.8"
+
+[dev-dependencies]
+# The crate's own integration tests need the staged bundle path.
+oxgl-sys = { path = ".", features = ["test-support"] }

@@ -10,6 +10,9 @@
 //!
 //! The resolved bundle directory is written to `<target>/<profile>/oxgl-angle-dir`
 //! so the npm build can stage its libraries next to the addon.
+//!
+//! EGL/GLES types and constants are generated with bindgen from the bundle's
+//! headers. Functions are not bound: they are resolved at runtime.
 
 use std::env;
 use std::fmt::Write as _;
@@ -107,6 +110,13 @@ fn run() -> Result<()> {
     };
     check_layout(&bundle, platform)?;
     check_licenses(&bundle, &deny_path)?;
+    generate_bindings(&bundle)?;
+    // Read only by `test_support` (feature `test-support`), so a build without
+    // that feature never embeds the path.
+    println!(
+        "cargo::rustc-env=OXGL_STAGED_ANGLE_LIB_DIR={}",
+        bundle.join("lib").display()
+    );
     // Re-run (and re-download if needed) when the bundle directory is deleted
     // or changes, so the recorded path never goes stale.
     println!("cargo::rerun-if-changed={}", bundle.display());
@@ -121,6 +131,60 @@ fn run() -> Result<()> {
         bundle.display().to_string(),
     )
     .map_err(|e| format!("cannot record the ANGLE bundle path: {e}"))
+}
+
+/// Generates the EGL/GLES types (including `PFN…PROC` function-pointer types)
+/// and constants into `$OUT_DIR/bindings.rs`.
+fn generate_bindings(bundle: &Path) -> Result<()> {
+    let include = bundle.join("include");
+    let header = [
+        "EGL/egl.h",
+        "EGL/eglext.h",
+        "EGL/eglext_angle.h",
+        "GLES3/gl3.h",
+        "GLES2/gl2ext.h",
+        "GLES2/gl2ext_angle.h",
+    ]
+    .iter()
+    .fold(String::new(), |mut text, file| {
+        let _ = writeln!(text, "#include <{file}>");
+        text
+    });
+    let bindings = bindgen::Builder::default()
+        .header_contents("oxgl_angle.h", &header)
+        .clang_arg(format!("-I{}", include.display()))
+        // Prototypes are not needed; the PFN typedefs are always declared.
+        .clang_arg("-DEGL_EGL_PROTOTYPES=0")
+        .clang_arg("-DGL_GLES_PROTOTYPES=0")
+        .allowlist_type("(EGL|GL|PFNEGL|PFNGL|khronos_).*")
+        .allowlist_var("(EGL|GL)_.*")
+        .parse_callbacks(Box::new(ConstantTypes))
+        .layout_tests(false)
+        .generate()
+        .map_err(|e| format!("cannot generate EGL/GLES bindings: {e}"))?;
+    let out = PathBuf::from(var("OUT_DIR")?).join("bindings.rs");
+    bindings
+        .write_to_file(&out)
+        .map_err(|e| format!("cannot write {}: {e}", out.display()))
+}
+
+/// Types `GL_*` constants as `GLenum` (`u32`) and `EGL_*` constants as `EGLint`
+/// (`i32`), the types the APIs take them as. Values that do not fit keep
+/// bindgen's default.
+#[derive(Debug)]
+struct ConstantTypes;
+
+impl bindgen::callbacks::ParseCallbacks for ConstantTypes {
+    fn int_macro(&self, name: &str, value: i64) -> Option<bindgen::callbacks::IntKind> {
+        use bindgen::callbacks::IntKind;
+        if name.starts_with("GL_") && u32::try_from(value).is_ok() {
+            Some(IntKind::U32)
+        } else if name.starts_with("EGL_") && i32::try_from(value).is_ok() {
+            Some(IntKind::I32)
+        } else {
+            None
+        }
+    }
 }
 
 fn var(name: &str) -> Result<String> {
@@ -314,8 +378,11 @@ fn check_layout(bundle: &Path, platform: &Platform) -> Result<()> {
         [
             "lib/vk_swiftshader_icd.json",
             "include/EGL/egl.h",
+            "include/EGL/eglext.h",
             "include/EGL/eglext_angle.h",
             "include/GLES2/gl2.h",
+            "include/GLES2/gl2ext.h",
+            "include/GLES2/gl2ext_angle.h",
             "include/GLES3/gl3.h",
             "BUILD_INFO.json",
         ]

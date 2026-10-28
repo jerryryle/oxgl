@@ -1,10 +1,9 @@
-# Spec Delta
+# context-creation Specification
 
 ## Purpose
-
 Defines how a caller obtains a headless WebGL 1 or WebGL 2 rendering context from oxgl, how its drawing buffer is allocated and reported, and how the context's native resources are released, by explicit `destroy()` or garbage collection.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: createContext entry point
 The package SHALL export `createContext(options)` where `options` is `{ width, height, backend?, webgl2? }`. It SHALL return a `WebGLRenderingContext` when `webgl2` is absent or `false`, and a `WebGL2RenderingContext` when `webgl2` is `true`. No window system, display server, or canvas SHALL be required.
@@ -74,7 +73,7 @@ If no usable backend can create a context for the requested options, `createCont
 - **THEN** an `Error` with `code === 'OXGL_CONTEXT_CREATION_FAILED'` is thrown
 
 ### Requirement: Explicit destroy
-`destroy()` SHALL synchronously release every native resource owned by the context and set its webgl context lost flag, after which the context SHALL behave as a lost context per WebGL 1.0 §5.14.13 and the `[WebGLHandlesContextLoss]` rules of §5.14. Calling `destroy()` again SHALL have no effect. `drawingBufferWidth`/`drawingBufferHeight` SHALL keep their last values.
+`destroy()` SHALL synchronously release every native resource owned by the context and set its webgl context lost flag, after which the context SHALL behave as a lost context per the lost-context rules of WebGL 1.0 §5.14 (including `[WebGLHandlesContextLoss]`) and §5.15.2 "The Context Lost Event". Calling `destroy()` again SHALL have no effect. `drawingBufferWidth`/`drawingBufferHeight` SHALL then return `0`, as Chromium does for a context lost through `WEBGL_lose_context`.
 
 #### Scenario: Calls after destroy are inert
 - **WHEN** `destroy()` is called and then `clearColor`, `clear`, and `readPixels` are called
@@ -88,6 +87,10 @@ If no usable backend can create a context for the requested options, `createCont
 - **WHEN** `destroy()` is called twice
 - **THEN** the second call returns without error
 
+#### Scenario: Drawing buffer size after destroy
+- **WHEN** a 7×3 context is destroyed and `drawingBufferWidth` and `drawingBufferHeight` are read
+- **THEN** both are `0`
+
 ### Requirement: Garbage-collected contexts release resources
 A context that becomes unreachable without `destroy()` SHALL have its native resources released after garbage collection, on the thread that created it, without requiring further API calls.
 
@@ -97,6 +100,8 @@ A context that becomes unreachable without `destroy()` SHALL have its native res
 
 ### Requirement: No resource growth across context lifecycles
 Creating and destroying contexts repeatedly SHALL NOT grow resident memory without bound. After a 50-iteration warm-up, creating and destroying 1,000 contexts of 256×256 SHALL increase resident set size by no more than 32 MiB, measured after a forced garbage collection.
+
+Accepted trade-off (upstream ANGLE): each thread that has used oxgl leaves about 72 bytes of ANGLE thread state behind when it exits.
 
 #### Scenario: Software soak test
 - **WHEN** the soak test runs with `backend: 'software'`
