@@ -102,8 +102,12 @@ async function dropContexts(count) {
 test('dropped contexts are reclaimed', async (t) => {
   // Up to ~100 contexts are alive between collections, so the allocators'
   // high-water mark is far above the destroy() soak's. The warm-up runs the
-  // same pattern once, so the measured pass shows growth, not the mark.
+  // same pattern twice before measuring: glibc raises its mmap threshold
+  // after the first frees, so only from the second pass on do the buffers
+  // come from a heap that keeps its high-water mark. The measured pass then
+  // shows growth, not that mark.
   const baselineContexts = liveContexts();
+  await dropContexts(ITERATIONS);
   await dropContexts(ITERATIONS);
   const baseline = rssAfterGc();
   await dropContexts(ITERATIONS);
