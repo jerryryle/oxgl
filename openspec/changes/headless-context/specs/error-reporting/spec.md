@@ -24,6 +24,8 @@ Defines the WebGL error model in oxgl: how GL errors are recorded and reported t
 ### Requirement: Lost-context error reporting
 While a context's webgl context lost flag is set, `getError()` SHALL return `CONTEXT_LOST_WEBGL` the first time it is called and `NO_ERROR` afterward (WebGL 1.0 §5.14.3), and other methods SHALL follow the `[WebGLHandlesContextLoss]` rules of WebGL 1.0 §5.14 without generating errors.
 
+Accepted trade-off: if a device loss was already reported by `getError()`, a later `destroy()` makes `getError()` report `CONTEXT_LOST_WEBGL` once more.
+
 #### Scenario: Lost context
 - **WHEN** a context is destroyed and `getError()` is called three times
 - **THEN** it returns `CONTEXT_LOST_WEBGL`, `NO_ERROR`, `NO_ERROR`

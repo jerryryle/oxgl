@@ -62,19 +62,34 @@ If `OXGL_BACKEND` in the calling thread's `process.env` (main thread or worker) 
 - **THEN** an `Error` with `code === 'OXGL_INVALID_BACKEND'` is thrown, mentioning `OXGL_BACKEND` and `vulkan`
 
 ### Requirement: Display reuse and isolation
-Selecting a backend SHALL NOT modify process-global state visible to other code in the host process (for example environment variables or the system Vulkan loader configuration), and repeated context creation on the same backend SHALL reuse the initialized backend rather than re-initializing it per context.
+Selecting a GPU backend SHALL NOT modify process-global state visible to other code in the host process (for example environment variables, the working directory, or the system Vulkan loader configuration). Repeated context creation on the same backend SHALL reuse the initialized backend rather than re-initializing it per context.
 
 #### Scenario: Environment untouched
 - **WHEN** contexts are created on every available backend
 - **THEN** `process.env` is identical before and after
 
-### Requirement: GPU failure is remembered for the process
-Once the GPU backend fails to initialize or create a context, including a CPU-only device rejection, it SHALL be treated as unavailable for the rest of the process without being retried. This is an accepted trade-off: after a transient failure such as a driver reset, `'auto'` renders with SwiftShader and `'gpu'` throws `OXGL_GPU_UNAVAILABLE` until the process restarts. No content is lost.
+### Requirement: SwiftShader initialization side effects
+SwiftShader SHALL be initialized at most once per process, at the first context that uses it, never at import, so GPU-only applications are unaffected.
 
-#### Scenario: No retry after a GPU failure
-- **WHEN** a GPU context creation has failed once in the process and `createContext` is called again with `backend: 'auto'`
+Accepted trade-off (known issue, upstream ANGLE): that step briefly sets `VK_ICD_FILENAMES` and, on Linux and Windows, the working directory. A thread using either at that moment can crash the process, an explicit exception to the crash rule.
+
+#### Scenario: Import touches nothing
+- **WHEN** the package is imported and only GPU contexts are created
+- **THEN** ANGLE never initializes SwiftShader in the process
+
+### Requirement: GPU initialization failure is remembered for the process
+Once the GPU backend fails to initialize, including a CPU-only device rejection, it SHALL be treated as unavailable for the rest of the process. A failure to create one GPU context (normal use can cause one, such as running out of GPU memory) SHALL fail only that call.
+
+Accepted trade-off: after a transient initialization failure such as a driver reset, `'auto'` renders with SwiftShader and `'gpu'` throws until the process restarts.
+
+#### Scenario: No retry after a GPU initialization failure
+- **WHEN** GPU initialization has failed once in the process and `createContext` is called again with `backend: 'auto'`
 - **THEN** a SwiftShader context is returned without another GPU initialization attempt
 
-#### Scenario: Forced GPU after a failure
-- **WHEN** a GPU context creation has failed once in the process and `createContext` is called with `backend: 'gpu'`
+#### Scenario: Forced GPU after an initialization failure
+- **WHEN** GPU initialization has failed once in the process and `createContext` is called with `backend: 'gpu'`
 - **THEN** an `Error` with `code === 'OXGL_GPU_UNAVAILABLE'` is thrown without another GPU initialization attempt
+
+#### Scenario: Context failure is not remembered
+- **WHEN** creating a GPU context fails (for example out of GPU memory) and `createContext` is called again with `backend: 'gpu'`
+- **THEN** the GPU backend is tried again for the new context

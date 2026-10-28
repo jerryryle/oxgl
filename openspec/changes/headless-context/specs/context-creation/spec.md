@@ -74,7 +74,7 @@ If no usable backend can create a context for the requested options, `createCont
 - **THEN** an `Error` with `code === 'OXGL_CONTEXT_CREATION_FAILED'` is thrown
 
 ### Requirement: Explicit destroy
-`destroy()` SHALL synchronously release every native resource owned by the context and set its webgl context lost flag, after which the context SHALL behave as a lost context per WebGL 1.0 §5.14.13 and the `[WebGLHandlesContextLoss]` rules of §5.14. Calling `destroy()` again SHALL have no effect. `drawingBufferWidth`/`drawingBufferHeight` SHALL keep their last values.
+`destroy()` SHALL synchronously release every native resource owned by the context and set its webgl context lost flag, after which the context SHALL behave as a lost context per the lost-context rules of WebGL 1.0 §5.14 (including `[WebGLHandlesContextLoss]`) and §5.15.2 "The Context Lost Event". Calling `destroy()` again SHALL have no effect. `drawingBufferWidth`/`drawingBufferHeight` SHALL then return `0`, as Chromium does for a context lost through `WEBGL_lose_context`.
 
 #### Scenario: Calls after destroy are inert
 - **WHEN** `destroy()` is called and then `clearColor`, `clear`, and `readPixels` are called
@@ -87,6 +87,10 @@ If no usable backend can create a context for the requested options, `createCont
 #### Scenario: Double destroy
 - **WHEN** `destroy()` is called twice
 - **THEN** the second call returns without error
+
+#### Scenario: Drawing buffer size after destroy
+- **WHEN** a 7×3 context is destroyed and `drawingBufferWidth` and `drawingBufferHeight` are read
+- **THEN** both are `0`
 
 ### Requirement: Garbage-collected contexts release resources
 A context that becomes unreachable without `destroy()` SHALL have its native resources released after garbage collection, on the thread that created it, without requiring further API calls.
