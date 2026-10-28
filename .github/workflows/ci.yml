@@ -209,19 +209,20 @@ jobs:
       - name: Diagnose ASan startup
         continue-on-error: true
         run: |
-          uname -a
-          sysctl vm.mmap_rnd_bits vm.overcommit_memory kernel.randomize_va_space || true
-          getconf PAGE_SIZE
-          grep -m1 -i "address sizes" /proc/cpuinfo || true
+          set +e
+          tail -3 /proc/self/maps
           cargo +"$ASAN_NIGHTLY" test -p oxgl-core --lib --locked -Zbuild-std --target aarch64-unknown-linux-gnu --no-run --message-format=json \
             | jq -r 'select(.executable != null) | .executable' > /tmp/bins
           bin=$(head -1 /tmp/bins)
-          ASAN_OPTIONS=verbosity=2:detect_leaks=1 "$bin" --list 2>&1 | tail -60 || true
-          echo "--- with detect_leaks=0"
-          ASAN_OPTIONS=detect_leaks=0 "$bin" --list 2>&1 | tail -5 || true
-          echo "--- with mmap_rnd_bits=28"
-          sudo sysctl -w vm.mmap_rnd_bits=28 || true
-          ASAN_OPTIONS=detect_leaks=1 "$bin" --list 2>&1 | tail -5 || true
+          ls -la "$bin"
+          "$bin" --list > /tmp/out 2>&1; echo "plain exit=$?"; tail -5 /tmp/out
+          setarch "$(uname -m)" -R "$bin" --list > /tmp/out 2>&1; echo "no-aslr exit=$?"; tail -5 /tmp/out
+          printf 'int main(void){return 0;}\n' > /tmp/t.c
+          clang -fsanitize=address /tmp/t.c -o /tmp/t-clang && { /tmp/t-clang; echo "clang asan exit=$?"; }
+          printf 'fn main(){println!("hi");}\n' > /tmp/t.rs
+          rustc +"$ASAN_NIGHTLY" -Zsanitizer=address --target aarch64-unknown-linux-gnu /tmp/t.rs -o /tmp/t-rust && { /tmp/t-rust; echo "rust asan exit=$?"; }
+          sudo apt-get install -y -qq gdb > /dev/null 2>&1
+          gdb -batch -ex run -ex bt -ex 'info registers pc sp' -ex "x/4i \$pc" --args "$bin" --list 2>&1 | tail -40
       # oxgl-node is a Node addon whose tests run under Node, not cargo.
       # PLATFORM-FOCUS: re-enable
       #   -Zbuild-std --target x86_64-unknown-linux-gnu
