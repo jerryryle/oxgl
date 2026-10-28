@@ -101,11 +101,15 @@ The Linux bundle SHALL declare the minimum glibc version it requires, and SHALL 
 - **THEN** it states the maximum glibc symbol version referenced by the bundled libraries
 
 ### Requirement: Bundle licenses are on the project allowlist
-Every component in a platform bundle SHALL carry a license on the project's license allowlist (see the licensing capability), recorded per component in build-info. The build recipe SHALL fail if any linked component's license is missing from the bundle's license directory or is not on the allowlist.
+Every component in a platform bundle SHALL carry a license on the project's license allowlist (see the licensing capability), recorded per component in build-info. The build recipe SHALL fail if any linked component's license is missing from the bundle's license directory or is not on the allowlist. The native build SHALL re-check the pinned bundle's recorded component licenses against the current allowlist, so a narrowed allowlist cannot pass with a bundle built under an older one.
 
 #### Scenario: Disallowed component license
 - **WHEN** a pin bump pulls in a linked third-party component whose license is not on the allowlist
 - **THEN** the bundle build fails and names the component and its license
+
+#### Scenario: Allowlist narrowed after a bundle was built
+- **WHEN** a license that a pinned bundle's component uses is removed from the allowlist
+- **THEN** the native build fails and names that component and its license
 
 #### Scenario: Per-component license recorded
 - **WHEN** a bundle's build-info is read

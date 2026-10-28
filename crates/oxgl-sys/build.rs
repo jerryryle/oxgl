@@ -279,8 +279,11 @@ fn check_licenses(bundle: &Path, deny_path: &Path) -> Result<()> {
         let (Some(path), Some(license)) = (path, license) else {
             return Err(format!("{} has a malformed component", info_path.display()));
         };
-        // Same splitting rule as angle/scripts/bundle.py's license_parts.
-        let ok = license
+        // Same split as angle/scripts/bundle.py's license_parts (commas, and AND
+        // with any surrounding whitespace); whitespace runs are collapsed first
+        // so `MIT  AND  BSD-3-Clause` splits as it does there.
+        let normalized = license.split_whitespace().collect::<Vec<_>>().join(" ");
+        let ok = normalized
             .split(',')
             .flat_map(|part| part.split(" AND "))
             .map(str::trim)

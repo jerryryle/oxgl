@@ -19,6 +19,7 @@
 - [x] 3.1 Implement `crates/oxgl-sys/build.rs` resolution order (override → cache → verified download), digest verification before extraction, and staging `lib/` next to the addon; verify match, mismatch (build fails, nothing extracted), and cache hit (no network); verified by manual checks against a `file://` bundle URL (accepted instead of unit tests, since Cargo does not run tests in build scripts)
 - [x] 3.2 Implement `OXGL_ANGLE_DIR` override with required-file checks and a cargo warning when in use; verify offline build succeeds with override and fails listing missing files for an incomplete directory
 - [x] 3.3 Verify `cargo clippy --workspace --all-targets -- -D warnings` passes with the build script
+- [x] 3.4 Re-check the bundle's component licenses against the current `deny.toml` allowlist in `build.rs`; verify that removing an allowlisted license a component uses fails the native build naming those components, and that a `deny.toml` without `[licenses] allow` fails with that message
 
 ## 4. Documentation
 
