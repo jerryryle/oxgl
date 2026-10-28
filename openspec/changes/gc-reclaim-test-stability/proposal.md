@@ -2,10 +2,11 @@
 
 ## Why
 
-The Node test for "Dropped contexts are reclaimed" fails intermittently in CI. In CI run 40645729850 it failed on `node-range (26)` with `RSS grew by 42.0 MiB (limit 32 MiB)`. The same commit passed on every other job. Across recent CI runs the measured growth on the GC path was 0 MiB in most jobs and jumped to 15–48 MiB in others (Linux, macOS, Node 22.12.0 and 26 alike), sometimes going negative. Locally, 40 back-to-back passes of 1,000 dropped contexts (macOS, Node 26) showed:
+The Node test for "Dropped contexts are reclaimed" fails intermittently in CI. In CI run 40645729850 it failed on `node-range (26)` with `RSS grew by 42.0 MiB (limit 32 MiB)`. The same commit passed on every other job. Across recent CI runs the measured growth on the GC path was 0 MiB in most jobs and jumped to 15–48 MiB in others (Linux, macOS, Node 22.12.0 and 26 alike), sometimes going negative. Locally (macOS, Node 26), repeated passes of 1,000 dropped contexts showed:
 
 - a flat V8 heap;
-- one-off RSS steps of about 20 MiB, after which RSS levelled off at roughly 160 B per context;
+- one-off RSS steps: two 12-pass runs printed every pass, and only one of their 22 pass-to-pass changes exceeded 5 MiB (23.1 MiB);
+- RSS levelling off at roughly 160 B per context over 40-pass runs (sampled every fourth pass);
 - the same curve for contexts released with `destroy()`.
 
 That is allocator high-water noise, not a leak. The scenario measures one pass against one baseline, so it fails whenever a step happens to land in the measured pass. A required `ci` gate that flakes gets ignored, so the test has to be deterministic. It also has to stay a real leak gate.
@@ -14,7 +15,7 @@ That is allocator high-water noise, not a leak. The scenario measures one pass a
 
 - The scenario "Dropped contexts are reclaimed" measures three consecutive passes of 1,000 dropped contexts after the warm-up, instead of one. It gates on the **median** per-pass RSS growth, which must stay within the soak-test threshold (32 MiB). A leak grows RSS on every pass. A high-water step is a one-off, and so is an allocator trim (CI saw RSS fall by up to 14 MiB). The median ignores a single swing in either direction, so the noise is filtered and the limit is not loosened.
 - The `context-creation` spec gains an accepted trade-off. A leak only just over the threshold can be absorbed by free memory the allocator already holds after a high-water step, and then goes undetected in that run.
-- The scenario also requires the live-context count to return to its baseline after every pass. The test already waits for this, but the scenario does not state it.
+- Each pass ends by waiting (failing after 10 s) until the live-context count is back at its baseline, and the scenario requires that count after every pass. Today the test waits on the counter only every 100 contexts, which covers the end of a pass only when the pass size is a multiple of 100.
 - The threshold stays at 32 MiB, and so does the `destroy()` soak scenario.
 
 ## Capabilities
