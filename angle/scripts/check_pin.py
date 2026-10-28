@@ -1,10 +1,12 @@
 #!/usr/bin/env python3
 """Validates angle/pin.toml and angle/bundles.toml.
 
-    check_pin.py [--allow-unpublished]
+    check_pin.py [--allow-unpublished] [angle-dir]
 
-Fails on a missing key or platform, a malformed commit, version or digest, or
-(unless --allow-unpublished) a platform without a published URL and digest.
+Fails on a missing key or platform, a malformed commit, version or digest, a
+URL outside the release named by bundles.toml's bundle_version, or (unless
+--allow-unpublished) a platform without a published URL and digest.
+angle-dir defaults to this repository's angle/.
 """
 
 import re
@@ -41,13 +43,16 @@ def bundles_problems(bundles: dict, allow_unpublished: bool) -> list[str]:
             continue
         if not str(url).startswith("https://"):
             found.append(f"platform.{name}.url must be an https URL")
+        elif f"/download/{bundles.get('bundle_version')}/" not in str(url):
+            found.append(f"platform.{name}.url is not in the {bundles.get('bundle_version')} release")
         if not re.fullmatch(r"[0-9a-f]{64}", str(sha)):
             found.append(f"platform.{name}.sha256 must be 64 lowercase hex characters")
     return found
 
 
 def main() -> None:
-    angle = Path(__file__).resolve().parents[1]
+    args = [a for a in sys.argv[1:] if not a.startswith("--")]
+    angle = Path(args[0]) if args else Path(__file__).resolve().parents[1]
     allow_unpublished = "--allow-unpublished" in sys.argv
     failed = False
     for name, check in (

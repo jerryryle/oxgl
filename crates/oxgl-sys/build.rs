@@ -92,8 +92,8 @@ fn run() -> Result<()> {
         let pinned = version(&pin);
         if pinned != version(&bundles) {
             println!(
-                "cargo::warning=angle/pin.toml is at {pinned} but angle/bundles.toml has {} bundles; \
-                 building against those until the new bundles are published and pinned",
+                "cargo::warning=angle/pin.toml is at {pinned} but angle/bundles.toml pins {} \
+                 bundles; building against the pinned bundles",
                 version(&bundles)
             );
         }

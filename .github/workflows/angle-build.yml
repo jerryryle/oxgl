@@ -9,10 +9,16 @@ name: angle-build
 on:
   workflow_dispatch:
   pull_request:
+    # The recipe: only files that can change a bundle. bundles.toml (outputs),
+    # the README, check_pin.py, pin.sh and smoke/ are deliberately absent.
     paths:
-      - "angle/**"
-      - "!angle/bundles.toml"   # build outputs: recording them must not rebuild
-      - "!angle/README.md"
+      - "angle/pin.toml"
+      - "angle/args/**"
+      - "angle/build.sh"
+      - "angle/build.ps1"
+      - "angle/scripts/bundle.py"
+      - "angle/licenses.toml"
+      - "angle/license-texts/**"
       - ".github/workflows/angle-build.yml"
 
 concurrency:
@@ -35,8 +41,15 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="$(angle/scripts/pin.sh bundle_version)"
-          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>err.txt; then
             echo "::error::$tag is already released; bump bundle_version in angle/pin.toml"
+            exit 1
+          fi
+          # Only "not found" means unreleased; any other failure (auth, rate
+          # limit, network) must not let a forgotten bump through.
+          if ! grep -q "release not found" err.txt; then
+            cat err.txt
+            echo "::error::could not check whether $tag is released"
             exit 1
           fi
 

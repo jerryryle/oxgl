@@ -58,7 +58,7 @@ sha256 = "<64-hex>"
 # ... macos-arm64, windows-x64
 ```
 
-The recipe is everything under `angle/` except `bundles.toml` and `README.md`,
+The recipe is every file that can change a bundle (`pin.toml`, `args/`, `build.sh`, `build.ps1`, `scripts/bundle.py`, `licenses.toml`, `license-texts/` under `angle/`),
 plus the workflow file; `angle-build` runs on pull requests that touch it.
 While `pin.toml` names a newer `bundle_version` than `bundles.toml` (between
 a recipe change merging and its bundles being pinned), `oxgl-sys/build.rs`

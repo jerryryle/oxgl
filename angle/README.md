@@ -82,8 +82,8 @@ OXGL_ANGLE_DIR=~/.cache/oxgl/angle-build/dist/angle-macos-arm64 npm run build
 
 ## Changing ANGLE
 
-The recipe is everything in this directory except `bundles.toml` and this
-README. Any recipe change (a new ANGLE commit, GN args, targets, scripts,
+The recipe is every file that can change a bundle: `pin.toml`, `args/`, `build.sh`, `build.ps1`, `scripts/bundle.py`, `licenses.toml`, `license-texts/`, and
+`.github/workflows/angle-build.yml`. `angle-build` runs only for those. Any recipe change (a new ANGLE commit, GN args, targets, scripts,
 license data) gets a new `bundle_version`: published bundles are never rebuilt
 or replaced, because rebuilds are not bit-identical and older commits pin the
 old digests.
@@ -106,7 +106,10 @@ old digests.
    This does not rebuild ANGLE; CI builds oxgl against the new bundles.
 5. When that PR merges, publish the release without making it the
    repository's latest release (oxgl's own `v*` releases share the list):
-   `gh release edit <bundle_version> --draft=false --latest=false`.
+   `gh release edit <bundle_version> --draft=false --latest=false`. If you
+   publish from the Releases page instead, untick "Set as the latest release",
+   which is ticked by default; the `--latest=false` set on the draft does not
+   carry over.
 
 A deleted or broken release asset is replaced the same way, under a new
 `bundle_version`.
