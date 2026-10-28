@@ -40,11 +40,20 @@ type WebGL1Constants = typeof WEBGL1_CONSTANTS; // already readonly literals
 export interface WebGLRenderingContext extends ContextBase, WebGL1Constants {}
 export const WebGLRenderingContext: WebGL1Constants & {
   readonly prototype: WebGLRenderingContext;
-  new (/* ContextBase's internal constructor parameters */): WebGLRenderingContext;
+  new (...args: ConstructorParameters<typeof ContextBase>): WebGLRenderingContext;
 } = withConstants(class WebGLRenderingContext extends ContextBase {}, WEBGL1_CONSTANTS);
+
+/** Defines `table` as WebIDL constants on `cls` and its prototype. */
+function withConstants<A extends unknown[], I extends object, K extends Readonly<Record<string, number>>>(
+  cls: new (...args: A) => I,
+  table: K,
+): K & { readonly prototype: I & K; new (...args: A): I & K } {
+  // defineProperty on cls and cls.prototype for each entry, as today
+  return cls as unknown as K & { readonly prototype: I & K; new (...args: A): I & K };
+}
 ```
 
-WebGL 2 follows the same pattern. `withConstants(cls, table)` replaces today's `defineProperty` loop. It defines the table on `cls` and `cls.prototype` with the WebIDL attributes and returns `cls` typed as the annotated constructor. That return is the one type assertion, and it sits next to the code that makes it true. A sketch of this pattern compiled under `tsc --strict` with the expected runtime `name`, `instanceof` narrowing and `.d.ts`. This gives:
+WebGL 2 follows the same pattern. `withConstants` replaces today's `defineProperty` loop. Its cast on return is the one type assertion, and it sits next to the code that makes it true. Each type parameter appears twice in the signature, as `@typescript-eslint/no-unnecessary-type-parameters` requires. The construct signature is derived from `ContextBase`, so adding a constructor parameter needs no edit here. A sketch of this pattern passed `tsc --strict` and the repo's `eslint` config, with the expected runtime `name`, `instanceof` narrowing and `.d.ts`. This gives:
 
 - **One instance type.** `new`, `createContext`'s overloads and `instanceof` narrowing all produce the same interface, constants included. The `prototype` member is what `instanceof` narrows to, so no casts are needed.
 - **The right name.** The class expression carries the interface's name, so the runtime `name` is `WebGLRenderingContext` / `WebGL2RenderingContext`, which `webgl-test-utils.js` uses as its enum cache key. The emitted `.d.ts` contains no internal class name.
