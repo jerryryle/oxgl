@@ -21,6 +21,7 @@ function mixinConstants(idl, path, name) {
   const start = idl.indexOf(`interface mixin ${name}`);
   if (start === -1) throw new Error(`${path}: no interface mixin ${name}`);
   const end = idl.indexOf('\n};', start);
+  if (end === -1) throw new Error(`${path}: interface mixin ${name} has no closing '};'`);
   const constants = [];
   for (const line of idl.slice(start, end).split('\n')) {
     if (!/^\s*const\b/.test(line)) continue;

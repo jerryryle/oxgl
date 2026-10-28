@@ -187,7 +187,8 @@ let contextBody;
  */
 function contextSource() {
   const constants = readFileSync(CONSTANTS_URL, 'utf8')
-    .replace(/^\s*\/\/.*$/gm, '')
+    // The generated module holds no strings, so every `//` starts a comment.
+    .replace(/\/\/.*$/gm, '')
     .replace(/^export const /gm, 'const ')
     .replace(/\s*\n\s*/g, ' ');
   const body = readFileSync(CONTEXT_URL, 'utf8')
