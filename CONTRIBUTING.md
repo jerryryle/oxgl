@@ -16,6 +16,7 @@ to `main`. A newer push to a pull request cancels its earlier run.
 | `repo-checks` | Linux | the ANGLE pin check, dependency licenses and `THIRD_PARTY_NOTICES` |
 | `node-range` | Linux arm64 | Node tests on Node 22.22.2 (the `engines` floor) and Node 26 |
 | `asan` | Linux arm64 | Rust tests under AddressSanitizer and LeakSanitizer |
+| `conformance` | Linux arm64 | both Khronos conformance suites with `OXGL_BACKEND=software`, judged against `conformance/expectations.txt`; each suite's report is uploaded as `conformance-results-<suite>` (see Conformance tests below) |
 | `gpu` | self-hosted `oxgl-gpu` runner | Node tests on a real GPU; skipped unless the `OXGL_GPU_RUNNER` repository variable is `true` |
 | `ci` | Linux | succeeds only when every job above except `gpu` succeeded |
 

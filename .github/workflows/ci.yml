@@ -248,16 +248,15 @@ jobs:
       - run: npm test
 
   # The one check branch protection requires.
-  # TEMPORARY (conformance-harness task 5.1): generates the first
-  # conformance/expectations.txt and results report for review. Not part of
-  # `ci`. Replaced by the `conformance` job in task 6.1.
-  conformance-generate:
+  # Both Khronos conformance suites, judged against
+  # conformance/expectations.txt (openspec conformance-testing). The suites
+  # run in parallel; each uploads its report whether it passes or fails.
+  conformance:
     strategy:
       fail-fast: false
       matrix:
         suite: [webgl1, webgl2]
     runs-on: ubuntu-24.04-arm
-    timeout-minutes: 240
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -280,27 +279,27 @@ jobs:
         with:
           path: ~/.cargo/oxgl-angle
           key: angle-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('angle/bundles.toml') }}
+      # The suite is fetched by its pinned commit; the cache is keyed by the pin.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .cache/conformance
           key: conformance-suite-${{ hashFiles('conformance/suite.json') }}
       - run: npm ci
       - run: npm run build
-      - run: npm run conformance -- --suite "$SUITE" --update --fast-errors
+      - run: npm run conformance -- --suite "$SUITE"
         env:
           SUITE: ${{ matrix.suite }}
           OXGL_BACKEND: software
+      # Artifact names must be unique within a run, hence the suite suffix.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
-          name: conformance-generate-${{ matrix.suite }}
-          path: |
-            conformance/expectations.txt
-            conformance-results.json
+          name: conformance-results-${{ matrix.suite }}
+          path: conformance-results.json
 
   ci:
     if: always()
-    needs: [workflow-lint, check, repo-checks, node-range, asan]
+    needs: [workflow-lint, check, repo-checks, node-range, asan, conformance]
     runs-on: ubuntu-24.04
     steps:
       - name: Require every job to succeed
