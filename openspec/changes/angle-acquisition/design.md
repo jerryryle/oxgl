@@ -14,7 +14,7 @@ See proposal.md for motivation. Constraints that shape the choice:
 **A. Build from source with depot_tools (in our CI, results published as our own artifacts).**
 **B. Vendor third-party prebuilt binaries** — realistically: libraries extracted from Electron or Chromium distributions (they ship `libEGL`, `libGLESv2`, and `vk_swiftshader` on all three platforms), or package-manager ports (vcpkg, conda-forge, Homebrew) or community wheels/packages.
 
-Figures below are planning estimates for GitHub-hosted standard runners; task 1.2 measures the real numbers on the first build and records them in `angle/README.md`.
+Figures below are planning estimates for GitHub-hosted standard runners. Measured sizes and wall times are deliberately not recorded in the repo, since they change with every ANGLE update.
 
 | Criterion | A. Build from source | B. Vendor third-party prebuilts |
 |---|---|---|

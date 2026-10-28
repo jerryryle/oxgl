@@ -3,16 +3,16 @@
 ## 1. Build spike and recipe
 
 - [x] 1.1 Pick an ANGLE commit on the current Chromium stable branch and write `angle/args/{linux-x64,macos-arm64,windows-x64}.gn`; verify each with `gn gen` + `gn args --list` that every arg exists at that revision
-- [ ] 1.2 Write `angle/build.sh` (and `build.ps1` for Windows) that fetches with depot_tools at the pinned commit, builds only the needed targets, and assembles the bundle layout; run it on each platform and record wall time, checkout size, and bundle size in `angle/README.md`
-- [ ] 1.3 Add `angle/smoke/` (a tiny C program built against the bundle headers) that loads the bundle by absolute path, initializes a SwiftShader EGL display with no window system, clears a pbuffer, reads back a pixel, and checks `GL_RENDERER` names SwiftShader; verify it passes on all three platforms without setting `VK_ICD_FILENAMES`
-- [ ] 1.4 Add the outcome checks to the recipe: every linked component has an allowlisted SPDX license recorded in build-info and its license text in `licenses/`; Linux has no X11/xcb/Wayland `NEEDED` entries and no glibc symbol newer than 2.31; build-info lists Vulkan+SwiftShader everywhere, Metal on macOS, D3D11 on Windows; licenses directory covers every linked third_party; verify each check fails on a deliberately bad input
+- [x] 1.2 Write `angle/build.sh` (and `build.ps1` for Windows) that fetches with depot_tools at the pinned commit, builds only the needed targets, and assembles the bundle layout; run it on each platform (sizes and wall times are not recorded: they drift with every ANGLE update)
+- [x] 1.3 Add `angle/smoke/` (a tiny C program built against the bundle headers) that loads the bundle by absolute path, initializes a SwiftShader EGL display with no window system, clears a pbuffer, reads back a pixel, and checks `GL_RENDERER` names SwiftShader; verify it passes on all three platforms without setting `VK_ICD_FILENAMES`; verified in angle-build runs on PR #1 and `main`, where `GL_RENDERER` named the SwiftShader Vulkan device on all three platforms
+- [x] 1.4 Add the outcome checks to the recipe: every linked component has an allowlisted SPDX license recorded in build-info and its license text in `licenses/`; Linux has no X11/xcb/Wayland `NEEDED` entries and no glibc symbol newer than 2.31; build-info lists Vulkan+SwiftShader everywhere, Metal on macOS, D3D11 on Windows; licenses directory covers every linked third_party; verify each check fails on a deliberately bad input; verified by running `bundle.py`'s checks with canned `gn`/`readelf`/`objdump` output (disabled backends, a missing GN arg, X11 enabled, X11/xcb/Wayland linkage, glibc 2.34, a disallowed, missing or textless license, a narrowed allowlist, a missing library or ICD manifest), each failing with its message
 
 ## 2. Pin and publishing workflow
 
 - [x] 2.1 Add `angle/pin.toml` per design; verify a schema check script parses it and rejects a missing platform or malformed digest
-- [ ] 2.2 Add `.github/workflows/angle-build.yml` (manual dispatch; three-platform matrix; actions pinned by SHA; runs recipe, checks, smoke test; uploads bundles and symbols to a draft `angle-*` release and prints digests); verify one end-to-end run produces three bundles
+- [x] 2.2 Add `.github/workflows/angle-build.yml` (manual dispatch; three-platform matrix; actions pinned by SHA; runs recipe, checks, smoke test; uploads bundles and symbols to a draft `angle-*` release and prints digests); verify one end-to-end run produces three bundles
 - [ ] 2.3 Fill `bundles.toml` digests from that run and publish the release; verify downloading each URL reproduces its digest, and that the `bundles.toml` PR does not run `angle-build`
-- [ ] 2.4 Split the bundle URLs and digests out of `pin.toml` into `bundles.toml`; exclude it and `angle/README.md` from the `angle-build` trigger; fail `angle-build` first thing when the pinned `bundle_version` is already released; make the release job create-only with `--latest=false`; have `build.rs` warn when `pin.toml` is ahead of `bundles.toml`; verify `check_pin.py` accepts and rejects both files, the warning appears, and the guard fails a run whose version is released
+- [ ] 2.4 Split the bundle URLs and digests out of `pin.toml` into `bundles.toml`; exclude it and `angle/README.md` from the `angle-build` trigger; fail `angle-build` first thing when the pinned `bundle_version` is already released; make the release job create-only with `--latest=false`; have `build.rs` warn when `pin.toml` is ahead of `bundles.toml`; verify `check_pin.py` accepts and rejects both files, the warning appears, and the guard fails a run whose version is released (checked by running the guard step's script locally against the published release, not by a PR, so no recipe change is pushed)
 
 ## 3. Consumption in oxgl-sys
 
@@ -23,4 +23,4 @@
 
 ## 4. Documentation
 
-- [ ] 4.1 Document the update procedure, override, and cache in `angle/README.md`; verify the procedure by performing a dry-run pin bump on a branch
+- [ ] 4.1 Document the update procedure, override, and cache in `angle/README.md`; verify the procedure by performing a dry-run pin bump on a local branch that is never pushed (so `angle-build` never runs; steps that need a PR or a release are exercised by the real `angle-8078.1` cycle)
