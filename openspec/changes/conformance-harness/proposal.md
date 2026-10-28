@@ -25,6 +25,7 @@ oxgl promises to behave exactly as a browser's WebGL does, and the Khronos WebGL
 
 - New: `conformance/` (runner, canvas shim, suite pin, expectations), `.github/workflows/ci.yml` conformance job, `npm run conformance` script.
 - New devDependency: `jsdom` (MIT). It is test-only and never ships, so the licensing allowlist does not apply. Neither do the Khronos tests, which are fetched at test time and not distributed.
+- The `engines` floor rises from Node 22.12.0 to 22.22.2, the oldest Node 22 that jsdom 30 supports, because the harness tests run in `npm test`, which `node-range` runs on the floor.
 - No change to the oxgl API or native code. Nearly every page fails today, so the first expectations file lists almost the whole suite. Later changes remove entries as they make pages pass.
 - `CONTRIBUTING.md` documents running a subset locally and updating expectations.
 

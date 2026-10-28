@@ -14,8 +14,9 @@ to `main`. A newer push to a pull request cancels its earlier run.
 | `workflow-lint` | Linux | actionlint, and zizmor with `.github/zizmor.yml` (every action pinned to a commit SHA, minimal permissions, no template injection) |
 | `check` | Linux arm64 | rustfmt, clippy (pedantic, warnings as errors), Rust tests, ESLint and tsc, native + TS build, Node tests with `OXGL_BACKEND=software` |
 | `repo-checks` | Linux | the ANGLE pin check, dependency licenses and `THIRD_PARTY_NOTICES` |
-| `node-range` | Linux arm64 | Node tests on Node 22.12.0 (the `engines` floor) and Node 26 |
+| `node-range` | Linux arm64 | Node tests on Node 22.22.2 (the `engines` floor) and Node 26 |
 | `asan` | Linux arm64 | Rust tests under AddressSanitizer and LeakSanitizer |
+| `conformance` | Linux arm64 | both Khronos conformance suites with `OXGL_BACKEND=software`, judged against `conformance/expectations.txt`; each suite's report is uploaded as `conformance-results-<suite>` (see Conformance tests below) |
 | `gpu` | self-hosted `oxgl-gpu` runner | Node tests on a real GPU; skipped unless the `OXGL_GPU_RUNNER` repository variable is `true` |
 | `ci` | Linux | succeeds only when every job above except `gpu` succeeded |
 
@@ -92,3 +93,57 @@ unwinder follow ANGLE's signed return addresses, so suppressions can match
 ANGLE-internal frames. Read the header of `.github/lsan-suppressions.txt`
 before adding an entry: suppressions name one specific internal function,
 never a library or an exported EGL/GL/Vulkan entry point.
+
+## Conformance tests
+
+`npm run conformance` runs the Khronos WebGL conformance suites against the
+built package (`npm run build` first). The suite is `sdk/tests` of the
+`KhronosGroup/WebGL` commit pinned in `conformance/suite.json`. The first run
+fetches it into `.cache/conformance/`, and later runs reuse that copy until the
+pin changes. Each page runs in jsdom in its own Node process, with
+`canvas.getContext` returning oxgl contexts.
+
+There are two suites. `webgl1` runs the 1.0.x test list with WebGL 1 contexts,
+and `webgl2` runs the 2.0.x list, which includes `conformance/`, with WebGL 2
+contexts. Every page gets one outcome: `PASS`, `FAIL`, `TIMEOUT` or `CRASH`.
+
+`conformance/expectations.txt` lists every page that is not expected to pass,
+one per line as `<suite> <path> <OUTCOME> # <reason>`. A run fails on any
+difference: a page that regressed, a page that passes but is still listed, a
+different failure than the one listed, or an entry for a page the suite no
+longer has. A change that makes pages pass removes their entries. `SKIP`
+entries are for pages confirmed to hang; they are not run.
+
+An uncaught error ends a page at once only when its entry is `FAIL`. Every other
+page keeps running after the error, as in the official harness, until it
+completes or goes the time limit without a new result. Once the file is empty, every page is
+judged as the official harness judges it.
+
+Run CI's configuration (`OXGL_BACKEND=software`) when comparing with CI.
+Results under SwiftShader on other platforms can differ from CI's on Linux
+arm64.
+
+```sh
+OXGL_BACKEND=software npm run conformance                       # both suites
+OXGL_BACKEND=software npm run conformance -- --suite webgl1     # one suite
+OXGL_BACKEND=software npm run conformance -- --filter conformance/buffers/   # pages whose path contains this
+OXGL_BACKEND=software npm run conformance -- --filter conformance/buffers/ --update   # rewrite their entries
+```
+
+Other options: `--include-skipped` runs `SKIP` pages and reports them without
+judging them. `--fast-errors` ends every page at its first uncaught error, which
+helps when exploring an area that oxgl does not implement yet. `--timeout
+<seconds>` sets how long a page may go without a new result before it times
+out (default 20, the official harness's watchdog); each result restarts the
+clock. `--jobs <n>` sets how many pages run at once (default: half the CPU
+cores).
+
+`--update` rewrites the entries of the pages that ran from their outcomes. It
+keeps the reason of an entry whose outcome did not change, removes entries
+for pages that now pass, and takes new reasons from the page's first failure
+message. On a run without `--filter`, it also drops entries for pages the suite
+no longer has. Review the diff, and replace generated reasons with better ones
+where it helps. Moving a page to `SKIP` is a manual edit.
+
+Every run writes `conformance-results.json` with each page's outcome, result
+counts, duration and first failure message or error.

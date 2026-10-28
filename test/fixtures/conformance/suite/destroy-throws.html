@@ -1,0 +1,8 @@
+<!DOCTYPE html>
+<html><head><script src="harness.js"></script></head><body>
+<script>
+var gl = document.createElement("canvas").getContext("webgl");
+gl.destroy = function () { throw new Error("destroy failed"); };
+testPassed("context created"); finishTest();
+</script>
+</body></html>
