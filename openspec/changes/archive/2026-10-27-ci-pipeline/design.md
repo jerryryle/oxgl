@@ -69,6 +69,8 @@ Runner images are pinned by version label (not `-latest`) so image rollovers are
 
 Each SwiftShader context create/destroy includes ANGLE's internal shader compilation, and ASan multiplies the cost. Per-cycle time is measured in the first CI runs. If the full 1,000-cycle soaks push a job past the budget below, the full count keeps running on the Linux `check` job, the ASan job and a scheduled nightly run. macOS and Windows PR runs then set `OXGL_SOAK_ITERATIONS=200`.
 
+Measured in run 40645020601 (headless-context PR, warm caches), for all 1,000 cycles at 256×256: the Rust soak took 0.32 s on Linux, 0.33 s on macOS, 0.40 s on Windows and 0.87 s under ASan, and the Node soak took 0.37 s, 0.28 s and 0.40 s. That is under 1 ms per cycle everywhere, so every run keeps the full count and no nightly run is added.
+
 ### Cost
 
 Per PR: 3 platform jobs + 2 Linux node-range jobs + 1 ASan job + 2 Linux lint jobs (`workflow-lint`, `repo-checks`). Estimated runtime after caches warm: Linux ~8-10 min, Windows ~12-15 min, macOS ~8-10 min, ASan ~15-20 min (build-std is the main cost). On a public repository standard runners are free; on a private one macOS minutes dominate, and the macOS job could be limited to pushes to `main` plus a PR label if needed.

@@ -7,4 +7,4 @@
 # either hides every unreachable allocation made under it, including ones our
 # own misuse causes. The published ANGLE libraries are stripped, so naming an
 # ANGLE-internal function first needs the unstripped-libraries follow-up
-# described in openspec/changes/ci-pipeline/design.md.
+# described in openspec/changes/archive/2026-10-27-ci-pipeline/design.md.
