@@ -11,6 +11,7 @@
 - [ ] 2.2 Add `npm ci`, `npm run lint` (which includes the license and notices check), `npm run build`, and `OXGL_BACKEND=software npm test` steps; record soak per-cycle time on each platform and in ASan, and apply the reduced macOS/Windows PR count plus a nightly full run if the budget is exceeded (see design); verify the test log shows clear-then-readPixels and soak tests executing (not skipped) on every platform
 - [ ] 2.3 Add the `node-range` job (Node 22.12.0 exactly, matching the `engines` floor, and 26 on Linux); verify both pass
 - [ ] 2.4 Verify a stale `Cargo.lock` fails CI via `--locked`
+- [ ] 2.5 Run `python3 angle/scripts/check_pin.py --allow-unpublished` in the `check` job, so a malformed `angle/bundles.toml` fails its PR (it does not trigger `angle-build`); verify a bundles.toml with an uppercase digest fails
 
 ## 3. AddressSanitizer job
 

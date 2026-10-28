@@ -53,7 +53,7 @@ CI SHALL include a Linux x64 job that builds and runs the Rust test suites, incl
 CI SHALL obtain ANGLE only through the pinned, checksum-verified bundle defined by angle-distribution, MAY cache it keyed by its digest, and SHALL NOT build ANGLE from source.
 
 #### Scenario: Cache keyed by digest
-- **WHEN** the ANGLE pin changes
+- **WHEN** a bundle digest in the bundle manifest changes
 - **THEN** the next CI run misses the cache, downloads and verifies the new bundle, and caches it under the new digest
 
 ### Requirement: Workflow security

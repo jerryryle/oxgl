@@ -10,8 +10,30 @@ Defines how oxgl obtains, verifies, and ships the ANGLE and SwiftShader binaries
 The repository SHALL record a single pinned ANGLE source revision (commit hash and the Chromium release branch it was taken from), the build configuration for each supported platform, and the SHA-256 digest of each platform's ANGLE bundle. Changing any of these SHALL be a reviewable change to tracked files.
 
 #### Scenario: Pin is inspectable
-- **WHEN** a reviewer reads the pin manifest
-- **THEN** it names the ANGLE commit, the Chromium branch, and one bundle URL and SHA-256 digest for each of Linux x64, macOS arm64, and Windows x64
+- **WHEN** a reviewer reads the recipe pin and the bundle manifest
+- **THEN** the pin names the ANGLE commit and the Chromium branch, and the manifest names one bundle URL and SHA-256 digest for each of Linux x64, macOS arm64, and Windows x64
+
+### Requirement: ANGLE is built only when its recipe changes
+ANGLE SHALL be built from source only by the ANGLE build workflow, which SHALL run only for changes to the build recipe (the pinned revision, build configuration, build scripts, license data and the bundle smoke test). Recording the digests of published bundles and changes to oxgl's own code SHALL NOT build ANGLE.
+
+#### Scenario: Recording digests does not rebuild
+- **WHEN** a pull request changes only the bundle manifest
+- **THEN** the ANGLE build workflow does not run
+
+#### Scenario: oxgl change does not rebuild
+- **WHEN** a pull request changes only oxgl's Rust or JavaScript code
+- **THEN** the ANGLE build workflow does not run, and the native build uses the pinned prebuilt bundle
+
+### Requirement: Published bundles are immutable
+A published bundle version SHALL never be rebuilt or replaced. Every recipe change SHALL produce a new bundle version, and the build workflow SHALL fail before compiling when the pinned bundle version is already released. ANGLE bundle releases SHALL NOT be marked as the repository's latest release.
+
+#### Scenario: Forgotten version bump
+- **WHEN** a pull request changes the build recipe but keeps a bundle version that is already released
+- **THEN** the ANGLE build workflow fails in its first step, naming the version to bump
+
+#### Scenario: Existing release is not overwritten
+- **WHEN** the release job runs for a bundle version that already has a release
+- **THEN** it fails without uploading anything
 
 ### Requirement: Bundle contents
 Each platform bundle SHALL contain the ANGLE EGL and GLES shared libraries, the SwiftShader Vulkan ICD and its manifest, any Vulkan loader ANGLE requires at runtime, the EGL/GLES/KHR headers including ANGLE extension headers, a build-info file recording the source revision and build configuration, and the license notices of every included component.
@@ -79,11 +101,15 @@ The Linux bundle SHALL declare the minimum glibc version it requires, and SHALL 
 - **THEN** it states the maximum glibc symbol version referenced by the bundled libraries
 
 ### Requirement: Bundle licenses are on the project allowlist
-Every component in a platform bundle SHALL carry a license on the project's license allowlist (see the licensing capability), recorded per component in build-info. The build recipe SHALL fail if any linked component's license is missing from the bundle's license directory or is not on the allowlist.
+Every component in a platform bundle SHALL carry a license on the project's license allowlist (see the licensing capability), recorded per component in build-info. The build recipe SHALL fail if any linked component's license is missing from the bundle's license directory or is not on the allowlist. The native build SHALL re-check the pinned bundle's recorded component licenses against the current allowlist, so a narrowed allowlist cannot pass with a bundle built under an older one.
 
 #### Scenario: Disallowed component license
 - **WHEN** a pin bump pulls in a linked third-party component whose license is not on the allowlist
 - **THEN** the bundle build fails and names the component and its license
+
+#### Scenario: Allowlist narrowed after a bundle was built
+- **WHEN** a license that a pinned bundle's component uses is removed from the allowlist
+- **THEN** the native build fails and names that component and its license
 
 #### Scenario: Per-component license recorded
 - **WHEN** a bundle's build-info is read
