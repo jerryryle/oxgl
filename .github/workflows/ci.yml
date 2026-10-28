@@ -192,7 +192,9 @@ jobs:
         with:
           persist-credentials: false
       - name: Install the pinned nightly
-        run: rustup toolchain install "$ASAN_NIGHTLY" --profile minimal --component rust-src
+        # PLATFORM-FOCUS: re-enable (x64 rebuilds std, which needs rust-src)
+        # run: rustup toolchain install "$ASAN_NIGHTLY" --profile minimal --component rust-src
+        run: rustup toolchain install "$ASAN_NIGHTLY" --profile minimal
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
@@ -205,30 +207,16 @@ jobs:
         with:
           path: ~/.cargo/oxgl-angle
           key: angle-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('angle/bundles.toml') }}
-      # TEMP-DIAG: remove before merge.
-      - name: Diagnose ASan startup
-        continue-on-error: true
-        run: |
-          set +e
-          tail -3 /proc/self/maps
-          cargo +"$ASAN_NIGHTLY" test -p oxgl-core --lib --locked -Zbuild-std --target aarch64-unknown-linux-gnu --no-run --message-format=json \
-            | jq -r 'select(.executable != null) | .executable' > /tmp/bins
-          bin=$(head -1 /tmp/bins)
-          ls -la "$bin"
-          "$bin" --list > /tmp/out 2>&1; echo "plain exit=$?"; tail -5 /tmp/out
-          setarch "$(uname -m)" -R "$bin" --list > /tmp/out 2>&1; echo "no-aslr exit=$?"; tail -5 /tmp/out
-          printf 'int main(void){return 0;}\n' > /tmp/t.c
-          clang -fsanitize=address /tmp/t.c -o /tmp/t-clang && { /tmp/t-clang; echo "clang asan exit=$?"; }
-          printf 'fn main(){println!("hi");}\n' > /tmp/t.rs
-          rustc +"$ASAN_NIGHTLY" -Zsanitizer=address --target aarch64-unknown-linux-gnu /tmp/t.rs -o /tmp/t-rust && { /tmp/t-rust; echo "rust asan exit=$?"; }
-          sudo apt-get install -y -qq gdb > /dev/null 2>&1
-          gdb -batch -ex run -ex bt -ex 'info registers pc sp' -ex "x/4i \$pc" --args "$bin" --list 2>&1 | tail -40
       # oxgl-node is a Node addon whose tests run under Node, not cargo.
+      # No -Zbuild-std on aarch64: it instruments compiler_builtins, whose
+      # outline atomics __asan_init calls before shadow memory exists, so every
+      # test binary segfaults at startup. The prebuilt std is uninstrumented;
+      # heap errors are still caught through ASan's allocator.
       # PLATFORM-FOCUS: re-enable
       #   -Zbuild-std --target x86_64-unknown-linux-gnu
       - run: >-
           cargo +"$ASAN_NIGHTLY" test --workspace --exclude oxgl-node --locked
-          -Zbuild-std --target aarch64-unknown-linux-gnu
+          --target aarch64-unknown-linux-gnu
 
   # Extension point: GPU coverage on a self-hosted runner, enabled by setting
   # the OXGL_GPU_RUNNER repository variable to 'true'. Not required by `ci`.

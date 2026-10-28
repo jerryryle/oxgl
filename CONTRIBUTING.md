@@ -71,14 +71,18 @@ uvx zizmor@<ZIZMOR_VERSION> --config .github/zizmor.yml .github/workflows
 
 ```sh
 NIGHTLY=<ASAN_NIGHTLY>
-rustup toolchain install "$NIGHTLY" --profile minimal --component rust-src
+rustup toolchain install "$NIGHTLY" --profile minimal
 RUSTFLAGS="-Zsanitizer=address -Cforce-frame-pointers=yes" \
 RUSTDOCFLAGS="-Zsanitizer=address -Cforce-frame-pointers=yes" \
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1:detect_stack_use_after_return=1 \
 LSAN_OPTIONS="suppressions=$PWD/.github/lsan-suppressions.txt" \
 cargo +"$NIGHTLY" test --workspace --exclude oxgl-node --locked \
-  -Zbuild-std --target aarch64-unknown-linux-gnu
+  --target aarch64-unknown-linux-gnu
 ```
+
+The arm64 job does not rebuild std with `-Zbuild-std`: on aarch64 that
+instruments `compiler_builtins`, and every test binary then crashes inside
+`__asan_init`.
 
 `.github/lsan-suppressions.txt` starts empty. Read its header before adding an
 entry: suppressions name one specific internal function, never a library or an
