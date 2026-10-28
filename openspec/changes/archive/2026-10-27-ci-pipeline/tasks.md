@@ -8,7 +8,7 @@
 ## 2. Platform check matrix
 
 - [x] 2.1 Add the `check` job matrix (ubuntu-24.04, macos-15, windows-2025) with toolchain, cargo/npm caches, ANGLE cache keyed by the pinned digest, `npm ci`, `npm run lint:rust`, `npm run lint:js`, and `cargo test --workspace --exclude oxgl-node --locked`; verify a deliberate clippy pedantic violation on a branch fails all three platforms
-- [ ] 2.2 Add `npm run build` and `OXGL_BACKEND=software npm test` steps; record soak per-cycle time on each platform and in ASan, and apply the reduced macOS/Windows PR count plus a nightly full run if the budget is exceeded (see design); verify the test log shows clear-then-readPixels and soak tests executing (not skipped) on every platform
+- [x] 2.2 Add `npm run build` and `OXGL_BACKEND=software npm test` steps; record soak per-cycle time on each platform and in ASan, and apply the reduced macOS/Windows PR count plus a nightly full run if the budget is exceeded (see design); verify the test log shows clear-then-readPixels and soak tests executing (not skipped) on every platform
 - [x] 2.3 Add the `node-range` job (Node 22.12.0 exactly, matching the `engines` floor, and 26 on Linux); verify both pass
 - [x] 2.4 Verify a stale `Cargo.lock` fails CI via `--locked`
 - [x] 2.5 Run `python3 angle/scripts/check_pin.py --allow-unpublished` in the Linux `repo-checks` job (not the three-platform `check` matrix), so a malformed `angle/bundles.toml` fails its PR (it does not trigger `angle-build`); verify a bundles.toml with an uppercase digest fails
@@ -16,9 +16,9 @@
 
 ## 3. AddressSanitizer job
 
-- [ ] 3.1 Add the `asan` job (pinned nightly, build-std, ASan/LSan options, ANGLE cache restored as in `check`); verify it runs the SwiftShader integration and soak tests
-- [ ] 3.2 Add `.github/lsan-suppressions.txt`, empty apart from a header comment stating the narrow-suppression rule; verify the job passes with it (if a real ANGLE-internal report appears, stop and propose the symbols-archive follow-up instead of adding a broad entry)
-- [ ] 3.3 Verify detection on a throwaway branch: an injected use-after-free and an injected leak of memory allocated by `oxgl-sys` code each fail the job. Make the leak deterministic by leaking from a short-lived spawned thread that is joined before the test returns (e.g. `Box::into_raw` of a heap buffer, then the pointer discarded), so no stale stack slot on the test thread keeps it reachable; a skipped `eglDestroyContext` is the live-object counter test's to catch, not LSan's
+- [x] 3.1 Add the `asan` job (pinned nightly, build-std, ASan/LSan options, ANGLE cache restored as in `check`); verify it runs the SwiftShader integration and soak tests
+- [x] 3.2 Add `.github/lsan-suppressions.txt`, empty apart from a header comment stating the narrow-suppression rule; verify the job passes with it (if a real ANGLE-internal report appears, stop and propose the symbols-archive follow-up instead of adding a broad entry)
+- [x] 3.3 Verify detection on a throwaway branch: an injected use-after-free and an injected leak of memory allocated by `oxgl-sys` code each fail the job. Make the leak deterministic by leaking from a short-lived spawned thread that is joined before the test returns (e.g. `Box::into_raw` of a heap buffer, then the pointer discarded), so no stale stack slot on the test thread keeps it reachable; a skipped `eglDestroyContext` is the live-object counter test's to catch, not LSan's
 
 ## 4. Aggregate check and GPU slot
 
@@ -27,7 +27,7 @@
 
 ## 5. Documentation
 
-- [ ] 5.1 Document the jobs, how to reproduce each locally (including the ASan command), and the branch-protection setting to require `ci` in `CONTRIBUTING.md`; verify the local ASan command runs as written on Linux
+- [x] 5.1 Document the jobs, how to reproduce each locally (including the ASan command), and the branch-protection setting to require `ci` in `CONTRIBUTING.md`; verify the local ASan command runs as written on Linux
 
 ## Workflow follow-up
 
