@@ -4,18 +4,20 @@ oxgl renders through [ANGLE](https://chromium.googlesource.com/angle/angle),
 with SwiftShader as the software fallback. Google publishes no ANGLE binaries,
 so oxgl builds its own from a pinned revision and publishes them as GitHub
 release assets. Everything else (developers, CI, npm builds) downloads those
-bundles and verifies them against digests committed here.
+bundles and verifies them against digests committed here, so ANGLE is built
+only when its recipe changes.
 
 ## Files
 
 | File | Purpose |
 |---|---|
-| `pin.toml` | ANGLE commit, depot_tools commit, release tag, and per-platform bundle URL + sha256 |
+| `pin.toml` | Recipe inputs: ANGLE commit, depot_tools commit, `bundle_version` (release tag) |
+| `bundles.toml` | Build outputs: per-platform bundle URL + sha256 that oxgl-sys downloads |
 | `args/*.gn` | GN build arguments: `common.gn` plus one file per platform |
 | `args/targets.txt` | Ninja targets to build |
 | `build.sh`, `build.ps1` | Build recipe (`fetch`, `build`, `bundle`, `all`) for macOS/Linux and Windows |
 | `scripts/bundle.py` | Assembles the bundle and enforces the outcome checks |
-| `scripts/check_pin.py` | Validates `pin.toml` |
+| `scripts/check_pin.py` | Validates `pin.toml` and `bundles.toml` |
 | `licenses.toml` | SPDX licenses for third_party directories lacking `README.chromium` metadata |
 | `smoke/smoke.c` | Loads a bundle, renders one frame with SwiftShader, reads a pixel back |
 
@@ -45,8 +47,12 @@ The GN-arg and license checks also run right after `gn gen`
 1. `OXGL_ANGLE_DIR`: an extracted bundle directory (offline builds, or testing a
    local ANGLE build). The build prints a warning while this is set.
 2. The cache: `$OXGL_ANGLE_CACHE`, default `~/.cargo/oxgl-angle/<sha256>/`.
-3. A download of the pinned URL with `curl`, verified against the pinned sha256
-   before anything is extracted. A mismatch fails the build.
+3. A download of the URL in `bundles.toml` with `curl`, verified against its
+   sha256 before anything is extracted. A mismatch fails the build.
+
+When `pin.toml` names a newer `bundle_version` than `bundles.toml` (a recipe
+change has merged but its bundles are not pinned yet), the build uses the older
+bundles and prints a warning.
 
 `npm run build` then copies the bundle's `lib/` to `dist/angle/` next to the
 addon and writes `dist/THIRD_PARTY_NOTICES` with the ANGLE license texts.
@@ -74,19 +80,33 @@ OXGL_ANGLE_DIR=~/.cache/oxgl/angle-build/dist/angle-macos-arm64 npm run build
 | linux-x64 | first `angle-build` run | | |
 | windows-x64 | first `angle-build` run | | |
 
-## Updating ANGLE
+## Changing ANGLE
 
-1. Pick the ANGLE commit Chrome stable ships (chromiumdash.appspot.com lists it
-   under the release's hashes) and set `angle_commit`, `chromium_branch`, and a
-   new `bundle_version` in `pin.toml`. Optionally bump `depot_tools_commit`.
-2. Open a PR with the pin change: `angle-build` runs automatically and builds,
-   checks and smoke-tests all three platforms. After it merges, run
-   `angle-build` by hand from `main` (Actions → angle-build → Run workflow); that
-   run creates a draft release named after `bundle_version`, with the digests
-   in its summary.
-3. Copy each platform's URL and sha256 into `pin.toml`, run
-   `python3 angle/scripts/check_pin.py`, and open a PR; CI builds against the
-   new bundles.
-4. Publish the draft release when the PR merges.
+The recipe is everything in this directory except `bundles.toml` and this
+README. Any recipe change (a new ANGLE commit, GN args, targets, scripts,
+license data) gets a new `bundle_version`: published bundles are never rebuilt
+or replaced, because rebuilds are not bit-identical and older commits pin the
+old digests.
 
-A deleted release asset is rebuilt by re-running the workflow at the same pin.
+1. Optionally iterate locally first: change the recipe, run
+   `angle/build.sh all <platform>` (later runs recompile only what changed) and
+   point oxgl at the result with `OXGL_ANGLE_DIR`.
+2. Open a PR with the recipe change and a bumped `bundle_version` in
+   `pin.toml` (`angle-NNNN.<n+1>`; for a new ANGLE version, pick the commit
+   Chrome stable ships, listed on chromiumdash.appspot.com, and set
+   `angle_commit`, `chromium_branch` and `angle-<branch>.1`). `angle-build`
+   runs: it fails within seconds if the version is already released, within
+   minutes if a GN arg or license check fails (`bundle.py --preflight`), and
+   otherwise builds, checks and smoke-tests all three platforms.
+3. After it merges, run `angle-build` by hand from `main` (Actions →
+   angle-build → Run workflow). That run creates a draft release named after
+   `bundle_version`, with the digests in its summary.
+4. Copy each platform's URL and sha256, and the `bundle_version`, into
+   `bundles.toml`, run `python3 angle/scripts/check_pin.py`, and open a PR.
+   This does not rebuild ANGLE; CI builds oxgl against the new bundles.
+5. When that PR merges, publish the release without making it the
+   repository's latest release (oxgl's own `v*` releases share the list):
+   `gh release edit <bundle_version> --draft=false --latest=false`.
+
+A deleted or broken release asset is replaced the same way, under a new
+`bundle_version`.

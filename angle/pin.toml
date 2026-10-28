@@ -1,20 +1,8 @@
-# ANGLE revision and published bundles used by oxgl (see angle/README.md).
-# Changing any value here is a reviewed change; oxgl-sys verifies each bundle
-# against its sha256 before use.
+# The ANGLE build recipe's pinned inputs (see angle/README.md). Changing a value
+# here, or anything else under angle/ except bundles.toml and README.md, is a
+# recipe change: bump bundle_version, and angle-build rebuilds the bundles.
 
 angle_commit = "127e783de33425c27a70a3f48da9d9202d6a0745"
 chromium_branch = "chromium/8078"   # Chrome 156 stable; informational
 bundle_version = "angle-8078.1"     # release tag; .N increments on rebuilds of the same branch
 depot_tools_commit = "3218cfc968b246bf2498fd13f707851a0b1cd408"
-
-[platform.linux-x64]
-url = ""
-sha256 = ""
-
-[platform.macos-arm64]
-url = ""
-sha256 = ""
-
-[platform.windows-x64]
-url = ""
-sha256 = ""

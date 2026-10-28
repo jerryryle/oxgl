@@ -1,8 +1,9 @@
-# Builds the oxgl ANGLE bundles from the revision in angle/pin.toml.
-# On pull requests that touch the recipe it builds, checks and smoke-tests all
-# three platforms and keeps the bundles as run artifacts. Run manually
-# (workflow_dispatch) to also upload them to a draft release, then copy the
-# printed digests into angle/pin.toml (see angle/README.md).
+# Builds the oxgl ANGLE bundles from the recipe in angle/ (pin.toml, GN args,
+# scripts, license data). On pull requests that touch the recipe it builds,
+# checks and smoke-tests all three platforms and keeps the bundles as run
+# artifacts. Run manually (workflow_dispatch) from main to also create a draft
+# release, then copy the printed digests into angle/bundles.toml (see
+# angle/README.md). Published bundle versions are never rebuilt or replaced.
 name: angle-build
 
 on:
@@ -10,6 +11,8 @@ on:
   pull_request:
     paths:
       - "angle/**"
+      - "!angle/bundles.toml"   # build outputs: recording them must not rebuild
+      - "!angle/README.md"
       - ".github/workflows/angle-build.yml"
 
 concurrency:
@@ -20,7 +23,25 @@ permissions:
   contents: read
 
 jobs:
+  guard:
+    # A recipe change needs a new bundle_version; fail in seconds, not after
+    # the compile. (Drafts are invisible to this read-only token; the release
+    # job catches those.)
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+      - name: Refuse an already released bundle_version
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          tag="$(angle/scripts/pin.sh bundle_version)"
+          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>&1; then
+            echo "::error::$tag is already released; bump bundle_version in angle/pin.toml"
+            exit 1
+          fi
+
   build:
+    needs: guard
     name: build (${{ matrix.platform }})
     strategy:
       fail-fast: false
@@ -138,15 +159,17 @@ jobs:
           tag="$(angle/scripts/pin.sh bundle_version)"
           commit="$(angle/scripts/pin.sh angle_commit)"
           (cd bundles && sha256sum ./*.tar.xz | tee SHA256SUMS)
+          # Published bundles are immutable (rebuilds are not bit-identical), so
+          # never upload into an existing release, draft or not.
           if gh release view "$tag" >/dev/null 2>&1; then
-            # Re-run at the same pin (e.g. to restore a deleted asset).
-            gh release upload "$tag" bundles/*.tar.xz bundles/SHA256SUMS --clobber
-          else
-            # Tag the commit whose recipe built these bundles, not the default branch.
-            gh release create "$tag" bundles/*.tar.xz bundles/SHA256SUMS \
-              --draft --target "$GITHUB_SHA" --title "ANGLE bundle $tag" \
-              --notes "ANGLE $commit built by angle/build.sh at ${GITHUB_SHA}. Digests are in SHA256SUMS; copy them into angle/pin.toml."
+            echo "::error::release $tag already exists; bump bundle_version in angle/pin.toml (delete it first if it is an unpublished draft)"
+            exit 1
           fi
+          # Tag the commit whose recipe built these bundles, not the default
+          # branch, and keep ANGLE releases from becoming the repo's "Latest".
+          gh release create "$tag" bundles/*.tar.xz bundles/SHA256SUMS \
+            --draft --latest=false --target "$GITHUB_SHA" --title "ANGLE bundle $tag" \
+            --notes "ANGLE $commit built by angle/build.sh at ${GITHUB_SHA}. Digests are in SHA256SUMS; copy them into angle/bundles.toml."
           {
             echo "### ANGLE bundle digests ($tag)"
             echo '```'

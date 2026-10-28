@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""Validates angle/pin.toml.
+"""Validates angle/pin.toml and angle/bundles.toml.
 
-    check_pin.py [--allow-unpublished] [path]
+    check_pin.py [--allow-unpublished]
 
-Fails on a missing key or platform, a malformed commit or digest, or (unless
---allow-unpublished) a platform without a published URL and digest.
+Fails on a missing key or platform, a malformed commit, version or digest, or
+(unless --allow-unpublished) a platform without a published URL and digest.
 """
 
 import re
@@ -13,16 +13,24 @@ import tomllib
 from pathlib import Path
 
 PLATFORMS = ("linux-x64", "macos-arm64", "windows-x64")
+VERSION = r"angle-\d+\.\d+"
 
 
-def problems(pin: dict, allow_unpublished: bool) -> list[str]:
+def pin_problems(pin: dict) -> list[str]:
     found = []
-    for key, pattern in (("angle_commit", r"[0-9a-f]{40}"), ("depot_tools_commit", r"[0-9a-f]{40}")):
-        if not re.fullmatch(pattern, str(pin.get(key, ""))):
+    for key in ("angle_commit", "depot_tools_commit"):
+        if not re.fullmatch(r"[0-9a-f]{40}", str(pin.get(key, ""))):
             found.append(f"{key} must be a 40-character lowercase hex commit")
-    if not re.fullmatch(r"angle-\d+\.\d+", str(pin.get("bundle_version", ""))):
+    if not re.fullmatch(VERSION, str(pin.get("bundle_version", ""))):
         found.append("bundle_version must look like angle-<branch>.<n>")
-    platforms = pin.get("platform", {})
+    return found
+
+
+def bundles_problems(bundles: dict, allow_unpublished: bool) -> list[str]:
+    found = []
+    if not re.fullmatch(VERSION, str(bundles.get("bundle_version", ""))):
+        found.append("bundle_version must look like angle-<branch>.<n>")
+    platforms = bundles.get("platform", {})
     for name in PLATFORMS:
         entry = platforms.get(name)
         if entry is None:
@@ -39,14 +47,23 @@ def problems(pin: dict, allow_unpublished: bool) -> list[str]:
 
 
 def main() -> None:
-    args = [a for a in sys.argv[1:] if not a.startswith("--")]
-    path = Path(args[0]) if args else Path(__file__).resolve().parents[1] / "pin.toml"
-    with open(path, "rb") as f:
-        pin = tomllib.load(f)
-    found = problems(pin, "--allow-unpublished" in sys.argv)
-    if found:
-        sys.exit(f"{path}:\n  " + "\n  ".join(found))
-    print(f"{path}: ok")
+    angle = Path(__file__).resolve().parents[1]
+    allow_unpublished = "--allow-unpublished" in sys.argv
+    failed = False
+    for name, check in (
+        ("pin.toml", pin_problems),
+        ("bundles.toml", lambda data: bundles_problems(data, allow_unpublished)),
+    ):
+        path = angle / name
+        with open(path, "rb") as f:
+            found = check(tomllib.load(f))
+        if found:
+            failed = True
+            print(f"{path}:\n  " + "\n  ".join(found), file=sys.stderr)
+        else:
+            print(f"{path}: ok")
+    if failed:
+        sys.exit(1)
 
 
 if __name__ == "__main__":

@@ -11,7 +11,8 @@
 
 - [x] 2.1 Add `angle/pin.toml` per design; verify a schema check script parses it and rejects a missing platform or malformed digest
 - [ ] 2.2 Add `.github/workflows/angle-build.yml` (manual dispatch; three-platform matrix; actions pinned by SHA; runs recipe, checks, smoke test; uploads bundles and symbols to a draft `angle-*` release and prints digests); verify one end-to-end run produces three bundles
-- [ ] 2.3 Fill `pin.toml` digests from that run and publish the release; verify downloading each URL reproduces its digest
+- [ ] 2.3 Fill `bundles.toml` digests from that run and publish the release; verify downloading each URL reproduces its digest, and that the `bundles.toml` PR does not run `angle-build`
+- [ ] 2.4 Split the bundle URLs and digests out of `pin.toml` into `bundles.toml`; exclude it and `angle/README.md` from the `angle-build` trigger; fail `angle-build` first thing when the pinned `bundle_version` is already released; make the release job create-only with `--latest=false`; have `build.rs` warn when `pin.toml` is ahead of `bundles.toml`; verify `check_pin.py` accepts and rejects both files, the warning appears, and the guard fails a run whose version is released
 
 ## 3. Consumption in oxgl-sys
 

@@ -29,24 +29,52 @@ Figures below are planning estimates for GitHub-hosted standard runners; task 1.
 
 ## Recommendation
 
-**Option A, delivered as prebuilt artifacts (a hybrid):** build ANGLE from source in a dedicated `angle-build` workflow that runs only when the pin changes, publish the per-platform bundles as release assets on the oxgl GitHub repo, and have everything else (developers, regular CI, the npm release) consume those verified prebuilts.
+**Option A, delivered as prebuilt artifacts (a hybrid):** build ANGLE from source in a dedicated `angle-build` workflow that runs only when the build recipe changes, publish the per-platform bundles as release assets on the oxgl GitHub repo, and have everything else (developers, regular CI, the npm release) consume those verified prebuilts.
 
 Rationale: it is the only option that satisfies the headless/no-X11 requirement and the "no undefined behavior" bar with configuration we control, gives SwiftShader + the right GPU backend on all three platforms, lets us respond to ANGLE security fixes on our schedule, and leaves room for sanitizer-instrumented builds. Its main cost, build time, is paid ~once a month rather than per PR. Option B would be acceptable only as a short-lived stopgap and is not recommended.
 
 ## Decisions
 
-### Pin manifest (`angle/pin.toml`)
+### Recipe pin (`angle/pin.toml`) and bundle manifest (`angle/bundles.toml`)
+
+The build's inputs and its outputs live in separate files, so recording a
+build's outputs does not trigger another build.
 
 ```toml
-angle_commit   = "<40-hex>"
-chromium_branch = "chromium/NNNN"   # informational: which stable branch the commit came from
-bundle_version = "angle-NNNN.<n>"   # release tag; <n> increments for rebuilds of the same branch
+# angle/pin.toml: inputs; changing it (or anything else in the recipe) rebuilds ANGLE
+angle_commit       = "<40-hex>"
+chromium_branch    = "chromium/NNNN"   # informational: which stable branch the commit came from
+bundle_version     = "angle-NNNN.<n>"  # release tag; <n> increments for rebuilds of the same branch
+depot_tools_commit = "<40-hex>"
+```
+
+```toml
+# angle/bundles.toml: outputs; what oxgl-sys downloads
+bundle_version = "angle-NNNN.<n>"      # the recipe version these bundles were built from
 
 [platform.linux-x64]
 url    = "https://github.com/<org>/oxgl/releases/download/angle-NNNN.n/angle-linux-x64.tar.xz"
 sha256 = "<64-hex>"
 # ... macos-arm64, windows-x64
 ```
+
+The recipe is everything under `angle/` except `bundles.toml` and `README.md`,
+plus the workflow file; `angle-build` runs on pull requests that touch it.
+While `pin.toml` names a newer `bundle_version` than `bundles.toml` (between
+a recipe change merging and its bundles being pinned), `oxgl-sys/build.rs`
+builds against the older bundles and prints a warning.
+
+### Published bundles are immutable
+
+A published `bundle_version` is never rebuilt or replaced: ANGLE builds are
+not bit-identical, so a rebuild would change every digest and break
+verification for every commit pinned to the old ones. `angle-build` fails in
+its first step when a release with the pin's `bundle_version` already exists,
+so a recipe change without a version bump fails in seconds rather than after
+the compile. The release job creates a release only, never uploads into an
+existing one, and marks it `--latest=false` so ANGLE releases never become
+the repository's "Latest" release (oxgl's own `v*` releases share the release
+list).
 
 ### Build configuration (`angle/args/<platform>.gn`)
 
@@ -81,7 +109,7 @@ Built against Chromium's Debian sysroot; the build fails if any referenced glibc
 
 ### Update procedure
 
-1. Pick the ANGLE commit from the target Chromium stable branch. 2. Edit `angle_commit`/`chromium_branch` in `pin.toml`. 3. Run the `angle-build` workflow (manual dispatch) — it builds all three platforms, runs a smoke test (create SwiftShader display, clear, read back) against each bundle, and uploads a draft release. 4. Fill the digests into `pin.toml` and open a PR; regular CI validates against the new bundles. 5. Publish the release when the PR merges.
+1. Change the recipe (the ANGLE commit and `chromium_branch` in `pin.toml`, GN args, targets, scripts or license data) and bump `bundle_version`. 2. Open a PR: `angle-build` builds, checks and smoke-tests all three platforms (create a SwiftShader display, clear, read back). 3. After it merges, run `angle-build` by hand from `main`; it creates a draft release with the digests in its summary. 4. Copy the URLs and digests into `bundles.toml` and open a PR; this does not rebuild ANGLE, and regular CI validates against the new bundles. 5. Publish the release when that PR merges.
 
 ## Safety Rules
 
@@ -92,7 +120,7 @@ Built against Chromium's Debian sysroot; the build fails if any referenced glibc
 ## Risks / Trade-offs
 
 - [ANGLE build breaks on a GitHub runner image update] → Workflow pins runner image versions; failure only blocks pin bumps, never regular CI.
-- [Release assets deleted or repo renamed] → Digests in-repo make substitution detectable; a deleted asset is rebuilt by re-running `angle-build` at the same pin.
+- [Release assets deleted or repo renamed] → Digests in-repo make substitution detectable; a deleted asset is rebuilt under a new `bundle_version`, and commits pinned to the deleted one cannot build from a fresh cache until they move to it.
 - [Long time-to-patch for a critical ANGLE CVE] → Documented update procedure; the build can run on larger runners to cut wall time.
 - [Upstream removes or renames a GN arg] → Spec states outcomes; build script checks outcomes (linkage, backends) rather than trusting args.
 - [Runtime loading picks wrong ICD or system Vulkan loader] → Smoke test asserts the SwiftShader renderer string; task 1.3 verifies isolation per platform.

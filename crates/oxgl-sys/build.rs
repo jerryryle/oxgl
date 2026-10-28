@@ -2,7 +2,7 @@
 //!
 //! Order: `OXGL_ANGLE_DIR` (an extracted bundle, for offline builds or a
 //! locally built ANGLE), then the cache, then a download from the URL in
-//! `angle/pin.toml`. A download is verified against the pinned sha256 before
+//! `angle/bundles.toml`. A download is verified against the pinned sha256 before
 //! anything is extracted; there is no unverified fallback.
 //!
 //! The resolved bundle directory is written to `<target>/<profile>/oxgl-angle-dir`
@@ -58,8 +58,11 @@ fn run() -> Result<()> {
     println!("cargo::rerun-if-env-changed=OXGL_ANGLE_DIR");
     println!("cargo::rerun-if-env-changed=OXGL_ANGLE_CACHE");
     let manifest_dir = PathBuf::from(var("CARGO_MANIFEST_DIR")?);
-    let pin_path = manifest_dir.join("../../angle/pin.toml");
+    let angle_dir = manifest_dir.join("../../angle");
+    let pin_path = angle_dir.join("pin.toml");
+    let bundles_path = angle_dir.join("bundles.toml");
     println!("cargo::rerun-if-changed={}", pin_path.display());
+    println!("cargo::rerun-if-changed={}", bundles_path.display());
 
     let target = var("TARGET")?;
     let platform = PLATFORMS
@@ -84,7 +87,17 @@ fn run() -> Result<()> {
         );
         dir
     } else {
-        let (url, sha256) = pinned_bundle(&pin_path, platform.key)?;
+        let bundles = read_toml(&bundles_path)?;
+        let pin = read_toml(&pin_path)?;
+        let pinned = version(&pin);
+        if pinned != version(&bundles) {
+            println!(
+                "cargo::warning=angle/pin.toml is at {pinned} but angle/bundles.toml has {} bundles; \
+                 building against those until the new bundles are published and pinned",
+                version(&bundles)
+            );
+        }
+        let (url, sha256) = pinned_bundle(&bundles, platform.key)?;
         cached_or_downloaded(&url, &sha256)?
     };
     check_layout(&bundle, platform)?;
@@ -108,16 +121,25 @@ fn var(name: &str) -> Result<String> {
     env::var(name).map_err(|e| format!("{name}: {e}"))
 }
 
-fn pinned_bundle(pin_path: &Path, key: &str) -> Result<(String, String)> {
-    let text = fs::read_to_string(pin_path)
-        .map_err(|e| format!("cannot read {}: {e}", pin_path.display()))?;
-    let pin: toml::Table = text
-        .parse()
-        .map_err(|e| format!("cannot parse {}: {e}", pin_path.display()))?;
-    let entry = pin
+fn read_toml(path: &Path) -> Result<toml::Table> {
+    let text =
+        fs::read_to_string(path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
+    text.parse()
+        .map_err(|e| format!("cannot parse {}: {e}", path.display()))
+}
+
+fn version(table: &toml::Table) -> &str {
+    table
+        .get("bundle_version")
+        .and_then(toml::Value::as_str)
+        .unwrap_or("no bundle_version")
+}
+
+fn pinned_bundle(bundles: &toml::Table, key: &str) -> Result<(String, String)> {
+    let entry = bundles
         .get("platform")
         .and_then(|p| p.get(key))
-        .ok_or_else(|| format!("angle/pin.toml has no [platform.{key}] entry"))?;
+        .ok_or_else(|| format!("angle/bundles.toml has no [platform.{key}] entry"))?;
     let field = |name: &str| {
         entry
             .get(name)
