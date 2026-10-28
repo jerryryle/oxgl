@@ -26,7 +26,7 @@ REPO = Path(__file__).resolve().parents[2]
 GLIBC_MAX = (2, 31)
 FORBIDDEN_NEEDED = ("libX11", "libxcb", "libwayland-client")
 REQUIRED_ARGS = {
-    "common": {"angle_enable_vulkan": "true", "angle_enable_swiftshader": "true"},
+    "common": {"angle_enable_vulkan": "true", "angle_enable_swiftshader": "true", "angle_enable_wgpu": "false"},
     "macos-arm64": {"angle_enable_metal": "true"},
     "linux-x64": {"angle_use_x11": "false", "angle_use_wayland": "false"},
     "windows-x64": {"angle_enable_d3d11": "true"},

@@ -68,7 +68,7 @@ OXGL_ANGLE_DIR=~/.cache/oxgl/angle-build/dist/angle-macos-arm64 npm run build
 
 | Platform | Checkout + build tree | Bundle (`.tar.xz`) | Unpacked `lib/` |
 |---|---|---|---|
-| macos-arm64 (M-series, 16 cores) | ~13 GB | 7.6 MB | 28 MB |
+| macos-arm64 (M-series, 16 cores) | ~13 GB | to re-measure without WebGPU (was 7.6 MB) | to re-measure (was 28 MB) |
 | linux-x64 | first `angle-build` run | | |
 | windows-x64 | first `angle-build` run | | |
 

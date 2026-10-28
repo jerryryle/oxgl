@@ -50,7 +50,7 @@ sha256 = "<64-hex>"
 
 ### Build configuration (`angle/args/<platform>.gn`)
 
-Common: `is_debug=false`, `is_component_build=false`, `symbol_level=1` (symbols split into a separate archive), `angle_enable_vulkan=true`, `angle_enable_swiftshader=true`, `angle_enable_gl=false`, `angle_enable_null=false`, `angle_build_tests=false`.
+Common: `is_debug=false`, `is_component_build=false`, `symbol_level=1` (symbols split into a separate archive), `angle_enable_vulkan=true`, `angle_enable_swiftshader=true`, `angle_enable_gl=false`, `angle_enable_null=false`, `angle_build_tests=false`, `angle_has_frame_capture=false`, `angle_enable_perfetto=false`, `angle_enable_wgpu=false` (ANGLE enables its WebGPU backend by default on macOS and Windows; it links Dawn and, on Windows, DXC, roughly 9 MB that oxgl never uses).
 Linux: display integrations off (`angle_use_x11=false`, `angle_use_wayland=false`, and any Ozone/X11 arg the pinned revision requires — confirmed in task 1.1).
 macOS: `angle_enable_metal=true`, `target_cpu="arm64"`. Windows: `angle_enable_d3d11=true`, `angle_enable_d3d9=false`.
 
