@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html><head><script src="harness.js"></script></head><body>
+<script>
+// Contexts the page drops are collected and released, as in a browser.
+(async function () {
+  var baseline = liveContexts();
+  (function () {
+    for (var i = 0; i < 10; i++) document.createElement("canvas").getContext("webgl");
+  })();
+  for (var tries = 0; tries < 50 && liveContexts() > baseline; tries++) await collectGarbage();
+  // Collection timing is V8's and jsdom's; held strongly, none would go.
+  var released = 10 - (liveContexts() - baseline);
+  if (released >= 5) testPassed(released + " of 10 dropped contexts were released");
+  else testFailed("only " + released + " of 10 dropped contexts were released");
+  finishTest();
+})();
+</script>
+</body></html>

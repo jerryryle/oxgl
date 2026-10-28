@@ -1,0 +1,10 @@
+<!DOCTYPE html>
+<html><head><script src="harness.js"></script></head><body>
+<script>
+// Reports results nonstop for 4 s in one synchronous stretch, which no
+// timer can interrupt; under a 3 s limit it must not time out.
+var end = performance.now() + 4000;
+while (performance.now() < end) testPassed("busy");
+finishTest();
+</script>
+</body></html>

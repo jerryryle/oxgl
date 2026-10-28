@@ -99,8 +99,7 @@ WebGL errors are reported through `getError()`, as in a browser.
 
 - [rustup](https://rustup.rs). The pinned toolchain in `rust-toolchain.toml` is
   installed automatically on first use.
-- Node.js 22.12.0 or newer (`engines` in `package.json`). Development tooling
-  needs Node 22.13.0 or newer.
+- Node.js 22.22.2 or newer (`engines` in `package.json`).
 - libclang, which generates the EGL/GLES bindings at build time: Xcode's
   command-line tools on macOS, `libclang-dev` (or any LLVM install) on Linux,
   LLVM on Windows. Set `LIBCLANG_PATH` if it is not found.
@@ -117,6 +116,7 @@ npm install        # install JS tooling
 npm run build      # build the native addon (release) and the TypeScript package into dist/
 npm run lint       # rustfmt, clippy (pedantic, warnings as errors), ESLint, tsc, license check
 npm test           # node:test suites in test/ (run after build)
+npm run conformance   # Khronos WebGL conformance suites, judged against conformance/expectations.txt
 npm run notices    # regenerate THIRD_PARTY_NOTICES after changing Rust dependencies
 cargo test --workspace --exclude oxgl-node   # Rust tests (oxgl-node is tested from Node)
 ```

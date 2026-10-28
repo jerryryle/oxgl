@@ -1,0 +1,7 @@
+<!DOCTYPE html>
+<html><head><script src="harness.js"></script></head><body>
+<script>
+if (new URLSearchParams(location.search).get("webglVersion") === "2") testPassed("webglVersion=2"); else testFailed(location.search);
+finishTest();
+</script>
+</body></html>

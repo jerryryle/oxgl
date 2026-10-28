@@ -1,0 +1,19 @@
+<!DOCTYPE html>
+<html><head><script src="harness.js"></script></head><body>
+<canvas id="c"></canvas>
+<script>
+var canvas = document.getElementById("c");
+if (canvas.getContext("2d") === null) testPassed("2d is null"); else testFailed("2d is not null");
+var other = document.createElement("canvas");
+var gl = other.getContext("webgl");
+if (gl instanceof WebGLRenderingContext) testPassed("webgl context"); else testFailed("no webgl context");
+if (gl.drawingBufferWidth === 300 && gl.drawingBufferHeight === 150) testPassed("300x150");
+else testFailed("size " + gl.drawingBufferWidth + "x" + gl.drawingBufferHeight);
+if (other.getContext("webgl") === gl) testPassed("same context"); else testFailed("different context");
+if (other.getContext("experimental-webgl") === gl) testPassed("same for experimental-webgl"); else testFailed("experimental-webgl differs");
+if (other.getContext("webgl2") === null) testPassed("webgl2 on a webgl canvas is null"); else testFailed("webgl2 not null");
+var two = document.createElement("canvas").getContext("webgl2");
+if (two instanceof WebGL2RenderingContext) testPassed("webgl2 context"); else testFailed("no webgl2 context");
+finishTest();
+</script>
+</body></html>

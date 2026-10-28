@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html><head><script src="harness.js"></script></head><body>
+<script>
+var frame = document.createElement("iframe");
+frame.onload = function () {
+  if (window.frameResult === "context") testPassed("the frame got an oxgl context"); else testFailed("frame got " + window.frameResult);
+  finishTest();
+};
+frame.src = "frame-inner.html";
+document.body.appendChild(frame);
+</script>
+</body></html>

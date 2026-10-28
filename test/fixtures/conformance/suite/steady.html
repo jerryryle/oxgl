@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html><head><script src="harness.js"></script></head><body>
+<script>
+// Reports a result every 200 ms for 4 s: longer in total than a 3 s limit,
+// but never 3 s without a result.
+var n = 0;
+var timer = setInterval(function () {
+  testPassed("step " + n);
+  if (++n === 20) { clearInterval(timer); finishTest(); }
+}, 200);
+</script>
+</body></html>

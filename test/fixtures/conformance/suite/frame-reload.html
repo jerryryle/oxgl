@@ -1,0 +1,21 @@
+<!DOCTYPE html>
+<html><head><script src="harness.js"></script></head><body>
+<script>
+// The frame loads twice; the first load's context must be released when it
+// navigates, as a browser releases it with the document.
+var frame = document.createElement("iframe");
+var first;
+frame.onload = function () {
+  if (!first) {
+    first = frame.contentWindow.frameContext;
+    frame.src = "frame-inner.html?again";
+    return;
+  }
+  if (first.drawingBufferWidth === 0) testPassed("the first load's context was released");
+  else testFailed("the first load's context is still alive");
+  finishTest();
+};
+frame.src = "frame-inner.html";
+document.body.appendChild(frame);
+</script>
+</body></html>

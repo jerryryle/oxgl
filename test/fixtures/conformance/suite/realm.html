@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html><head><script src="harness.js"></script></head><body>
+<script>
+var gl = document.createElement("canvas").getContext("webgl");
+try {
+  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, {});
+  testFailed("readPixels did not throw");
+} catch (e) {
+  if (e instanceof TypeError) testPassed("the page's own TypeError"); else testFailed("a TypeError from another realm");
+}
+var proto = WebGLRenderingContext.prototype;
+while (Object.getPrototypeOf(proto) !== null && Object.getPrototypeOf(proto) !== Object.prototype) proto = Object.getPrototypeOf(proto);
+if (Object.getPrototypeOf(proto) === Object.prototype) testPassed("prototype chain ends at the page's Object.prototype");
+else testFailed("prototype chain leaves the page's realm");
+finishTest();
+</script>
+</body></html>
