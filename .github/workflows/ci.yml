@@ -207,6 +207,14 @@ jobs:
         with:
           path: ~/.cargo/oxgl-angle
           key: angle-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('angle/bundles.toml') }}
+      # TEMP-DIAG: remove before merge.
+      - name: Diagnose the arm64 leak stacks
+        continue-on-error: true
+        env:
+          ASAN_OPTIONS: detect_leaks=1:fast_unwind_on_malloc=0:malloc_context_size=40
+        run: >-
+          cargo +"$ASAN_NIGHTLY" test -p oxgl-core --test gpu_isolation --locked
+          --target aarch64-unknown-linux-gnu
       # oxgl-node is a Node addon whose tests run under Node, not cargo.
       # No -Zbuild-std on aarch64: it instruments compiler_builtins, whose
       # outline atomics __asan_init calls before shadow memory exists, so every
