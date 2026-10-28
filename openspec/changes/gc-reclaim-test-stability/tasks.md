@@ -7,7 +7,7 @@
 
 ## 2. CI verification
 
-- [ ] 2.1 Re-run the PR's CI at least three times. Verify that `check` (Linux, macOS, Windows) and `node-range` (22.12.0, 26) pass every time, and record all per-pass growths from the logs in the PR. If any `check` or `node-range` job, on any platform, shows two passes stepping by more than 32 MiB within one run, raise the pass count to five, update both the spec scenario and the requirement's accepted-trade-off paragraph (which also say three passes), and re-run.
+- [x] 2.1 Re-run the PR's CI at least three times. Verify that `check` (Linux, macOS, Windows) and `node-range` (22.12.0, 26) pass every time, and record all per-pass growths from the logs in the PR. If any `check` or `node-range` job, on any platform, shows two passes stepping by more than 32 MiB within one run, raise the pass count to five, update both the spec scenario and the requirement's accepted-trade-off paragraph (which also say three passes), and re-run.
 
 ## Workflow follow-up
 
