@@ -2,6 +2,7 @@
 # A page without an entry is expected to PASS. See CONTRIBUTING.md; `npm run conformance -- --update`
 # rewrites this file.
 
+webgl1 conformance/attribs/gl-bindAttribLocation-aliasing.html FAIL # webgl-test-utils.js fails at load: WebGLRenderingContext has no static WebIDL constants (reads GL.RGBA)
 webgl1 conformance/attribs/gl-bindAttribLocation-matrix.html FAIL # webgl-test-utils.js fails at load: WebGLRenderingContext has no static WebIDL constants (reads GL.RGBA)
 webgl1 conformance/attribs/gl-bindAttribLocation-nonexistent-attribute.html FAIL # webgl-test-utils.js fails at load: WebGLRenderingContext has no static WebIDL constants (reads GL.RGBA)
 webgl1 conformance/attribs/gl-bindAttribLocation-repeated.html FAIL # webgl-test-utils.js fails at load: WebGLRenderingContext has no static WebIDL constants (reads GL.RGBA)
