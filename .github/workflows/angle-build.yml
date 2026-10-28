@@ -9,14 +9,17 @@ name: angle-build
 on:
   workflow_dispatch:
   pull_request:
-    # The recipe: only files that can change a bundle. bundles.toml (outputs),
-    # the README, check_pin.py, pin.sh and smoke/ are deliberately absent.
+    # The recipe: the files that build or test a bundle. bundles.toml (outputs),
+    # the README and check_pin.py are deliberately absent. (deny.toml is too:
+    # stage-angle re-checks bundle licenses against it wherever oxgl builds.)
     paths:
       - "angle/pin.toml"
       - "angle/args/**"
       - "angle/build.sh"
       - "angle/build.ps1"
       - "angle/scripts/bundle.py"
+      - "angle/scripts/pin.sh"
+      - "angle/smoke/**"
       - "angle/licenses.toml"
       - "angle/license-texts/**"
       - ".github/workflows/angle-build.yml"
@@ -41,17 +44,14 @@ jobs:
           GH_TOKEN: ${{ github.token }}
         run: |
           tag="$(angle/scripts/pin.sh bundle_version)"
-          if gh release view "$tag" --repo "$GITHUB_REPOSITORY" >/dev/null 2>err.txt; then
-            echo "::error::$tag is already released; bump bundle_version in angle/pin.toml"
-            exit 1
-          fi
-          # Only "not found" means unreleased; any other failure (auth, rate
-          # limit, network) must not let a forgotten bump through.
-          if ! grep -q "release not found" err.txt; then
-            cat err.txt
-            echo "::error::could not check whether $tag is released"
-            exit 1
-          fi
+          # Only a 404 means unreleased; any other failure (auth, rate limit,
+          # network) must not let a forgotten bump through.
+          status="$(gh api -i "repos/$GITHUB_REPOSITORY/releases/tags/$tag" 2>/dev/null | head -n1 || true)"
+          case "$status" in
+            *" 404"*) ;;
+            *" 200"*) echo "::error::$tag is already released; bump bundle_version in angle/pin.toml"; exit 1 ;;
+            *) echo "::error::could not check whether $tag is released (${status:-no response})"; exit 1 ;;
+          esac
 
   build:
     needs: guard

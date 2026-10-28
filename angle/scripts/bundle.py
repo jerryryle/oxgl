@@ -8,7 +8,6 @@
 args, component licenses), right after `gn gen`, so they fail before the
 long compile instead of after it.
 
-
 Produces <dist-dir>/angle-<platform>.tar.xz (stripped libraries, headers,
 licenses, BUILD_INFO.json) and angle-<platform>-symbols.tar.xz (unstripped
 libraries), and prints the bundle's sha256. Fails if any outcome check fails:

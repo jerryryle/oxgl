@@ -82,7 +82,7 @@ OXGL_ANGLE_DIR=~/.cache/oxgl/angle-build/dist/angle-macos-arm64 npm run build
 
 ## Changing ANGLE
 
-The recipe is every file that can change a bundle: `pin.toml`, `args/`, `build.sh`, `build.ps1`, `scripts/bundle.py`, `licenses.toml`, `license-texts/`, and
+The recipe is every file that builds or tests a bundle: `pin.toml`, `args/`, `build.sh`, `build.ps1`, `scripts/bundle.py`, `scripts/pin.sh`, `smoke/`, `licenses.toml`, `license-texts/`, and
 `.github/workflows/angle-build.yml`. `angle-build` runs only for those. Any recipe change (a new ANGLE commit, GN args, targets, scripts,
 license data) gets a new `bundle_version`: published bundles are never rebuilt
 or replaced, because rebuilds are not bit-identical and older commits pin the

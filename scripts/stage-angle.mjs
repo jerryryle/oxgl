@@ -34,6 +34,19 @@ mkdirSync(staged, { recursive: true });
 cpSync(join(bundle, 'lib'), staged, { recursive: true });
 
 const info = JSON.parse(readFileSync(join(bundle, 'BUILD_INFO.json'), 'utf8'));
+
+// The bundle's licenses were checked against deny.toml when it was built; the
+// allowlist may have narrowed since, so check them again against today's.
+const allowBlock = /^allow\s*=\s*\[([^\]]*)\]/m.exec(readFileSync('deny.toml', 'utf8'));
+const allowed = new Set([...(allowBlock?.[1] ?? '').matchAll(/"([^"]+)"/g)].map((m) => m[1]));
+const disallowed = info.components.filter((component) =>
+  component.license.split(/\s+AND\s+|,/).some((part) => part.trim() && !allowed.has(part.trim())),
+);
+if (disallowed.length > 0) {
+  console.error('stage-angle: ANGLE bundle components not on the deny.toml allowlist:');
+  for (const component of disallowed) console.error(`  ${component.path}: ${component.license}`);
+  process.exit(1);
+}
 const licenseDir = join(bundle, 'licenses');
 const licenseFiles = readdirSync(licenseDir).sort();
 const sections = info.components.map((component) => {

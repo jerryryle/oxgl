@@ -30,8 +30,10 @@ def pin_problems(pin: dict) -> list[str]:
 
 def bundles_problems(bundles: dict, allow_unpublished: bool) -> list[str]:
     found = []
-    if not re.fullmatch(VERSION, str(bundles.get("bundle_version", ""))):
+    version = str(bundles.get("bundle_version", ""))
+    if not re.fullmatch(VERSION, version):
         found.append("bundle_version must look like angle-<branch>.<n>")
+        version = ""
     platforms = bundles.get("platform", {})
     for name in PLATFORMS:
         entry = platforms.get(name)
@@ -43,8 +45,8 @@ def bundles_problems(bundles: dict, allow_unpublished: bool) -> list[str]:
             continue
         if not str(url).startswith("https://"):
             found.append(f"platform.{name}.url must be an https URL")
-        elif f"/download/{bundles.get('bundle_version')}/" not in str(url):
-            found.append(f"platform.{name}.url is not in the {bundles.get('bundle_version')} release")
+        elif version and f"/download/{version}/" not in str(url):
+            found.append(f"platform.{name}.url is not in the {version} release")
         if not re.fullmatch(r"[0-9a-f]{64}", str(sha)):
             found.append(f"platform.{name}.sha256 must be 64 lowercase hex characters")
     return found
