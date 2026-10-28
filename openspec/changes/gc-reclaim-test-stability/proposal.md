@@ -12,7 +12,8 @@ That is allocator high-water noise, not a leak. The scenario measures one pass a
 
 ## What Changes
 
-- The scenario "Dropped contexts are reclaimed" measures three consecutive passes of 1,000 dropped contexts after the warm-up, instead of one. It gates on the **smallest** per-pass RSS growth, which must stay within the soak-test threshold (32 MiB). A leak grows RSS on every pass, while a high-water step is a one-off that shows up in at most one pass, so taking the minimum filters the noise without loosening the limit.
+- The scenario "Dropped contexts are reclaimed" measures three consecutive passes of 1,000 dropped contexts after the warm-up, instead of one. It gates on the **median** per-pass RSS growth, which must stay within the soak-test threshold (32 MiB). A leak grows RSS on every pass. A high-water step is a one-off, and so is an allocator trim (CI saw RSS fall by up to 14 MiB). The median ignores a single swing in either direction, so the noise is filtered and the limit is not loosened.
+- The `context-creation` spec gains an accepted trade-off. A leak only just over the threshold can be absorbed by free memory the allocator already holds after a high-water step, and then goes undetected in that run.
 - The scenario also requires the live-context count to return to its baseline after every pass. The test already waits for this, but the scenario does not state it.
 - The threshold stays at 32 MiB, and so does the `destroy()` soak scenario.
 
@@ -33,6 +34,6 @@ None.
 
 ## Out of Scope and Extension Points
 
-- The `destroy()` soak test ("Software soak test"). It has not flaked: across those CI runs its growth stayed between 1.4 and 6.7 MiB. If it ever does flake, the same minimum-of-passes method applies.
+- The `destroy()` soak test ("Software soak test"). It keeps one context alive at a time, and across those CI runs its growth stayed between 1.4 and 6.7 MiB, far from the limit. Changing it would mean changing its scenario too, for no observed problem. The measurement is written as one helper, so if that test ever flakes, moving it to median-of-passes is a call-site change plus a scenario edit.
 - Exposing the EGL-level context and surface counters (`oxgl_sys::live_contexts`/`live_surfaces`) to Node. The Rust soak tests and the ASan/LSan job already gate native release.
 - Finding the cause of the allocator steps (system malloc, glibc arenas, SwiftShader pools). These steps are bounded and not a leak.
