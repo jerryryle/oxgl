@@ -23,4 +23,4 @@
 
 ## 4. Documentation
 
-- [ ] 4.1 Document the update procedure, override, and cache in `angle/README.md`; verify the procedure by performing a dry-run pin bump on a local branch that is never pushed (so `angle-build` never runs; steps that need a PR or a release are exercised by the real `angle-8078.1` cycle)
+- [x] 4.1 Document the update procedure, override, and cache in `angle/README.md`; verify the procedure by performing a dry-run pin bump on a local branch that is never pushed (so `angle-build` never runs; steps that need a PR or a release are exercised by the real `angle-8078.1` cycle); verified: `pin.sh` read `angle-8078.2`, `check_pin.py` accepted both files, and `cargo build` warned that `pin.toml` is ahead and built against the cached `angle-8078.1` bundle
