@@ -102,6 +102,8 @@ A context that becomes unreachable without `destroy()` SHALL have its native res
 ### Requirement: No resource growth across context lifecycles
 Creating and destroying contexts repeatedly SHALL NOT grow resident memory without bound. After a 50-iteration warm-up, creating and destroying 1,000 contexts of 256×256 SHALL increase resident set size by no more than 32 MiB, measured after a forced garbage collection.
 
+Accepted trade-off (upstream ANGLE): each thread that has used oxgl leaves about 72 bytes of ANGLE thread state behind when it exits.
+
 #### Scenario: Software soak test
 - **WHEN** the soak test runs with `backend: 'software'`
 - **THEN** RSS growth over the 1,000 measured iterations is at most 32 MiB, and the test fails otherwise, reporting the measured growth

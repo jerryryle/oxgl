@@ -18,6 +18,11 @@ support `clearColor`, `clear`, `readPixels`, and `getError` so far.
   one software context at startup, before starting other threads. The cause is
   ANGLE's `ScopedVkLoaderEnvironment`; this entry goes away once the pinned
   ANGLE stops doing it.
+- **Each thread that uses oxgl leaves about 72 bytes behind.** ANGLE allocates
+  per-thread state on a thread's first EGL call and intentionally never frees
+  it, so a worker thread that created a context leaks those bytes when it
+  exits. This is per thread, not per context. Applications that churn through
+  very many short-lived workers should reuse workers instead.
 
 ## Usage
 

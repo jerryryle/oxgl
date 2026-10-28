@@ -2,7 +2,7 @@
 
 mod common;
 
-use common::{Memory, rgba, runtime, serial, software};
+use common::{Memory, on_gl_thread, rgba, runtime, software};
 use oxgl_core::{
     CONTEXT_LOST_WEBGL, ContextRequest, RequestedBackend, key_from_parts, key_to_parts,
 };
@@ -15,102 +15,113 @@ use oxgl_sys::{ReadPixels, live_contexts, live_surfaces};
 
 #[test]
 fn create_and_destroy_release_everything() {
-    let _serial = serial();
-    let mut rt = runtime();
-    let before = (live_contexts(), live_surfaces());
-    let key = software(&mut rt, 64.0, 32.0, false);
-    let buffer = rt.context(key).unwrap().drawing_buffer();
-    assert_eq!((buffer.width(), buffer.height()), (64, 32));
-    assert_eq!(
-        (live_contexts(), live_surfaces()),
-        (before.0 + 1, before.1 + 1)
-    );
-    rt.destroy(key);
-    rt.destroy(key);
-    assert_eq!((live_contexts(), live_surfaces()), before);
-    assert_eq!(rt.live_contexts(), 0);
+    on_gl_thread(move || {
+        let mut rt = runtime();
+        let before = (live_contexts(), live_surfaces());
+        let key = software(&mut rt, 64.0, 32.0, false);
+        let buffer = rt.context(key).unwrap().drawing_buffer();
+        assert_eq!((buffer.width(), buffer.height()), (64, 32));
+        assert_eq!(
+            (live_contexts(), live_surfaces()),
+            (before.0 + 1, before.1 + 1)
+        );
+        rt.destroy(key);
+        rt.destroy(key);
+        assert_eq!((live_contexts(), live_surfaces()), before);
+        assert_eq!(rt.live_contexts(), 0);
+    });
 }
 
 #[test]
 fn stale_key_resolves_to_nothing() {
-    let _serial = serial();
-    let mut rt = runtime();
-    let key = software(&mut rt, 4.0, 4.0, false);
-    let parts = key_to_parts(key);
-    rt.destroy(key);
-    let replacement = software(&mut rt, 4.0, 4.0, false);
-    assert!(rt.context(key_from_parts(parts)).is_none());
-    assert!(rt.context(replacement).is_some());
-    rt.release(replacement);
-    assert!(rt.context(replacement).is_none());
-    assert_eq!(rt.live_contexts(), 0);
+    on_gl_thread(move || {
+        let mut rt = runtime();
+        let key = software(&mut rt, 4.0, 4.0, false);
+        let parts = key_to_parts(key);
+        rt.destroy(key);
+        let replacement = software(&mut rt, 4.0, 4.0, false);
+        assert!(rt.context(key_from_parts(parts)).is_none());
+        assert!(rt.context(replacement).is_some());
+        rt.release(replacement);
+        assert!(rt.context(replacement).is_none());
+        assert_eq!(rt.live_contexts(), 0);
+    });
 }
 
 #[test]
 fn destroy_all_releases_everything() {
-    let _serial = serial();
-    let before = (live_contexts(), live_surfaces());
-    let mut rt = runtime();
-    for _ in 0..3 {
-        software(&mut rt, 8.0, 8.0, false);
-    }
-    rt.destroy_all();
-    assert_eq!((live_contexts(), live_surfaces()), before);
+    on_gl_thread(move || {
+        let before = (live_contexts(), live_surfaces());
+        let mut rt = runtime();
+        for _ in 0..3 {
+            software(&mut rt, 8.0, 8.0, false);
+        }
+        rt.destroy_all();
+        assert_eq!((live_contexts(), live_surfaces()), before);
+    });
 }
 
 #[test]
 fn interleaved_contexts_are_independent() {
-    let _serial = serial();
-    let mut rt = runtime();
-    let a = software(&mut rt, 2.0, 2.0, false);
-    let b = software(&mut rt, 2.0, 2.0, false);
-    rt.context(a).unwrap().clear_color(1.0, 0.0, 0.0, 1.0);
-    rt.context(b).unwrap().clear_color(0.0, 0.0, 1.0, 1.0);
-    rt.context(a).unwrap().clear(GL_COLOR_BUFFER_BIT);
-    rt.context(b).unwrap().clear(GL_COLOR_BUFFER_BIT);
-    rt.context(a).unwrap().clear(0x1);
-    let read = |rt: &mut oxgl_core::Runtime, key| {
-        let memory = Memory::new(ViewKind::Uint8, 16, 0);
-        rt.context(key)
-            .unwrap()
-            .read_pixels(rgba(0, 0, 2, 2), Some(&memory));
-        memory.bytes()
-    };
-    assert!(read(&mut rt, a).chunks(4).all(|p| p == [255, 0, 0, 255]));
-    assert!(read(&mut rt, b).chunks(4).all(|p| p == [0, 0, 255, 255]));
-    assert_eq!(rt.context(b).unwrap().get_error(), GL_NO_ERROR);
-    assert_eq!(rt.context(a).unwrap().get_error(), GL_INVALID_VALUE);
-    rt.destroy_all();
+    on_gl_thread(move || {
+        let mut rt = runtime();
+        let a = software(&mut rt, 2.0, 2.0, false);
+        let b = software(&mut rt, 2.0, 2.0, false);
+        rt.context(a).unwrap().clear_color(1.0, 0.0, 0.0, 1.0);
+        rt.context(b).unwrap().clear_color(0.0, 0.0, 1.0, 1.0);
+        rt.context(a).unwrap().clear(GL_COLOR_BUFFER_BIT);
+        rt.context(b).unwrap().clear(GL_COLOR_BUFFER_BIT);
+        rt.context(a).unwrap().clear(0x1);
+        let read = |rt: &mut oxgl_core::Runtime, key| {
+            let memory = Memory::new(ViewKind::Uint8, 16, 0);
+            rt.context(key)
+                .unwrap()
+                .read_pixels(rgba(0, 0, 2, 2), Some(&memory));
+            memory.bytes()
+        };
+        assert!(read(&mut rt, a).chunks(4).all(|p| p == [255, 0, 0, 255]));
+        assert!(read(&mut rt, b).chunks(4).all(|p| p == [0, 0, 255, 255]));
+        assert_eq!(rt.context(b).unwrap().get_error(), GL_NO_ERROR);
+        assert_eq!(rt.context(a).unwrap().get_error(), GL_INVALID_VALUE);
+        rt.destroy_all();
+    });
 }
 
 #[test]
 fn webgl2_context() {
-    let _serial = serial();
-    let mut rt = runtime();
-    let key = software(&mut rt, 64.0, 32.0, true);
-    assert_eq!(rt.context(key).unwrap().get_error(), GL_NO_ERROR);
-    rt.destroy(key);
+    on_gl_thread(move || {
+        let mut rt = runtime();
+        let key = software(&mut rt, 64.0, 32.0, true);
+        assert_eq!(rt.context(key).unwrap().get_error(), GL_NO_ERROR);
+        rt.destroy(key);
+    });
 }
 
 #[test]
 fn oversized_request_is_clamped() {
-    let _serial = serial();
-    let mut rt = runtime();
-    let key = software(&mut rt, 1_000_000.0, 500_000.0, false);
-    let buffer = rt.context(key).unwrap().drawing_buffer();
-    let (w, h) = (buffer.width(), buffer.height());
-    assert!(w < 1_000_000 && w > 0, "{w}x{h}");
-    assert!((f64::from(w) - 2.0 * f64::from(h)).abs() <= 2.0, "{w}x{h}");
-    rt.destroy(key);
+    on_gl_thread(move || {
+        let mut rt = runtime();
+        let key = software(&mut rt, 1_000_000.0, 500_000.0, false);
+        let buffer = rt.context(key).unwrap().drawing_buffer();
+        let (w, h) = (buffer.width(), buffer.height());
+        assert!(w < 1_000_000 && w > 0, "{w}x{h}");
+        assert!((f64::from(w) - 2.0 * f64::from(h)).abs() <= 2.0, "{w}x{h}");
+        rt.destroy(key);
+    });
 }
 
 #[allow(clippy::unwrap_used, reason = "test helper")]
-fn with_context(width: f64, height: f64, test: impl FnOnce(&mut oxgl_core::Context)) {
-    let _serial = serial();
-    let mut rt = runtime();
-    let key = software(&mut rt, width, height, false);
-    test(rt.context(key).unwrap());
-    rt.destroy(key);
+fn with_context(
+    width: f64,
+    height: f64,
+    test: impl FnOnce(&mut oxgl_core::Context) + Send + 'static,
+) {
+    on_gl_thread(move || {
+        let mut rt = runtime();
+        let key = software(&mut rt, width, height, false);
+        test(rt.context(key).unwrap());
+        rt.destroy(key);
+    });
 }
 
 #[test]
@@ -299,24 +310,25 @@ fn device_loss_enters_the_lost_state() {
 
 #[test]
 fn creation_failure_allocates_nothing() {
-    let _serial = serial();
-    let before = (live_contexts(), live_surfaces());
-    let mut rt = oxgl_core::Runtime::new(std::env::temp_dir().join("oxgl-no-such-bundle"));
-    let error = rt
-        .create_context(
-            RequestedBackend::Software,
-            &ContextRequest {
-                width: 1.0,
-                height: 1.0,
-                webgl2: false,
-            },
-        )
-        .err();
-    // The process-wide bundle may already be loaded by another test, in which
-    // case the directory is not consulted and creation succeeds.
-    if let Some(error) = error {
-        assert_eq!(error.code(), "OXGL_NATIVE_MISSING");
-    }
-    drop(rt);
-    assert_eq!((live_contexts(), live_surfaces()), before);
+    on_gl_thread(move || {
+        let before = (live_contexts(), live_surfaces());
+        let mut rt = oxgl_core::Runtime::new(std::env::temp_dir().join("oxgl-no-such-bundle"));
+        let error = rt
+            .create_context(
+                RequestedBackend::Software,
+                &ContextRequest {
+                    width: 1.0,
+                    height: 1.0,
+                    webgl2: false,
+                },
+            )
+            .err();
+        // The process-wide bundle may already be loaded by another test, in which
+        // case the directory is not consulted and creation succeeds.
+        if let Some(error) = error {
+            assert_eq!(error.code(), "OXGL_NATIVE_MISSING");
+        }
+        drop(rt);
+        assert_eq!((live_contexts(), live_surfaces()), before);
+    });
 }

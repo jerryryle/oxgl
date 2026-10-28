@@ -4,18 +4,41 @@
 #![allow(clippy::unwrap_used, clippy::indexing_slicing, reason = "test helpers")]
 
 use std::cell::RefCell;
-use std::sync::{Mutex, MutexGuard, PoisonError};
+use std::panic::{self, AssertUnwindSafe};
+use std::sync::{OnceLock, mpsc};
 
 use oxgl_core::{ContextKey, ContextRequest, RequestedBackend, Runtime};
 use oxgl_sys::bindings::{GL_RGBA, GL_UNSIGNED_BYTE};
 use oxgl_sys::{PixelDestination, ReadPixels, ViewKind};
 
-/// Serializes tests that create contexts: the live-object counters are
-/// process-wide.
-static SERIAL: Mutex<()> = Mutex::new(());
-
-pub fn serial() -> MutexGuard<'static, ()> {
-    SERIAL.lock().unwrap_or_else(PoisonError::into_inner)
+/// Runs `f` on one long-lived thread shared by every test in the binary,
+/// which also serializes them (the live-object counters are process-wide).
+///
+/// ANGLE intentionally never frees the per-thread state it allocates when a
+/// thread first calls EGL. A thread that stays alive keeps it reachable, so
+/// `LeakSanitizer` does not report it as it would for libtest's per-test
+/// threads. Panics are re-raised on the calling thread.
+pub fn on_gl_thread<T: Send + 'static>(f: impl FnOnce() -> T + Send + 'static) -> T {
+    type Job = Box<dyn FnOnce() + Send>;
+    static GL_THREAD: OnceLock<mpsc::Sender<Job>> = OnceLock::new();
+    let sender = GL_THREAD.get_or_init(|| {
+        let (sender, jobs) = mpsc::channel::<Job>();
+        std::thread::Builder::new()
+            .name("gl".into())
+            .spawn(move || jobs.into_iter().for_each(|job| job()))
+            .unwrap();
+        sender
+    });
+    let (done, result) = mpsc::channel();
+    sender
+        .send(Box::new(move || {
+            let _ = done.send(panic::catch_unwind(AssertUnwindSafe(f)));
+        }))
+        .unwrap();
+    result
+        .recv()
+        .unwrap()
+        .unwrap_or_else(|payload| panic::resume_unwind(payload))
 }
 
 pub fn runtime() -> Runtime {

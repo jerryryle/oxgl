@@ -64,12 +64,25 @@ test('GPU soak test', { skip: await gpuSkipReason() }, (t) => {
   soak(t, 'gpu');
 });
 
+/** Forces GC and yields until `done()` holds, failing after 10 s. */
+async function collectUntil(done, what) {
+  const deadline = Date.now() + 10_000;
+  while (!done()) {
+    assert.ok(Date.now() < deadline, `${what} within 10 s`);
+    gc();
+    await turn();
+  }
+}
+
 /**
- * Creates `count` contexts, each dropped without destroy(), forcing GC (and
- * yielding so finalizers can run) every 100, then waits until `registry`'s
- * callback has seen every one collected (failing after 10 s), plus 10 turns.
+ * Creates `count` contexts, each dropped without destroy(). Every 100 it
+ * forces GC until those are released natively, so at most 100 are ever alive
+ * and the allocators' high-water mark does not depend on GC timing. Then it
+ * waits until `registry`'s callback has seen every one collected, plus 10
+ * event-loop turns.
  */
 async function dropContexts(count) {
+  const baseline = liveContexts();
   let collected = 0;
   const registry = new FinalizationRegistry(() => {
     collected += 1;
@@ -77,23 +90,19 @@ async function dropContexts(count) {
   for (let i = 0; i < count; i += 1) {
     registry.register(used('software'), undefined);
     if (i % 100 === 99) {
-      gc();
-      await turn();
+      await collectUntil(() => liveContexts() === baseline, 'contexts were not released');
     }
   }
-  const deadline = Date.now() + 10_000;
-  while (collected < count) {
-    assert.ok(Date.now() < deadline, `only ${collected} of ${count} contexts were collected within 10 s`);
-    gc();
-    await turn();
-  }
+  // The predicate references `registry`: an unreachable registry can itself
+  // be collected, and its pending callbacks then never run.
+  await collectUntil(() => registry !== null && collected === count, 'not every context was collected');
   for (let i = 0; i < 10; i += 1) await turn();
 }
 
 test('dropped contexts are reclaimed', async (t) => {
   // Up to ~100 contexts are alive between collections, so the allocators'
   // high-water mark is far above the destroy() soak's. The warm-up runs the
-  // same pattern once, so the measured pass shows growth, not that mark.
+  // same pattern once, so the measured pass shows growth, not the mark.
   const baselineContexts = liveContexts();
   await dropContexts(ITERATIONS);
   const baseline = rssAfterGc();

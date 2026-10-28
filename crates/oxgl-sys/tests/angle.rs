@@ -1,5 +1,7 @@
 //! Loads the staged ANGLE bundle and drives the safe wrappers on `SwiftShader`.
 
+#![allow(clippy::unwrap_used, clippy::indexing_slicing, reason = "test helpers")]
+
 use std::path::Path;
 
 use oxgl_sys::bindings::{
@@ -31,8 +33,28 @@ fn relative_directory_is_rejected() {
     assert_eq!(error.kind, LoadErrorKind::RelativeDirectory);
 }
 
+/// Runs `f` on a thread that stays alive (parked) afterwards. ANGLE never frees
+/// the per-thread state a thread allocates on its first EGL call; a live
+/// thread keeps it reachable, so `LeakSanitizer` does not report it.
+fn on_lasting_thread(f: impl FnOnce() + Send + 'static) {
+    let (done, result) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let _ = done.send(std::panic::catch_unwind(std::panic::AssertUnwindSafe(f)));
+        loop {
+            std::thread::park();
+        }
+    });
+    if let Err(payload) = result.recv().unwrap() {
+        std::panic::resume_unwind(payload);
+    }
+}
+
 #[test]
 fn swiftshader_clear_and_bounded_read() {
+    on_lasting_thread(swiftshader_clear_and_bounded_read_body);
+}
+
+fn swiftshader_clear_and_bounded_read_body() {
     let angle = Angle::load(&bundle_dir()).unwrap();
     let display = Display::open(&angle, DisplayKind::SwiftShader).unwrap();
     let mut context = display.create_context(ClientVersion::Es2).unwrap();
