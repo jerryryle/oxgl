@@ -39,7 +39,7 @@ On each platform, CI SHALL install dependencies with `npm ci`, run the JS lint a
 - **THEN** `OXGL_BACKEND` is `software` and clear-then-readPixels and soak tests execute (not skip) on all three platforms
 
 ### Requirement: AddressSanitizer job
-CI SHALL include a Linux x64 job that builds and runs the Rust test suites, including the SwiftShader integration and soak tests, with AddressSanitizer and LeakSanitizer enabled. Any sanitizer report SHALL fail the job. Leak suppressions SHALL be limited to named third-party components and checked into the repository with a justification for each entry.
+CI SHALL include a Linux x64 job that builds and runs the Rust test suites, including the SwiftShader integration and soak tests, with AddressSanitizer and LeakSanitizer enabled. Any sanitizer report SHALL fail the job.
 
 #### Scenario: Use-after-free is caught
 - **WHEN** a change introduces a use-after-free in oxgl code exercised by the tests
@@ -48,6 +48,13 @@ CI SHALL include a Linux x64 job that builds and runs the Rust test suites, incl
 #### Scenario: Leak in oxgl code is caught
 - **WHEN** a change leaks memory allocated by oxgl code in a tested path
 - **THEN** the job fails with a LeakSanitizer report not covered by any suppression
+
+### Requirement: Leak suppressions are narrow
+Leak suppressions SHALL name internal functions of a third-party component that make one-time allocations (process-lifetime caches, static initialization). They SHALL NOT name a library or an exported EGL/GL/Vulkan entry point, and SHALL be checked into the repository with a justification for each entry.
+
+#### Scenario: Broad suppression is rejected in review
+- **WHEN** a pull request adds a suppression naming `libGLESv2` or `eglInitialize`
+- **THEN** it does not meet this requirement, because it would hide every unreachable allocation made under that library or entry point
 
 ### Requirement: ANGLE obtained from the pinned bundle
 CI SHALL obtain ANGLE only through the pinned, checksum-verified bundle defined by angle-distribution, MAY cache it keyed by its digest, and SHALL NOT build ANGLE from source.

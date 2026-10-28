@@ -1,0 +1,10 @@
+# LeakSanitizer suppressions for ci.yml's asan job (LSAN_OPTIONS=suppressions=...).
+#
+# Intentionally empty. An entry must name an internal function of a third-party
+# component that makes a one-time allocation (process-lifetime cache, static
+# initialization), with a comment saying why. Never name a library
+# (leak:libGLESv2) or an exported EGL/GL/Vulkan entry point (leak:eglInitialize):
+# either hides every unreachable allocation made under it, including ones our
+# own misuse causes. The published ANGLE libraries are stripped, so naming an
+# ANGLE-internal function first needs the unstripped-libraries follow-up
+# described in openspec/changes/ci-pipeline/design.md.
