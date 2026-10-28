@@ -43,17 +43,21 @@ export const WebGLRenderingContext: WebGL1Constants & {
   new (...args: ConstructorParameters<typeof ContextBase>): WebGLRenderingContext;
 } = withConstants(class WebGLRenderingContext extends ContextBase {}, WEBGL1_CONSTANTS);
 
+type WithConstants<A extends unknown[], I, K> = K & { readonly prototype: I & K; new (...args: A): I & K };
+
 /** Defines `table` as WebIDL constants on `cls` and its prototype. */
 function withConstants<A extends unknown[], I extends object, K extends Readonly<Record<string, number>>>(
   cls: new (...args: A) => I,
   table: K,
-): K & { readonly prototype: I & K; new (...args: A): I & K } {
-  // defineProperty on cls and cls.prototype for each entry, as today
-  return cls as unknown as K & { readonly prototype: I & K; new (...args: A): I & K };
+): WithConstants<A, I, K> {
+  for (const target of [cls, cls.prototype] as object[]) {
+    // defineProperty for each entry, with today's attributes
+  }
+  return cls as unknown as WithConstants<A, I, K>;
 }
 ```
 
-WebGL 2 follows the same pattern. `withConstants` replaces today's `defineProperty` loop. Its cast on return is the one type assertion, and it sits next to the code that makes it true. Each type parameter appears twice in the signature, as `@typescript-eslint/no-unnecessary-type-parameters` requires. The construct signature is derived from `ContextBase`, so adding a constructor parameter needs no edit here. A sketch of this pattern passed `tsc --strict` and the repo's `eslint` config, with the expected runtime `name`, `instanceof` narrowing and `.d.ts`. This gives:
+WebGL 2 follows the same pattern. `withConstants` replaces today's `defineProperty` loop. It has two type assertions, both inside the helper. `as object[]` lets the constructor and its prototype share one loop. The return cast adds the constant types to the constructor, and it sits next to the code that makes it true. Each type parameter appears twice in the signature, as `@typescript-eslint/no-unnecessary-type-parameters` requires. The construct signature is derived from `ContextBase`, so adding a constructor parameter needs no edit here. A sketch of this pattern passed `tsc --strict` and the repo's `eslint` config, with the expected runtime `name`, `instanceof` narrowing and `.d.ts`. This gives:
 
 - **One instance type.** `new`, `createContext`'s overloads and `instanceof` narrowing all produce the same interface, constants included. The `prototype` member is what `instanceof` narrows to, so no casts are needed.
 - **The right name.** The class expression carries the interface's name, so the runtime `name` is `WebGLRenderingContext` / `WebGL2RenderingContext`, which `webgl-test-utils.js` uses as its enum cache key. The emitted `.d.ts` contains no internal class name.
