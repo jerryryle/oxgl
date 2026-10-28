@@ -94,9 +94,11 @@ If no usable backend can create a context for the requested options, `createCont
 ### Requirement: Garbage-collected contexts release resources
 A context that becomes unreachable without `destroy()` SHALL have its native resources released after garbage collection, on the thread that created it, without requiring further API calls.
 
+Accepted trade-off (allocator noise): a leak only slightly above the soak-test threshold can be absorbed by free memory the allocator holds after a high-water step, and go undetected in that run. Whole-context leaks are far above this margin.
+
 #### Scenario: Dropped contexts are reclaimed
-- **WHEN** 1,000 contexts are created one per iteration, each dropped without `destroy()` before the next is created, with garbage collection forced every 100 iterations, and the test then repeatedly forces garbage collection and yields to the event loop until its own `FinalizationRegistry` has seen every context collected (failing after 10 seconds). It then yields 10 more event-loop turns before measuring
-- **THEN** resident memory is within the soak-test threshold of its post-warm-up baseline, with no further oxgl call needed
+- **WHEN** 1,000 contexts are created one per iteration, each dropped without `destroy()` before the next is created, with garbage collection forced every 100 iterations, and the test then repeatedly forces garbage collection and yields to the event loop until its own `FinalizationRegistry` has seen every context collected (failing after 10 seconds) and until the live-context count is back at its pre-pass value (failing after 10 seconds), then yields 10 more event-loop turns; and this pass runs three times in a row after the warm-up, with resident memory measured after a forced garbage collection before the first pass and after each pass
+- **THEN** the live-context count is back at its pre-test value after every pass, and the median of the three per-pass resident-memory increases is within the soak-test threshold, with no further oxgl call needed
 
 ### Requirement: No resource growth across context lifecycles
 Creating and destroying contexts repeatedly SHALL NOT grow resident memory without bound. After a 50-iteration warm-up, creating and destroying 1,000 contexts of 256×256 SHALL increase resident set size by no more than 32 MiB, measured after a forced garbage collection.
