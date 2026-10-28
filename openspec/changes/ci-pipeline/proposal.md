@@ -8,6 +8,7 @@ The safety rules (no unsafe outside `oxgl-sys`, no panics, pedantic clippy, no l
 
 - Add a GitHub Actions workflow that runs on pull requests and pushes to `main`, with a matrix over Linux x64, macOS arm64, and Windows x64 running: rustfmt check, clippy (pedantic, warnings as errors), Rust tests, the JS lint/type check, the native + TS build, and the Node test suite with `OXGL_BACKEND=software`.
 - Add a Linux AddressSanitizer job (with LeakSanitizer) that runs the Rust test suites, including the SwiftShader integration and soak tests from `headless-context`.
+- Add a Linux `repo-checks` job for the host-independent checks: the ANGLE pin check (`check_pin.py`) and `npm run lint:licenses` (cargo-deny and cargo-about, versions pinned once in the workflow, installed checksum-verified).
 - Cache the verified ANGLE bundle and Cargo/npm dependencies; never rebuild ANGLE in this pipeline.
 - Pin all actions by commit SHA and give workflows least-privilege permissions.
 
@@ -23,6 +24,7 @@ None.
 ## Impact
 
 - New: `.github/workflows/ci.yml`, `.github/lsan-suppressions.txt`, `.github/dependabot.yml` (GitHub Actions ecosystem only, to keep SHA pins current).
+- Modified: `README.md` (license tool versions point to the workflow).
 - Uses the scripts from `bootstrap-workspace`, the bundle pin and cache from `angle-acquisition`, and the test suites from `headless-context`. It can merge after `bootstrap-workspace` with Node/ASan steps that become meaningful as later changes land; the full pipeline is green only once all three are applied.
 - Branch protection on `main` should require the aggregate `ci` check (a repository setting, done by a maintainer).
 

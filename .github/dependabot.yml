@@ -1,0 +1,12 @@
+# Proposes bumps for the SHA-pinned actions in .github/workflows (keeping the
+# trailing version comments in sync). Rust and npm dependencies are updated by
+# hand: a bump can require regenerating THIRD_PARTY_NOTICES.
+version: 2
+updates:
+  - package-ecosystem: github-actions
+    directory: /
+    schedule:
+      interval: weekly
+    groups:
+      actions:
+        patterns: ["*"]

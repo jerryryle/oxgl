@@ -1,0 +1,229 @@
+# The checks every change must pass (openspec continuous-integration spec).
+# Branch protection requires only the aggregate `ci` job, so jobs can be added
+# or renamed without touching repository settings. CONTRIBUTING.md explains
+# how to reproduce each job locally.
+name: ci
+
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+concurrency:
+  # A pull request's runs share a group, so a new push cancels the old run.
+  # Each push to main gets its own group: GitHub cancels a queued run whenever
+  # a newer one joins its group, which would skip commits on main.
+  group: ci-${{ github.event_name == 'pull_request' && github.ref || github.run_id }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  CARGO_TERM_COLOR: always
+  # License tools, pinned once here; README.md points at these values.
+  CARGO_DENY_VERSION: "0.20.2"
+  CARGO_ABOUT_VERSION: "0.9.3"
+  # Nightly is needed only for -Zsanitizer and -Zbuild-std; bump deliberately.
+  ASAN_NIGHTLY: nightly-2026-10-20
+  # Workflow linters. Dependabot doesn't bump these; CONTRIBUTING.md refers here.
+  ACTIONLINT_VERSION: v1.7.12
+  ZIZMOR_VERSION: "1.31.1"
+
+jobs:
+  workflow-lint:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # Go's checksum database verifies the module download.
+      - name: actionlint
+        run: |
+          go install "github.com/rhysd/actionlint/cmd/actionlint@$ACTIONLINT_VERSION"
+          "$(go env GOPATH)/bin/actionlint"
+      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
+        with:
+          tool: zizmor@${{ env.ZIZMOR_VERSION }}
+          fallback: none
+      - name: zizmor
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: zizmor --config .github/zizmor.yml .github/workflows
+
+  check:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, macos-15, windows-2025]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          # No restore-keys: falling back to an older entry would carry its
+          # stale target/ forward, so the cache would only ever grow.
+          key: cargo-${{ matrix.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+      # oxgl-sys/build.rs verifies the bundle's digest when it downloads it.
+      # A restored cache entry is used as-is. Cache entries a pull request
+      # writes are visible only to that pull request, so only runs on main can
+      # write one that other branches restore.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cargo/oxgl-angle
+          key: angle-${{ runner.os }}-${{ hashFiles('angle/bundles.toml') }}
+      - run: npm ci
+      - run: npm run lint:rust
+      - run: npm run lint:js
+      - run: cargo test --workspace --exclude oxgl-node --locked
+      - run: npm run build
+      - run: npm test
+        env:
+          OXGL_BACKEND: software
+
+  # Host-independent checks, run once.
+  repo-checks:
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+          key: cargo-registry-${{ hashFiles('Cargo.lock') }}
+          restore-keys: cargo-registry-
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - run: python3 angle/scripts/check_pin.py --allow-unpublished
+      # Checksums come from install-action's manifest; with no fallback, a
+      # version it does not list fails here instead of downloading unverified.
+      - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
+        with:
+          tool: cargo-deny@${{ env.CARGO_DENY_VERSION }},cargo-about@${{ env.CARGO_ABOUT_VERSION }}
+          fallback: none
+      - run: npm run lint:licenses
+
+  # Both ends of `engines`. N-API makes the addon independent of the Node
+  # version, so Linux alone covers it. The build tooling needs a newer Node
+  # than the engines floor, so build on 24 and test on each version.
+  node-range:
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [22.12.0, 26]
+    runs-on: ubuntu-24.04
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          # Its own key: this job builds only release, and sharing check's key
+          # would let whichever job saves first own the entry.
+          key: cargo-node-range-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cargo/oxgl-angle
+          key: angle-${{ runner.os }}-${{ hashFiles('angle/bundles.toml') }}
+      - run: npm ci
+      - run: npm run build
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: ${{ matrix.node }}
+      - run: npm test
+        env:
+          OXGL_BACKEND: software
+
+  # Rust test suites under AddressSanitizer + LeakSanitizer. ANGLE is the
+  # normal stripped bundle; see design.md for why suppressions start empty.
+  asan:
+    runs-on: ubuntu-24.04
+    env:
+      RUSTFLAGS: -Zsanitizer=address -Cforce-frame-pointers=yes
+      # Doctests are built by rustdoc, which reads only RUSTDOCFLAGS.
+      RUSTDOCFLAGS: -Zsanitizer=address -Cforce-frame-pointers=yes
+      ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:detect_stack_use_after_return=1
+      # Absolute: cargo runs each test binary from its package directory.
+      LSAN_OPTIONS: suppressions=${{ github.workspace }}/.github/lsan-suppressions.txt
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the pinned nightly
+        run: rustup toolchain install "$ASAN_NIGHTLY" --profile minimal --component rust-src
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: cargo-asan-${{ env.ASAN_NIGHTLY }}-${{ hashFiles('Cargo.lock') }}
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cargo/oxgl-angle
+          key: angle-${{ runner.os }}-${{ hashFiles('angle/bundles.toml') }}
+      # oxgl-node is a Node addon whose tests run under Node, not cargo.
+      - run: >-
+          cargo +"$ASAN_NIGHTLY" test --workspace --exclude oxgl-node --locked
+          -Zbuild-std --target x86_64-unknown-linux-gnu
+
+  # Extension point: GPU coverage on a self-hosted runner, enabled by setting
+  # the OXGL_GPU_RUNNER repository variable to 'true'. Not required by `ci`.
+  gpu:
+    if: vars.OXGL_GPU_RUNNER == 'true'
+    runs-on: [self-hosted, oxgl-gpu]
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install
+      - run: npm ci
+      - run: npm run build
+      - run: npm test
+
+  # The one check branch protection requires.
+  ci:
+    if: always()
+    needs: [workflow-lint, check, repo-checks, node-range, asan]
+    runs-on: ubuntu-24.04
+    steps:
+      - name: Require every job to succeed
+        env:
+          RESULTS: ${{ toJSON(needs) }}
+        run: echo "$RESULTS" | jq -e 'all(.[]; .result == "success")'

@@ -1,0 +1,3 @@
+self-hosted-runner:
+  # The optional `gpu` job in ci.yml (enabled by the OXGL_GPU_RUNNER variable).
+  labels: [oxgl-gpu]

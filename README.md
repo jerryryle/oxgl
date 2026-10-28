@@ -10,8 +10,11 @@ currently only loads its native addon.
   installed automatically on first use.
 - Node.js 22.12.0 or newer (`engines` in `package.json`). Development tooling
   needs Node 22.13.0 or newer.
-- For the license check: `cargo install --locked cargo-deny@0.20.2` and
-  `cargo install --locked cargo-about@0.9.3 --features cli`.
+- For the license check: cargo-deny and cargo-about at the versions CI pins
+  (`CARGO_DENY_VERSION` and `CARGO_ABOUT_VERSION` in
+  `.github/workflows/ci.yml`), installed with
+  `cargo install --locked cargo-deny@<version>` and
+  `cargo install --locked cargo-about@<version> --features cli`.
 
 ## Commands
 
@@ -25,6 +28,7 @@ cargo test --workspace --exclude oxgl-node   # Rust tests (oxgl-node is tested f
 ```
 
 Specs and change proposals live in `openspec/`; run OpenSpec as `npx openspec`.
+`CONTRIBUTING.md` describes the CI checks and how to run each one locally.
 
 ## License
 
