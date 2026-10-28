@@ -65,7 +65,7 @@ Per-page judgement, not per-assertion: the spec's out-of-scope note. Partial pro
 
 ### CI job
 
-A `conformance` job in `ci.yml` on `ubuntu-24.04`, run as a matrix over `suite: [webgl1, webgl2]` so the two suites run in parallel. Steps: build as in `check`, restore `.cache/conformance` keyed by `hashFiles('conformance/suite.json')`, run with `OXGL_BACKEND=software`, and upload the report with `actions/upload-artifact` pinned by SHA under `if: always()`, as `conformance-results-${{ matrix.suite }}`. Artifact names must be unique within a workflow run, so a shared name would make the second upload fail. Both matrix entries are added to the aggregate `ci` job's `needs`.
+A `conformance` job in `ci.yml` on `ubuntu-24.04-arm` (Linux arm64, the only supported platform during the Linux arm64 focus), run as a matrix over `suite: [webgl1, webgl2]` so the two suites run in parallel. Steps: build as in `check`, restore `.cache/conformance` keyed by `hashFiles('conformance/suite.json')`, run with `OXGL_BACKEND=software`, and upload the report with `actions/upload-artifact` pinned by SHA under `if: always()`, as `conformance-results-${{ matrix.suite }}`. Artifact names must be unique within a workflow run, so a shared name would make the second upload fail. Both matrix entries are added to the aggregate `ci` job's `needs`.
 
 ### Safety rules
 
@@ -78,12 +78,12 @@ The change adds no Rust code and calls oxgl only through its public JS API, so u
 - [Run time under SwiftShader is unknown until the first full run.] → The two suites run as parallel jobs. Pages that time out are converted to `SKIP` with a reason once confirmed to hang. The first full run's duration is recorded in tasks so the job can be split further if needed.
 - [A page whose outcome varies between runs fails CI at random.] → No flake tolerance is built in. A flaky page is a bug in oxgl or the runner: fix it, or mark it `SKIP` with the reason while it is being fixed.
 - [`CRASH` entries could normalise native crashes.] → A crash of the host process violates the safety rules. The expectations file may list `CRASH` only so the job can land, and each such entry's reason names the follow-up that fixes it.
-- [SwiftShader results on macOS or Windows differ from Linux, so a local run there can disagree with CI.] → Accepted. CI on Linux is authoritative, and the report records the platform. Per-platform expectations can be added if the other platforms join CI.
+- [SwiftShader results on any host other than Linux arm64 (macOS, Windows, or Linux x64, where SwiftShader compiles shaders with Subzero instead of LLVM) can differ, so a local run there can disagree with CI.] → Accepted. CI on Linux arm64 is authoritative, and the report records the platform. Per-platform expectations can be added if the other platforms join CI.
 
 ## Migration Plan
 
 1. Land the runner and its own tests with an empty expectations file. The CI job is not yet added.
-2. Run the full suites once on Linux, generate the expectations with `--update`, and review the reasons: group obvious cases and convert confirmed hangs to `SKIP`.
+2. Run the full suites once on Linux arm64, generate the expectations with `--update`, and review the reasons: group obvious cases and convert confirmed hangs to `SKIP`.
 3. Add the CI job and make it required in `ci`.
 
 Rollback: remove the job from `ci`'s `needs`. Nothing else depends on the harness.

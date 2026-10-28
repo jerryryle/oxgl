@@ -1,10 +1,18 @@
 # LeakSanitizer suppressions for ci.yml's asan job (LSAN_OPTIONS=suppressions=...).
 #
-# Intentionally empty. An entry must name an internal function of a third-party
+# An entry must name an internal function of a third-party
 # component that makes a one-time allocation (process-lifetime cache, static
-# initialization), with a comment saying why. Never name a library
+# initialization) or a per-thread allocation it never frees by design, with a
+# comment saying why. Never name a library
 # (leak:libGLESv2) or an exported EGL/GL/Vulkan entry point (leak:eglInitialize):
 # either hides every unreachable allocation made under it, including ones our
-# own misuse causes. The published ANGLE libraries are stripped, so naming an
-# ANGLE-internal function first needs the unstripped-libraries follow-up
-# described in openspec/changes/archive/2026-10-27-ci-pipeline/design.md.
+# own misuse causes. The published ANGLE libraries are stripped, so the asan
+# job builds with OXGL_ANGLE_SYMBOLS=1: the tests then load the unstripped
+# libraries from the platform's pinned symbols archive (angle/bundles.toml),
+# and entries can name ANGLE-internal functions.
+
+# ANGLE allocates each thread's egl::Thread (and its Display TLS) on the
+# thread's first EGL call and intentionally never frees it: 72 bytes per thread
+# that used EGL (README, Known issues). Test threads exit before LeakSanitizer
+# runs. Seen on Linux arm64 only.
+leak:egl::GetCurrentThread

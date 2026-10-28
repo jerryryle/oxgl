@@ -27,12 +27,12 @@
 
 ## 5. Initial expectations
 
-- [ ] 5.1 Run both full suites on Linux with `OXGL_BACKEND=software` and `--update` to generate `conformance/expectations.txt`. Record each suite's wall-clock time and its slowest passing page in this task. Verify that the slowest passing page takes less than half the time limit at the default `--jobs`, and raise the limit or lower the default if it does not.
+- [ ] 5.1 Run both full suites on Linux arm64 with `OXGL_BACKEND=software` and `--update` to generate `conformance/expectations.txt`. Record each suite's wall-clock time and its slowest passing page in this task. Verify that the slowest passing page takes less than half the time limit at the default `--jobs`, and raise the limit or lower the default if it does not.
 - [ ] 5.2 Review the generated entries. Convert confirmed hangs to `SKIP` with a reason, make sure every `CRASH` entry names the follow-up that fixes it, and check that the pages oxgl already supports (for example `conformance/rendering/gl-clear.html`, if it reaches only implemented calls) pass. Verify that a plain `npm run conformance` then succeeds twice in a row with identical outcomes.
 
 ## 6. CI
 
-- [ ] 6.1 Add the `conformance` job to `.github/workflows/ci.yml`: an `ubuntu-24.04` matrix over `suite`, the build steps from `check`, a suite cache keyed by `hashFiles('conformance/suite.json')`, `OXGL_BACKEND=software`, and `actions/upload-artifact` pinned by SHA with `if: always()` and the artifact named `conformance-results-${{ matrix.suite }}`. Add it to `ci`'s `needs`. Verify that actionlint and zizmor pass in `workflow-lint`.
+- [ ] 6.1 Add the `conformance` job to `.github/workflows/ci.yml`: an `ubuntu-24.04-arm` matrix over `suite`, the build steps from `check`, a suite cache keyed by `hashFiles('conformance/suite.json')`, `OXGL_BACKEND=software`, and `actions/upload-artifact` pinned by SHA with `if: always()` and the artifact named `conformance-results-${{ matrix.suite }}`. Add it to `ci`'s `needs`. Verify that actionlint and zizmor pass in `workflow-lint`.
 - [ ] 6.2 Verify in a pull request's CI run that both matrix entries pass, both suites' report artifacts are downloadable, and a deliberately broken expectation (removing one `FAIL` entry on a scratch commit) fails `ci` with the page named.
 
 ## Workflow follow-up

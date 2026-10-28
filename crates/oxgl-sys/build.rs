@@ -30,6 +30,9 @@ struct Platform {
     libs: &'static [&'static str],
 }
 
+const LINUX_LIBS: &[&str] = &["libEGL.so", "libGLESv2.so", "libvk_swiftshader.so"];
+const WINDOWS_LIBS: &[&str] = &["libEGL.dll", "libGLESv2.dll", "vk_swiftshader.dll"];
+
 const PLATFORMS: &[(&str, Platform)] = &[
     (
         "aarch64-apple-darwin",
@@ -42,14 +45,28 @@ const PLATFORMS: &[(&str, Platform)] = &[
         "x86_64-unknown-linux-gnu",
         Platform {
             key: "linux-x64",
-            libs: &["libEGL.so", "libGLESv2.so", "libvk_swiftshader.so"],
+            libs: LINUX_LIBS,
+        },
+    ),
+    (
+        "aarch64-unknown-linux-gnu",
+        Platform {
+            key: "linux-arm64",
+            libs: LINUX_LIBS,
         },
     ),
     (
         "x86_64-pc-windows-msvc",
         Platform {
             key: "windows-x64",
-            libs: &["libEGL.dll", "libGLESv2.dll", "vk_swiftshader.dll"],
+            libs: WINDOWS_LIBS,
+        },
+    ),
+    (
+        "aarch64-pc-windows-msvc",
+        Platform {
+            key: "windows-arm64",
+            libs: WINDOWS_LIBS,
         },
     ),
 ];
@@ -63,6 +80,7 @@ fn main() {
 fn run() -> Result<()> {
     println!("cargo::rerun-if-env-changed=OXGL_ANGLE_DIR");
     println!("cargo::rerun-if-env-changed=OXGL_ANGLE_CACHE");
+    println!("cargo::rerun-if-env-changed=OXGL_ANGLE_SYMBOLS");
     let manifest_dir = PathBuf::from(var("CARGO_MANIFEST_DIR")?);
     let angle_dir = manifest_dir.join("../../angle");
     let pin_path = angle_dir.join("pin.toml");
@@ -105,17 +123,28 @@ fn run() -> Result<()> {
                 version(&bundles)
             );
         }
-        let (url, sha256) = pinned_bundle(&bundles, platform.key)?;
+        let (url, sha256) = pinned_archive(&bundles, platform.key, "").ok_or_else(|| {
+            format!(
+                "no published ANGLE bundle is pinned for {}; build one with angle/build.sh \
+                 and set OXGL_ANGLE_DIR to the extracted bundle",
+                platform.key
+            )
+        })?;
         cached_or_downloaded(&url, &sha256)?
     };
     check_layout(&bundle, platform)?;
     check_licenses(&bundle, &deny_path)?;
     generate_bindings(&bundle)?;
+    let lib_dir = if env::var_os("OXGL_ANGLE_SYMBOLS").is_some() {
+        unstripped_lib_dir(&bundle, &read_toml(&bundles_path)?, platform.key)?
+    } else {
+        bundle.join("lib")
+    };
     // Read only by `test_support` (feature `test-support`), so a build without
     // that feature never embeds the path.
     println!(
         "cargo::rustc-env=OXGL_STAGED_ANGLE_LIB_DIR={}",
-        bundle.join("lib").display()
+        lib_dir.display()
     );
     // Re-run (and re-download if needed) when the bundle directory is deleted
     // or changes, so the recorded path never goes stale.
@@ -205,25 +234,48 @@ fn version(table: &toml::Table) -> &str {
         .unwrap_or("no bundle_version")
 }
 
-fn pinned_bundle(bundles: &toml::Table, key: &str) -> Result<(String, String)> {
-    let entry = bundles
-        .get("platform")
-        .and_then(|p| p.get(key))
-        .ok_or_else(|| format!("angle/bundles.toml has no [platform.{key}] entry"))?;
+/// The `{prefix}url` and `{prefix}sha256` of `[platform.<key>]`, if both are set.
+fn pinned_archive(bundles: &toml::Table, key: &str, prefix: &str) -> Option<(String, String)> {
+    let entry = bundles.get("platform").and_then(|p| p.get(key))?;
     let field = |name: &str| {
         entry
-            .get(name)
+            .get(format!("{prefix}{name}"))
             .and_then(toml::Value::as_str)
             .filter(|value| !value.is_empty())
             .map(str::to_owned)
     };
-    match (field("url"), field("sha256")) {
-        (Some(url), Some(sha256)) => Ok((url, sha256.to_ascii_lowercase())),
-        _ => Err(format!(
-            "no published ANGLE bundle is pinned for {key}; build one with angle/build.sh \
-             and set OXGL_ANGLE_DIR to the extracted bundle"
-        )),
+    Some((field("url")?, field("sha256")?.to_ascii_lowercase()))
+}
+
+/// For sanitizer runs (`OXGL_ANGLE_SYMBOLS`): a copy of the bundle's `lib/`
+/// with its libraries replaced by the unstripped ones from the platform's
+/// pinned symbols archive, so `LeakSanitizer` suppressions can name
+/// ANGLE-internal functions. The archive is verified like the bundle.
+fn unstripped_lib_dir(bundle: &Path, bundles: &toml::Table, key: &str) -> Result<PathBuf> {
+    let (url, sha256) = pinned_archive(bundles, key, "symbols_").ok_or_else(|| {
+        format!(
+            "OXGL_ANGLE_SYMBOLS is set but angle/bundles.toml pins no symbols archive for {key}"
+        )
+    })?;
+    let symbols = cached_or_downloaded(&url, &sha256)?;
+    let out = PathBuf::from(var("OUT_DIR")?).join("angle-lib-unstripped");
+    let _ = fs::remove_dir_all(&out);
+    fs::create_dir_all(&out).map_err(|e| format!("cannot create {}: {e}", out.display()))?;
+    for dir in [bundle.join("lib"), symbols] {
+        let entries =
+            fs::read_dir(&dir).map_err(|e| format!("cannot read {}: {e}", dir.display()))?;
+        for entry in entries {
+            let path = entry.map_err(|e| e.to_string())?.path();
+            let Some(name) = path.file_name() else {
+                continue;
+            };
+            if path.is_file() && name != ".complete" {
+                fs::copy(&path, out.join(name))
+                    .map_err(|e| format!("cannot copy {}: {e}", path.display()))?;
+            }
+        }
     }
+    Ok(out)
 }
 
 fn cache_root() -> Result<PathBuf> {

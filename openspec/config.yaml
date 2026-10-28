@@ -23,7 +23,9 @@ context: |
       macros require otherwise (any exemption is scoped and justified).
   - A JS/TS package at the repo root, published to npm as `oxgl`, with types
     matching the WebGL IDL.
-  - Target platforms: Linux x64, macOS arm64, Windows x64.
+  - Target platforms: Linux arm64 only, during the Linux arm64 focus (change
+    linux-arm64-focus). Eventual targets, each with an ANGLE bundle already:
+    Linux x64, Linux arm64, macOS arm64, Windows x64, Windows arm64.
 
   Safety rules (non-negotiable; every design and task must honor them):
   - Every unsafe block has a `// SAFETY:` comment; #![deny(unsafe_op_in_unsafe_fn)].
