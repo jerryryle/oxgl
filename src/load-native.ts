@@ -1,12 +1,44 @@
 import { createRequire } from 'node:module';
 
-/** Native interface exported by the oxgl addon. */
+/** Result of the native `createContext`: a key and size, or an error to throw. */
+export interface NativeCreated {
+  index: number;
+  version: number;
+  width: number;
+  height: number;
+  errorCode?: string;
+  errorMessage?: string;
+}
+
+/**
+ * Native interface exported by the oxgl addon. Arguments are already converted
+ * per WebIDL; contexts are identified by their key's `index` and `version`.
+ */
 export interface NativeBinding {
   nativeAbiVersion(): number;
+  init(libDir: string): void;
+  createContext(backend: string, width: number, height: number, webgl2: boolean): NativeCreated;
+  destroy(index: number, version: number): void;
+  release(index: number, version: number): void;
+  liveContexts(): number;
+  clearColor(index: number, version: number, red: number, green: number, blue: number, alpha: number): void;
+  clear(index: number, version: number, mask: number): void;
+  getError(index: number, version: number): number;
+  readPixels(
+    index: number,
+    version: number,
+    x: number,
+    y: number,
+    width: number,
+    height: number,
+    format: number,
+    type: number,
+    pixels: ArrayBufferView | null,
+  ): void;
 }
 
 /** Version of the JS ↔ native interface this package was built for. */
-export const NATIVE_ABI_VERSION = 1;
+export const NATIVE_ABI_VERSION = 2;
 
 function nativeMissing(detail: string, cause?: unknown): Error {
   const error = new Error(

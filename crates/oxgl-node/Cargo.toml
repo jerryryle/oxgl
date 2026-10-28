@@ -18,6 +18,8 @@ doctest = false
 napi = { version = "3.15.0", default-features = false, features = ["napi9"] }
 napi-derive = "3.6.13"
 oxgl-core = { path = "../oxgl-core" }
+# Direct dependency for the Node-API typed-array access in `napi_view`.
+oxgl-sys = { path = "../oxgl-sys", features = ["node"] }
 
 [build-dependencies]
 napi-build = "2.6.0"

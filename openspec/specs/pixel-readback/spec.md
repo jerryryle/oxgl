@@ -1,13 +1,12 @@
-# Spec Delta
+# pixel-readback Specification
 
 ## Purpose
-
 Covers reading pixels from the current framebuffer back into JavaScript memory via `readPixels`, including format/type validation, destination-buffer checks, and out-of-bounds behavior.
 
-## ADDED Requirements
+## Requirements
 
 ### Requirement: readPixels into an ArrayBufferView
-`readPixels(x, y, width, height, format, type, pixels)` SHALL behave as specified in WebGL 1.0 §5.14.12 "Read Operations" and OpenGL ES 2.0 §4.3.1 (WebGL 2: the `ArrayBufferView` overload without `dstOffset` in WebGL 2.0 "Reading back pixels", OpenGL ES 3.0 §4.3.2). Rows SHALL be written bottom-to-top as in OpenGL, honoring the default `PACK_ALIGNMENT` of 4.
+`readPixels(x, y, width, height, format, type, pixels)` SHALL behave as specified in WebGL 1.0 §5.14.12 "Read Operations" and OpenGL ES 2.0 §4.3.1 (WebGL 2: the `ArrayBufferView` overload without `dstOffset` in WebGL 2.0 §4.7.10 "Reading back pixels", OpenGL ES 3.0 §4.3.2). Rows SHALL be written bottom-to-top as in OpenGL, honoring the default `PACK_ALIGNMENT` of 4.
 
 #### Scenario: Read after clear
 - **WHEN** the buffer is cleared to `(0, 1, 0, 1)` and `readPixels(0, 0, w, h, RGBA, UNSIGNED_BYTE, new Uint8Array(w*h*4))` is called
@@ -43,14 +42,14 @@ If the `ArrayBufferView` type does not match `type`, `readPixels` SHALL generate
 - **THEN** a `TypeError` is thrown
 
 ### Requirement: Negative dimensions
-A negative `width` or `height` SHALL generate `INVALID_VALUE` (OpenGL ES 2.0 §4.3.1).
+A negative `width` or `height` SHALL generate `INVALID_VALUE` (OpenGL ES 2.0 §2.5, negative `sizei` arguments).
 
 #### Scenario: Negative width
 - **WHEN** `readPixels(0, 0, -1, 1, RGBA, UNSIGNED_BYTE, new Uint8Array(4))` is called
 - **THEN** `getError()` returns `INVALID_VALUE`
 
 ### Requirement: Reading outside the framebuffer
-Pixels of the requested region that lie outside the framebuffer SHALL be left untouched in the destination, as specified in WebGL 1.0 §6 "Reading Pixels Outside the Framebuffer" and the WebGL 2.0 out-of-bounds readPixels rules; pixels inside SHALL be written normally.
+Pixels of the requested region that lie outside the framebuffer SHALL be left untouched in the destination, as specified in WebGL 1.0 §6.11 "Reading Pixels Outside the Framebuffer" and WebGL 2.0 §5.1.7 "Out-of-bounds Behaviors in copyTexSubImage2D and readPixels calls"; pixels inside SHALL be written normally.
 
 #### Scenario: Partially outside region
 - **WHEN** a 4×4 buffer cleared to white is read at `(-2, -2, 4, 4)` into a `Uint8Array` pre-filled with `7`

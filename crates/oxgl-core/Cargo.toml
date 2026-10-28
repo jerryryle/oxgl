@@ -9,6 +9,10 @@ publish.workspace = true
 
 [dependencies]
 oxgl-sys = { path = "../oxgl-sys" }
+slotmap = "1.1.1"
+
+[dev-dependencies]
+oxgl-sys = { path = "../oxgl-sys", features = ["test-support"] }
 
 [lints]
 workspace = true

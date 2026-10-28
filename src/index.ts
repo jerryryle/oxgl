@@ -1,6 +1,12 @@
-import { loadNative } from './load-native.js';
+import { native } from './native.js';
 
-const native = loadNative('./native.cjs', import.meta.url);
+export {
+  createContext,
+  WebGL2RenderingContext,
+  WebGLRenderingContext,
+  type ContextBackend,
+  type ContextOptions,
+} from './context.js';
 
 /** Version of the JS ↔ native interface reported by the loaded addon. */
 export const nativeAbiVersion: number = native.nativeAbiVersion();
