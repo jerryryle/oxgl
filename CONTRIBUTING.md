@@ -12,12 +12,17 @@ to `main`. A newer push to a pull request cancels its earlier run.
 | Job | Runs on | Checks |
 |---|---|---|
 | `workflow-lint` | Linux | actionlint, and zizmor with `.github/zizmor.yml` (every action pinned to a commit SHA, minimal permissions, no template injection) |
-| `check` | Linux x64, macOS arm64, Windows x64 | rustfmt, clippy (pedantic, warnings as errors), Rust tests, ESLint and tsc, native + TS build, Node tests with `OXGL_BACKEND=software` |
+| `check` | Linux arm64 | rustfmt, clippy (pedantic, warnings as errors), Rust tests, ESLint and tsc, native + TS build, Node tests with `OXGL_BACKEND=software` |
 | `repo-checks` | Linux | the ANGLE pin check, dependency licenses and `THIRD_PARTY_NOTICES` |
-| `node-range` | Linux | Node tests on Node 22.12.0 (the `engines` floor) and Node 26 |
-| `asan` | Linux x64 | Rust tests under AddressSanitizer and LeakSanitizer |
+| `node-range` | Linux arm64 | Node tests on Node 22.12.0 (the `engines` floor) and Node 26 |
+| `asan` | Linux arm64 | Rust tests under AddressSanitizer and LeakSanitizer |
 | `gpu` | self-hosted `oxgl-gpu` runner | Node tests on a real GPU; skipped unless the `OXGL_GPU_RUNNER` repository variable is `true` |
 | `ci` | Linux | succeeds only when every job above except `gpu` succeeded |
+
+Linux arm64 is the only supported platform for now (see the README), so the
+jobs that build or test oxgl run only on `ubuntu-24.04-arm`. The other
+platforms' entries stay in `ci.yml`, commented out; `grep -n PLATFORM-FOCUS
+.github/workflows/ci.yml` lists them.
 
 Branch protection on `main` should require the single `ci` check (Settings →
 Branches → branch protection rule for `main` → Require status checks → `ci`).
@@ -50,7 +55,7 @@ OXGL_BACKEND=software npm test
 `ci.yml`'s `env`):
 
 ```sh
-python3 angle/scripts/check_pin.py --allow-unpublished
+python3 angle/scripts/check_pin.py
 npm run lint:licenses
 ```
 
@@ -62,7 +67,7 @@ go install github.com/rhysd/actionlint/cmd/actionlint@<ACTIONLINT_VERSION>
 uvx zizmor@<ZIZMOR_VERSION> --config .github/zizmor.yml .github/workflows
 ```
 
-`asan` (Linux x64 only):
+`asan` (Linux arm64 only):
 
 ```sh
 NIGHTLY=<ASAN_NIGHTLY>
@@ -72,7 +77,7 @@ RUSTDOCFLAGS="-Zsanitizer=address -Cforce-frame-pointers=yes" \
 ASAN_OPTIONS=detect_leaks=1:halt_on_error=1:detect_stack_use_after_return=1 \
 LSAN_OPTIONS="suppressions=$PWD/.github/lsan-suppressions.txt" \
 cargo +"$NIGHTLY" test --workspace --exclude oxgl-node --locked \
-  -Zbuild-std --target x86_64-unknown-linux-gnu
+  -Zbuild-std --target aarch64-unknown-linux-gnu
 ```
 
 `.github/lsan-suppressions.txt` starts empty. Read its header before adding an

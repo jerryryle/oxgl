@@ -30,6 +30,9 @@ struct Platform {
     libs: &'static [&'static str],
 }
 
+const LINUX_LIBS: &[&str] = &["libEGL.so", "libGLESv2.so", "libvk_swiftshader.so"];
+const WINDOWS_LIBS: &[&str] = &["libEGL.dll", "libGLESv2.dll", "vk_swiftshader.dll"];
+
 const PLATFORMS: &[(&str, Platform)] = &[
     (
         "aarch64-apple-darwin",
@@ -42,14 +45,28 @@ const PLATFORMS: &[(&str, Platform)] = &[
         "x86_64-unknown-linux-gnu",
         Platform {
             key: "linux-x64",
-            libs: &["libEGL.so", "libGLESv2.so", "libvk_swiftshader.so"],
+            libs: LINUX_LIBS,
+        },
+    ),
+    (
+        "aarch64-unknown-linux-gnu",
+        Platform {
+            key: "linux-arm64",
+            libs: LINUX_LIBS,
         },
     ),
     (
         "x86_64-pc-windows-msvc",
         Platform {
             key: "windows-x64",
-            libs: &["libEGL.dll", "libGLESv2.dll", "vk_swiftshader.dll"],
+            libs: WINDOWS_LIBS,
+        },
+    ),
+    (
+        "aarch64-pc-windows-msvc",
+        Platform {
+            key: "windows-arm64",
+            libs: WINDOWS_LIBS,
         },
     ),
 ];

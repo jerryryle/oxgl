@@ -56,7 +56,10 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        os: [ubuntu-24.04, macos-15, windows-2025]
+        # Linux arm64 is the only supported platform for now (see README.md).
+        os: [ubuntu-24.04-arm]
+        # PLATFORM-FOCUS: re-enable
+        # os: [ubuntu-24.04, macos-15, windows-2025]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -88,7 +91,7 @@ jobs:
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cargo/oxgl-angle
-          key: angle-${{ runner.os }}-${{ hashFiles('angle/bundles.toml') }}
+          key: angle-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('angle/bundles.toml') }}
       - run: npm ci
       - run: npm run lint:rust
       - run: npm run lint:js
@@ -118,7 +121,7 @@ jobs:
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
-      - run: python3 angle/scripts/check_pin.py --allow-unpublished
+      - run: python3 angle/scripts/check_pin.py
       # Checksums come from install-action's manifest; with no fallback, a
       # version it does not list fails here instead of downloading unverified.
       - uses: taiki-e/install-action@5488ac5a951645ce95062214902ac4b6bc1a1037 # v2.87.32
@@ -135,7 +138,9 @@ jobs:
       fail-fast: false
       matrix:
         node: [22.12.0, 26]
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
+    # PLATFORM-FOCUS: re-enable
+    # runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -155,11 +160,11 @@ jobs:
             target
           # Its own key: this job builds only release, and sharing check's key
           # would let whichever job saves first own the entry.
-          key: cargo-node-range-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+          key: cargo-node-range-${{ runner.arch }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cargo/oxgl-angle
-          key: angle-${{ runner.os }}-${{ hashFiles('angle/bundles.toml') }}
+          key: angle-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('angle/bundles.toml') }}
       - run: npm ci
       - run: npm run build
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -172,7 +177,9 @@ jobs:
   # Rust test suites under AddressSanitizer + LeakSanitizer. ANGLE is the
   # normal stripped bundle; see design.md for why suppressions start empty.
   asan:
-    runs-on: ubuntu-24.04
+    runs-on: ubuntu-24.04-arm
+    # PLATFORM-FOCUS: re-enable
+    # runs-on: ubuntu-24.04
     env:
       RUSTFLAGS: -Zsanitizer=address -Cforce-frame-pointers=yes
       # Doctests are built by rustdoc, which reads only RUSTDOCFLAGS.
@@ -193,15 +200,17 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git/db
             target
-          key: cargo-asan-${{ env.ASAN_NIGHTLY }}-${{ hashFiles('Cargo.lock') }}
+          key: cargo-asan-${{ runner.arch }}-${{ env.ASAN_NIGHTLY }}-${{ hashFiles('Cargo.lock') }}
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cargo/oxgl-angle
-          key: angle-${{ runner.os }}-${{ hashFiles('angle/bundles.toml') }}
+          key: angle-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('angle/bundles.toml') }}
       # oxgl-node is a Node addon whose tests run under Node, not cargo.
+      # PLATFORM-FOCUS: re-enable
+      #   -Zbuild-std --target x86_64-unknown-linux-gnu
       - run: >-
           cargo +"$ASAN_NIGHTLY" test --workspace --exclude oxgl-node --locked
-          -Zbuild-std --target x86_64-unknown-linux-gnu
+          -Zbuild-std --target aarch64-unknown-linux-gnu
 
   # Extension point: GPU coverage on a self-hosted runner, enabled by setting
   # the OXGL_GPU_RUNNER repository variable to 'true'. Not required by `ci`.

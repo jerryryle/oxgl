@@ -4,6 +4,14 @@ Standards-compliant WebGL 1 and WebGL 2 for Node.js, rendered headless through
 ANGLE, with a SwiftShader software fallback. Early development: contexts
 support `clearColor`, `clear`, `readPixels`, and `getError` so far.
 
+## Platforms
+
+Linux arm64 (glibc) is the only supported and tested platform for now. The
+build also recognises Linux x64, macOS arm64, Windows x64 and Windows arm64,
+and a pinned ANGLE bundle exists for each, so `npm run build` works on those
+hosts for local use. They are not supported or tested until they are
+restored.
+
 ## Known issues
 
 - **SwiftShader initialization briefly changes process-global state.** The
