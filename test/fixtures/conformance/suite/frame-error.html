@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html><head><script src="harness.js"></script></head><body>
+<script>
+// Run as expected-FAIL: an error in the frame must not end the page or
+// become its error.
+var frame = document.createElement("iframe");
+frame.onload = function () { testPassed("the page outlived its frame's error"); finishTest(); };
+frame.src = "frame-error-inner.html";
+document.body.appendChild(frame);
+</script>
+</body></html>

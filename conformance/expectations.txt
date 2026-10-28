@@ -1,0 +1,4 @@
+# Conformance pages not expected to pass, per suite: <suite> <path> <OUTCOME> # <reason>
+# A page without an entry is expected to PASS. See CONTRIBUTING.md; `npm run conformance -- --update`
+# rewrites this file.
+

@@ -1,0 +1,7 @@
+<!DOCTYPE html>
+<html><head><script src="harness.js"></script></head><body>
+<script>
+setTimeout(function () { throw new Error("error in a side callback"); }, 0);
+setTimeout(function () { testPassed("main flow"); finishTest(); }, 50);
+</script>
+</body></html>

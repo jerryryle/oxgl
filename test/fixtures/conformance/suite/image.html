@@ -1,0 +1,9 @@
+<!DOCTYPE html>
+<html><head><script src="harness.js"></script></head><body>
+<script>
+var img = new Image();
+img.onload = function () { testPassed("image loaded"); finishTest(); };
+img.onerror = function () { testFailed("image failed to load"); finishTest(); };
+img.src = "missing.png";
+</script>
+</body></html>

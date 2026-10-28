@@ -39,6 +39,13 @@ Within a page, `getContext` on a canvas element SHALL return an oxgl context for
 - **WHEN** a page calls `getContext('2d')`
 - **THEN** it receives `null`, and a page that needs a 2D context fails rather than the runner crashing
 
+### Requirement: oxgl objects belong to the page
+As in a browser, oxgl's context classes, the contexts a page creates and the errors oxgl's API throws SHALL belong to the page's own JavaScript realm.
+
+#### Scenario: Errors are the page's own types
+- **WHEN** a page calls a context method with an argument WebIDL rejects and checks the exception with `instanceof TypeError` (as `wtu.shouldThrow` does)
+- **THEN** the check succeeds, and the classes' prototype chains end at the page's own `Object.prototype` (cf. Khronos `conformance/context/context-type-test.html`)
+
 ### Requirement: Rejected context creation returns null
 When oxgl rejects a context creation requested through `getContext`, `getContext` SHALL return `null`, as a browser does when creation fails, and the rejection message SHALL be recorded with the page's results.
 
@@ -58,11 +65,23 @@ Image, video and audio elements in a page SHALL report a load error shortly afte
 - **THEN** the page sees `undefined`, as it would from oxgl outside the runner
 
 ### Requirement: Page outcome
-Each page run SHALL have exactly one outcome, taken from the first rule that applies. `CRASH`: the process running it dies from a signal or native abort that the runner did not send, even after the page reported. `FAIL`: a script error escapes; the page ends then, without waiting for completion. `TIMEOUT`: it does not complete within the time limit. `FAIL`: it completes with a failing result or no results. `PASS`: it completes with at least one result, all succeeding.
+Each page run SHALL have exactly one outcome, taken from the first rule that applies. `CRASH`: its process dies from a signal or abort the runner did not send, even after the page reported, or does not exit 30 s after completing. `FAIL`: a script error escapes in a page that ends early on errors. `TIMEOUT`: it goes the time limit without a new result. `FAIL`: it completes with a failing result or no results. `PASS`: it completes with at least one result, all succeeding.
 
-#### Scenario: Uncaught exception
-- **WHEN** a page calls a WebGL method oxgl does not implement and the resulting `TypeError` is not caught by the page
+#### Scenario: Uncaught exception in a page expected to fail
+- **WHEN** a page whose expectation is `FAIL` calls a WebGL method oxgl does not implement and the resulting `TypeError` is not caught by the page
 - **THEN** the page's outcome is `FAIL`, the exception message is recorded, and the page ends at once rather than waiting out the time limit
+
+#### Scenario: Uncaught exception in a page expected to pass
+- **WHEN** a page with no expectations entry throws an uncaught error and then never completes
+- **THEN** the page keeps running until the time limit, its outcome is `TIMEOUT`, and the error message is recorded
+
+#### Scenario: Page recovers from an uncaught exception
+- **WHEN** a page with no expectations entry throws an uncaught error from a callback and its main script then completes with only passing results
+- **THEN** the page's outcome is `PASS`, as in the official harness
+
+#### Scenario: Every page ends early on errors
+- **WHEN** a run asks for every page to end early on errors and a page with no expectations entry throws an uncaught error
+- **THEN** the page's outcome is `FAIL` and it ends at once
 
 #### Scenario: Page never finishes
 - **WHEN** a page waits on a promise that never settles and so never signals completion
@@ -72,9 +91,24 @@ Each page run SHALL have exactly one outcome, taken from the first rule that app
 - **WHEN** a page reports only passing results and completes, and the process then aborts while destroying its contexts
 - **THEN** the page's outcome is `CRASH`
 
+#### Scenario: Hang while tearing down
+- **WHEN** a page completes with only passing results and its process then hangs while destroying its contexts
+- **THEN** the runner kills the process 30 seconds later and the page's outcome is `CRASH`, not `TIMEOUT` or `PASS`
+
+#### Scenario: Long page that keeps reporting
+- **WHEN** a page reports results steadily and takes longer in total than the time limit, never going the time limit without a new result
+- **THEN** it is not timed out, and its outcome follows from its results
+
 #### Scenario: Runner stops a hung page
 - **WHEN** the runner kills a page's process at the time limit
 - **THEN** the page's outcome is `TIMEOUT`, not `CRASH`
+
+### Requirement: Escaped script errors
+A page SHALL end early on errors when its expectation is `FAIL` or when the run asks for every page to end early on errors: it ends at the first escaped script error. Every other page SHALL treat an escaped script error as the official harness (`webgl-test-harness.js`) does: the error is recorded and the page keeps running until it completes or reaches the time limit. The first escaped error's message SHALL be recorded for every page that has one.
+
+#### Scenario: Empty expectations
+- **WHEN** the expectations file has no entries and the run does not ask for every page to end early on errors
+- **THEN** every page is judged as the official harness judges it
 
 ### Requirement: Runner errors are not page outcomes
 When the runner's own code fails for a page (for example while setting up the page's window or loading it from the runner's server), the run SHALL fail with a harness error naming the page and the error. The other pages SHALL still run and be judged, and the report SHALL still be written. A harness error SHALL NOT be recorded as a page outcome, and the update option SHALL NOT write it to the expectations.
@@ -132,7 +166,7 @@ Every run SHALL write a machine-readable report recording, per suite and page, t
 - **THEN** the report is still written and contains the regressed page's failure message
 
 ### Requirement: Conformance command
-The root `package.json` SHALL expose `npm run conformance`, which runs both suites against the built package and exits non-zero when the run fails. A run with the update option SHALL be judged against the expectations it writes. It SHALL accept options to select one suite, to restrict the run to pages whose path contains a given substring, to include `SKIP` pages, and to rewrite the expectations file from the run's outcomes. A filtered run SHALL judge only the pages it ran.
+The root `package.json` SHALL expose `npm run conformance`, which runs both suites against the built package and exits non-zero when the run fails. It SHALL accept options to select one suite, to restrict the run to pages whose path contains a given substring, to include `SKIP` pages, to make every page end early on errors (Page outcome), and to rewrite the expectations file from the run's outcomes. A filtered run SHALL judge only the pages it ran.
 
 #### Scenario: Filtered run
 - **WHEN** a developer runs the command restricted to `conformance/buffers/`
@@ -140,7 +174,7 @@ The root `package.json` SHALL expose `npm run conformance`, which runs both suit
 
 #### Scenario: Updating expectations
 - **WHEN** a developer runs the command with the update option
-- **THEN** the expectations entries for the pages that ran are replaced with their outcomes, existing reasons are kept for entries whose outcome is unchanged, entries for pages that now pass are removed, on a run of whole suites entries for pages those suites no longer contain are removed, and new or changed entries take the page's first failure message (or `timed out` / `crashed`) as their reason, reduced to its first line and at most 200 characters; the command then exits zero unless the expectations file could not be parsed
+- **THEN** the run is judged against the expectations it writes, the expectations entries for the pages that ran are replaced with their outcomes, existing reasons are kept for entries whose outcome is unchanged, entries for pages that now pass are removed, on a run of whole suites entries for pages those suites no longer contain are removed, and new or changed entries take the page's first escaped error as their reason, or its first failure message when it has none (for `TIMEOUT` and `CRASH`, `no new result within the time limit` / `crashed`, followed by the first escaped error's message when there is one), reduced to its first line and at most 200 characters; the command then exits zero unless the expectations file could not be parsed or a page had a harness error
 
 ### Requirement: Backend follows the environment
 The runner SHALL create contexts with the backend selected by `OXGL_BACKEND` (backend-selection), and the report SHALL record that requested backend (`auto` when unset). Under `auto` the report does not say which backend served each context; runs meant to be compared set `OXGL_BACKEND` explicitly.

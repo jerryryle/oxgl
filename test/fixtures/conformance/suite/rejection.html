@@ -1,0 +1,7 @@
+<!DOCTYPE html>
+<html><head><script src="harness.js"></script></head><body>
+<script>
+(async function () { await null; throw new TypeError("gl.fenceSync is not a function"); })();
+setTimeout(function () { testPassed("still running after the rejection"); finishTest(); }, 100);
+</script>
+</body></html>

@@ -1,0 +1,8 @@
+{
+  "repository": "https://github.com/KhronosGroup/WebGL.git",
+  "commit": "3a65272e40f97c82de335825ea77c4da8e77a637",
+  "versions": {
+    "webgl1": "1.0.4",
+    "webgl2": "2.0.1"
+  }
+}

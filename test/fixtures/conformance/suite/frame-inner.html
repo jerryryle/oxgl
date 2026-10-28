@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html><head><script src="harness.js"></script></head><body>
+<script>
+// Runs in a frame: reports to its parent page, and its own results and
+// finishTest() must not count for the page.
+var gl = document.createElement("canvas").getContext("webgl");
+window.frameContext = gl;
+parent.frameResult = gl instanceof WebGLRenderingContext ? "context" : String(gl);
+testFailed("a frame result that must not count");
+finishTest();
+</script>
+</body></html>
