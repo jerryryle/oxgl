@@ -58,11 +58,31 @@ bundle() {
   python3 "$here/scripts/bundle.py" "$1" "$(out_dir "$1")" "$work/angle" "$work/dist" "$bundle_version" "$angle_commit"
 }
 
+# Network fetches occasionally fail transiently (dropped connections to
+# googlesource or Google Storage). Every fetch step is safe to repeat, so retry
+# the whole fetch a few times. Each attempt is a separate process so `set -e`
+# still stops it at the first failing command.
+fetch_with_retry() {
+  local attempt delay
+  for attempt in 1 2 3; do
+    if "$0" fetch-once; then
+      return 0
+    fi
+    [[ $attempt == 3 ]] && break
+    delay=$((attempt * 30))
+    echo "fetch attempt $attempt failed; retrying in ${delay}s" >&2
+    sleep "$delay"
+  done
+  echo "fetch failed after 3 attempts" >&2
+  return 1
+}
+
 cmd="${1:-}"
 case "$cmd" in
-  fetch) fetch ;;
+  fetch) fetch_with_retry ;;
+  fetch-once) fetch ;;
   build) build "${2:?platform}" ;;
   bundle) bundle "${2:?platform}" ;;
-  all) fetch; build "${2:?platform}"; bundle "$2" ;;
+  all) fetch_with_retry; build "${2:?platform}"; bundle "$2" ;;
   *) sed -n '2,12p' "$0"; exit 2 ;;
 esac

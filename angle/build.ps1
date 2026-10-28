@@ -55,9 +55,24 @@ function Bundle {
   Invoke-Checked python "$here\scripts\bundle.py" $platform $out "$work\angle" "$work\dist" $bundleVersion $angleCommit
 }
 
+# Network fetches occasionally fail transiently (dropped connections to
+# googlesource or Google Storage). Every fetch step is safe to repeat, so retry
+# the whole fetch a few times.
+function Fetch-WithRetry {
+  for ($attempt = 1; ; $attempt++) {
+    try { Fetch; return }
+    catch {
+      if ($attempt -ge 3) { throw "fetch failed after 3 attempts: $_" }
+      $delay = $attempt * 30
+      Write-Warning "fetch attempt $attempt failed ($_); retrying in ${delay}s"
+      Start-Sleep -Seconds $delay
+    }
+  }
+}
+
 switch ($Command) {
-  'fetch' { Fetch }
+  'fetch' { Fetch-WithRetry }
   'build' { Build }
   'bundle' { Bundle }
-  'all' { Fetch; Build; Bundle }
+  'all' { Fetch-WithRetry; Build; Bundle }
 }
