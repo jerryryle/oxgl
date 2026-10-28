@@ -286,7 +286,10 @@ jobs:
           key: conformance-suite-${{ hashFiles('conformance/suite.json') }}
       - run: npm ci
       - run: npm run build
-      - run: npm run conformance -- --suite "$SUITE"
+      # TEMPORARY (webgl-idl-constants task 3.1): regenerate this suite's
+      # expectations; the uploaded file is merged and committed, then this
+      # step goes back to a plain run.
+      - run: npm run conformance -- --suite "$SUITE" --update
         env:
           SUITE: ${{ matrix.suite }}
           OXGL_BACKEND: software
@@ -295,7 +298,9 @@ jobs:
         if: always()
         with:
           name: conformance-results-${{ matrix.suite }}
-          path: conformance-results.json
+          path: |
+            conformance-results.json
+            conformance/expectations.txt
 
   ci:
     if: always()
