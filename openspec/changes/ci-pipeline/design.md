@@ -36,7 +36,7 @@ jobs:
 
 Runner images are pinned by version label (not `-latest`) so image rollovers are deliberate. The main matrix uses the active LTS Node (24); `node-range` covers both ends of `engines` (the exact floor 22.12.0, and 26 current) on Linux only to keep cost down, since N-API makes the addon Node-version-independent and per-platform risk is already covered by `check`.
 
-`ANGLE` cache: `actions/cache` keyed `angle-${{ runner.os }}-${{ <sha256 from angle/pin.toml> }}`, restored into the cache directory `oxgl-sys/build.rs` already uses (`OXGL_ANGLE_CACHE`). The build script still verifies the digest after restore, so a poisoned cache entry fails the build instead of being used.
+`ANGLE` cache: `actions/cache` keyed `angle-${{ runner.os }}-${{ <sha256 from angle/bundles.toml> }}`, restored into the cache directory `oxgl-sys/build.rs` already uses (`OXGL_ANGLE_CACHE`). The build script still verifies the digest after restore, so a poisoned cache entry fails the build instead of being used.
 
 ### AddressSanitizer job
 
