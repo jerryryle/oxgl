@@ -55,7 +55,10 @@ change has merged but its bundles are not pinned yet), the build uses the older
 bundles and prints a warning.
 
 `npm run build` then copies the bundle's `lib/` to `dist/angle/` next to the
-addon and writes `dist/THIRD_PARTY_NOTICES` with the ANGLE license texts.
+addon and writes `dist/THIRD_PARTY_NOTICES` with the ANGLE license texts. It
+first re-checks the bundle's component licenses against today's `deny.toml`
+allowlist and fails if one is no longer allowed: narrowing the allowlist needs
+a bundle built under it (see Changing ANGLE), or the change reverted.
 
 ## Building locally
 

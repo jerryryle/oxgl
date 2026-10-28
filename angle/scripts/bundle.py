@@ -3,10 +3,12 @@
 
     bundle.py <platform> <out-dir> <angle-src> <dist-dir> <bundle-version> <angle-commit>
     bundle.py --preflight <platform> <out-dir> <angle-src>
+    bundle.py --check-licenses <BUILD_INFO.json>
 
 --preflight runs only the checks that need no compiled output (required GN
 args, component licenses), right after `gn gen`, so they fail before the
-long compile instead of after it.
+long compile instead of after it. --check-licenses re-checks a built bundle's
+components against today's deny.toml allowlist (npm run build runs it).
 
 Produces <dist-dir>/angle-<platform>.tar.xz (stripped libraries, headers,
 licenses, BUILD_INFO.json) and angle-<platform>-symbols.tar.xz (unstripped
@@ -64,7 +66,24 @@ def sha256(path: Path) -> str:
 
 def allowlist() -> set[str]:
     with open(REPO / "deny.toml", "rb") as f:
-        return set(tomllib.load(f)["licenses"]["allow"])
+        allow = tomllib.load(f).get("licenses", {}).get("allow")
+    if not isinstance(allow, list):
+        fail("cannot find [licenses] allow in deny.toml")
+    return set(allow)
+
+
+def license_parts(spdx: str) -> list[str]:
+    """The allowlist entries an SPDX expression from README.chromium needs."""
+    return [p.strip() for p in re.split(r"\s+AND\s+|,", spdx) if p.strip()]
+
+
+def check_licenses(build_info: Path) -> None:
+    allowed = allowlist()
+    components = json.loads(build_info.read_text())["components"]
+    disallowed = [c for c in components if any(p not in allowed for p in license_parts(c["license"]))]
+    if disallowed:
+        fail("bundle components not on the deny.toml allowlist (pin a bundle built under the new "
+             "allowlist, or revert it):\n  " + "\n  ".join(f"{c['path']}: {c['license']}" for c in disallowed))
 
 
 def overrides() -> dict[str, dict]:
@@ -136,8 +155,7 @@ def collect_licenses(src: Path, out: Path, stage: Path) -> list[dict[str, str]]:
         if not spdx:
             problems.append(f"{rel}: no license metadata (add it to angle/licenses.toml)")
             continue
-        parts = [p.strip() for p in re.split(r"\s+AND\s+|,", spdx) if p.strip()]
-        disallowed = [p for p in parts if p not in allowed]
+        disallowed = [p for p in license_parts(spdx) if p not in allowed]
         if disallowed:
             problems.append(f"{rel}: license {spdx} not on the allowlist")
         missing = [str(t) for t in texts if not t.is_file()]
@@ -201,8 +219,11 @@ def main() -> None:
             fail(f"unknown platform {platform}")
         preflight(platform, Path(out), Path(src))
         return
+    if len(sys.argv) == 3 and sys.argv[1] == "--check-licenses":
+        check_licenses(Path(sys.argv[2]))
+        return
     if len(sys.argv) != 7:
-        fail("usage:\n" + "\n".join(__doc__.strip().splitlines()[2:4]))
+        fail("usage:\n" + "\n".join(__doc__.strip().splitlines()[2:5]))
     platform, out, src, dist, version, commit = sys.argv[1:]
     out, src, dist = Path(out), Path(src), Path(dist)
     if platform not in LIB_PATTERNS:
