@@ -74,7 +74,9 @@ NIGHTLY=<ASAN_NIGHTLY>
 rustup toolchain install "$NIGHTLY" --profile minimal
 RUSTFLAGS="-Zsanitizer=address -Cforce-frame-pointers=yes" \
 RUSTDOCFLAGS="-Zsanitizer=address -Cforce-frame-pointers=yes" \
-ASAN_OPTIONS=detect_leaks=1:halt_on_error=1:detect_stack_use_after_return=1 \
+ASAN_OPTIONS=detect_leaks=1:halt_on_error=1:detect_stack_use_after_return=1:fast_unwind_on_malloc=0 \
+ASAN_SYMBOLIZER_PATH="$(command -v llvm-symbolizer)" \
+OXGL_ANGLE_SYMBOLS=1 \
 LSAN_OPTIONS="suppressions=$PWD/.github/lsan-suppressions.txt" \
 cargo +"$NIGHTLY" test --workspace --exclude oxgl-node --locked \
   --target aarch64-unknown-linux-gnu
@@ -84,6 +86,9 @@ The arm64 job does not rebuild std with `-Zbuild-std`: on aarch64 that
 instruments `compiler_builtins`, and every test binary then crashes inside
 `__asan_init`.
 
-`.github/lsan-suppressions.txt` starts empty. Read its header before adding an
-entry: suppressions name one specific internal function, never a library or an
-exported EGL/GL/Vulkan entry point.
+`OXGL_ANGLE_SYMBOLS=1` builds the tests against the unstripped ANGLE libraries
+from the pinned symbols archive, and `fast_unwind_on_malloc=0` lets the
+unwinder follow ANGLE's signed return addresses, so suppressions can match
+ANGLE-internal frames. Read the header of `.github/lsan-suppressions.txt`
+before adding an entry: suppressions name one specific internal function,
+never a library or an exported EGL/GL/Vulkan entry point.

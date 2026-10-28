@@ -184,7 +184,16 @@ jobs:
       RUSTFLAGS: -Zsanitizer=address -Cforce-frame-pointers=yes
       # Doctests are built by rustdoc, which reads only RUSTDOCFLAGS.
       RUSTDOCFLAGS: -Zsanitizer=address -Cforce-frame-pointers=yes
-      ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:detect_stack_use_after_return=1
+      # fast_unwind_on_malloc=0: ANGLE's arm64 build signs return addresses, which
+      # the frame-pointer unwinder cannot follow, so suppressions would never
+      # see the ANGLE frames.
+      ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:detect_stack_use_after_return=1:fast_unwind_on_malloc=0
+      # PLATFORM-FOCUS: re-enable
+      # ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:detect_stack_use_after_return=1
+      # Builds tests against the unstripped libraries of the pinned symbols
+      # archive (verified like the bundle), so suppressions can name ANGLE
+      # functions.
+      OXGL_ANGLE_SYMBOLS: "1"
       # Absolute: cargo runs each test binary from its package directory.
       LSAN_OPTIONS: suppressions=${{ github.workspace }}/.github/lsan-suppressions.txt
     steps:
@@ -195,6 +204,12 @@ jobs:
         # PLATFORM-FOCUS: re-enable (x64 rebuilds std, which needs rust-src)
         # run: rustup toolchain install "$ASAN_NIGHTLY" --profile minimal --component rust-src
         run: rustup toolchain install "$ASAN_NIGHTLY" --profile minimal
+      # LeakSanitizer matches suppressions against symbolized frames.
+      - name: Locate llvm-symbolizer
+        run: |
+          symbolizer=$(command -v llvm-symbolizer || find /usr/lib/llvm-*/bin -name llvm-symbolizer | sort -V | tail -1)
+          test -x "$symbolizer"
+          echo "ASAN_SYMBOLIZER_PATH=$symbolizer" >> "$GITHUB_ENV"
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: |
@@ -207,14 +222,6 @@ jobs:
         with:
           path: ~/.cargo/oxgl-angle
           key: angle-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('angle/bundles.toml') }}
-      # TEMP-DIAG: remove before merge.
-      - name: Diagnose the arm64 leak stacks
-        continue-on-error: true
-        env:
-          ASAN_OPTIONS: detect_leaks=1:fast_unwind_on_malloc=0:malloc_context_size=40
-        run: >-
-          cargo +"$ASAN_NIGHTLY" test -p oxgl-core --test gpu_isolation --locked
-          --target aarch64-unknown-linux-gnu
       # oxgl-node is a Node addon whose tests run under Node, not cargo.
       # No -Zbuild-std on aarch64: it instruments compiler_builtins, whose
       # outline atomics __asan_init calls before shadow memory exists, so every

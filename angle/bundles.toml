@@ -11,6 +11,9 @@ sha256 = "c1929ad8e0ba2088b92b79ddcabeb15a64e9edceafaa0606daaf071adaf69181"
 [platform.linux-arm64]
 url = "https://github.com/jerryryle/oxgl/releases/download/angle-8078.2/angle-linux-arm64.tar.xz"
 sha256 = "3d06a13dfa1a8afe541be59621d962389fd2bfbabef4a10af71481fc16dd0efb"
+# Unstripped libraries for the ASan job's leak suppressions (OXGL_ANGLE_SYMBOLS).
+symbols_url = "https://github.com/jerryryle/oxgl/releases/download/angle-8078.2/angle-linux-arm64-symbols.tar.xz"
+symbols_sha256 = "567761d642b2081fe4a50f21651639f50a090dede90ff3956d89b0c30d6bfada"
 
 [platform.macos-arm64]
 url = "https://github.com/jerryryle/oxgl/releases/download/angle-8078.2/angle-macos-arm64.tar.xz"
