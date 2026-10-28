@@ -6,7 +6,7 @@ bundle_version = "angle-8078.1"     # the angle/pin.toml version these were buil
 
 [platform.linux-x64]
 url = "https://github.com/jerryryle/oxgl/releases/download/angle-8078.1/angle-linux-x64.tar.xz"
-sha256 = "64229452251cfb672d59bda8f40f18480a50f5d0791c82e3922c4daad16b4512"
+sha256 = "64229452251CFB672D59BDA8F40F18480A50F5D0791C82E3922C4DAAD16B4512"
 
 [platform.macos-arm64]
 url = "https://github.com/jerryryle/oxgl/releases/download/angle-8078.1/angle-macos-arm64.tar.xz"
