@@ -3,7 +3,7 @@
 ## 1. Workflow skeleton and security
 
 - [x] 1.1 Add `.github/workflows/ci.yml` with triggers, concurrency, `permissions: contents: read`, and the `workflow-lint` job (actionlint + zizmor); verify a PR with a tag-pinned action fails `workflow-lint`
-- [ ] 1.2 Add `.github/dependabot.yml` for the github-actions ecosystem; verify Dependabot config validates in the repository settings view
+- [x] 1.2 Add `.github/dependabot.yml` for the github-actions ecosystem; verify Dependabot config validates in the repository settings view
 
 ## 2. Platform check matrix
 
