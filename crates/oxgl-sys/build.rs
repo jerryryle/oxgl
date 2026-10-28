@@ -5,6 +5,9 @@
 //! `angle/bundles.toml`. A download is verified against the pinned sha256 before
 //! anything is extracted; there is no unverified fallback.
 //!
+//! The bundle's component licenses were checked against `deny.toml` when it was
+//! built; the allowlist may have narrowed since, so they are checked again here.
+//!
 //! The resolved bundle directory is written to `<target>/<profile>/oxgl-angle-dir`
 //! so the npm build can stage its libraries next to the addon.
 
@@ -61,8 +64,10 @@ fn run() -> Result<()> {
     let angle_dir = manifest_dir.join("../../angle");
     let pin_path = angle_dir.join("pin.toml");
     let bundles_path = angle_dir.join("bundles.toml");
+    let deny_path = manifest_dir.join("../../deny.toml");
     println!("cargo::rerun-if-changed={}", pin_path.display());
     println!("cargo::rerun-if-changed={}", bundles_path.display());
+    println!("cargo::rerun-if-changed={}", deny_path.display());
 
     let target = var("TARGET")?;
     let platform = PLATFORMS
@@ -101,6 +106,7 @@ fn run() -> Result<()> {
         cached_or_downloaded(&url, &sha256)?
     };
     check_layout(&bundle, platform)?;
+    check_licenses(&bundle, &deny_path)?;
     // Re-run (and re-download if needed) when the bundle directory is deleted
     // or changes, so the recorded path never goes stale.
     println!("cargo::rerun-if-changed={}", bundle.display());
@@ -245,6 +251,54 @@ fn cached_or_downloaded(url: &str, expected: &str) -> Result<PathBuf> {
         }
     }
     Ok(dir)
+}
+
+fn check_licenses(bundle: &Path, deny_path: &Path) -> Result<()> {
+    let deny = read_toml(deny_path)?;
+    let allowed: Vec<&str> = deny
+        .get("licenses")
+        .and_then(|l| l.get("allow"))
+        .and_then(toml::Value::as_array)
+        .ok_or("cannot find [licenses] allow in deny.toml")?
+        .iter()
+        .filter_map(toml::Value::as_str)
+        .collect();
+    let info_path = bundle.join("BUILD_INFO.json");
+    let info: serde_json::Value = fs::read_to_string(&info_path)
+        .map_err(|e| e.to_string())
+        .and_then(|text| serde_json::from_str(&text).map_err(|e| e.to_string()))
+        .map_err(|e| format!("cannot read {}: {e}", info_path.display()))?;
+    let components = info
+        .get("components")
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| format!("{} has no components list", info_path.display()))?;
+    let mut disallowed = Vec::new();
+    for component in components {
+        let path = component.get("path").and_then(serde_json::Value::as_str);
+        let license = component.get("license").and_then(serde_json::Value::as_str);
+        let (Some(path), Some(license)) = (path, license) else {
+            return Err(format!("{} has a malformed component", info_path.display()));
+        };
+        // Same splitting rule as angle/scripts/bundle.py's license_parts.
+        let ok = license
+            .split(',')
+            .flat_map(|part| part.split(" AND "))
+            .map(str::trim)
+            .filter(|part| !part.is_empty())
+            .all(|part| allowed.contains(&part));
+        if !ok {
+            disallowed.push(format!("{path}: {license}"));
+        }
+    }
+    if disallowed.is_empty() {
+        Ok(())
+    } else {
+        Err(format!(
+            "ANGLE bundle components not on the deny.toml allowlist (pin a bundle built under \
+             the new allowlist, or revert it): {}",
+            disallowed.join("; ")
+        ))
+    }
 }
 
 fn check_layout(bundle: &Path, platform: &Platform) -> Result<()> {

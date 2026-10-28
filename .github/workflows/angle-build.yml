@@ -11,7 +11,7 @@ on:
   pull_request:
     # The recipe: the files that build or test a bundle. bundles.toml (outputs),
     # the README and check_pin.py are deliberately absent. (deny.toml is too:
-    # stage-angle re-checks bundle licenses against it wherever oxgl builds.)
+    # oxgl-sys's build.rs re-checks bundle licenses against it wherever oxgl builds.)
     paths:
       - "angle/pin.toml"
       - "angle/args/**"

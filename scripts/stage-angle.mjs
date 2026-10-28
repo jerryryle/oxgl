@@ -28,16 +28,6 @@ if (!existsSync(recorded)) {
 }
 const bundle = readFileSync(recorded, 'utf8').trim();
 
-// The bundle's licenses were checked against deny.toml when it was built; the
-// allowlist may have narrowed since, so re-check before staging anything.
-// bundle.py owns the license rules, so both checks agree.
-try {
-  execFileSync(process.platform === 'win32' ? 'python' : 'python3',
-    ['angle/scripts/bundle.py', '--check-licenses', join(bundle, 'BUILD_INFO.json')], { stdio: 'inherit' });
-} catch {
-  process.exit(1);
-}
-
 const staged = join('dist', 'angle');
 rmSync(staged, { recursive: true, force: true });
 mkdirSync(staged, { recursive: true });

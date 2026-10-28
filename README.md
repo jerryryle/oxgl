@@ -10,8 +10,6 @@ currently only loads its native addon.
   installed automatically on first use.
 - Node.js 22.12.0 or newer (`engines` in `package.json`). Development tooling
   needs Node 22.13.0 or newer.
-- Python 3.11 or newer (`python3`; `python` on Windows): `npm run build`
-  re-checks the ANGLE bundle's licenses with `angle/scripts/bundle.py`.
 - For the license check: `cargo install --locked cargo-deny@0.20.2` and
   `cargo install --locked cargo-about@0.9.3 --features cli`.
 
