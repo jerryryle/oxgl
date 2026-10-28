@@ -9,3 +9,6 @@ angle_enable_swiftshader = true
 angle_enable_gl = false
 angle_enable_null = false
 angle_enable_perfetto = false
+# ANGLE enables its WebGPU backend by default on macOS and Windows; it links
+# Dawn (and DXC on Windows), which oxgl does not use.
+angle_enable_wgpu = false
