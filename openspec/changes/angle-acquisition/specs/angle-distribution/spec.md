@@ -14,7 +14,7 @@ The repository SHALL record a single pinned ANGLE source revision (commit hash a
 - **THEN** the pin names the ANGLE commit and the Chromium branch, and the manifest names one bundle URL and SHA-256 digest for each of Linux x64, macOS arm64, and Windows x64
 
 ### Requirement: ANGLE is built only when its recipe changes
-ANGLE SHALL be built from source only by the ANGLE build workflow, which SHALL run only for changes to the build recipe (the pinned revision, build configuration, build scripts and license data). Recording the digests of published bundles and changes to oxgl's own code SHALL NOT build ANGLE.
+ANGLE SHALL be built from source only by the ANGLE build workflow, which SHALL run only for changes to the build recipe (the pinned revision, build configuration, build scripts, license data and the bundle smoke test). Recording the digests of published bundles and changes to oxgl's own code SHALL NOT build ANGLE.
 
 #### Scenario: Recording digests does not rebuild
 - **WHEN** a pull request changes only the bundle manifest
