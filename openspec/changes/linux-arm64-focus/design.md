@@ -21,7 +21,7 @@ Linux arm64 distributions differ in kernel page size: 4 KiB is the common defaul
 
 ### Cross-compile the arm64 bundles on x64 hosts
 
-`linux-arm64` builds on `ubuntu-24.04` with `target_cpu = "arm64"`. The `.gclient` file gets `target_cpu = ['arm64']` so `gclient sync` installs Chromium's arm64 Debian sysroot, the same bullseye sysroot family that gives the x64 bundle its glibc 2.31 baseline. `windows-arm64` builds on `windows-2025` with `target_cpu = "arm64"`, adding the Visual Studio ARM64 build-tools component the same way the workflow already adds the pinned Windows SDK. `build.ps1` gains a platform parameter instead of hard-coding `windows-x64`.
+`linux-arm64` builds on `ubuntu-24.04` with `target_cpu = "arm64"`. ANGLE's DEPS hooks install only the x86 and x64 sysroots, so `build.sh` runs `build/linux/sysroot_scripts/install-sysroot.py --arch=arm64` before `gn gen`. That installs Chromium's arm64 Debian bullseye sysroot (pinned in `sysroots.json`), the same sysroot family that gives the x64 bundle its glibc 2.31 baseline. `windows-arm64` builds on `windows-2025` with `target_cpu = "arm64"`, adding the Visual Studio ARM64 build-tools component the same way the workflow already adds the pinned Windows SDK. `build.ps1` gains a platform parameter instead of hard-coding `windows-x64`.
 
 Alternative: native builds on the arm64 runners. Chromium's toolchain (prebuilt clang, gn, and the sysroot scripts) supports Linux arm64 and Windows arm64 as targets from x64 hosts, which is how Chromium ships those platforms. Hosting builds on arm64 is not a supported Chromium configuration, and the arm runners have half the disk of the x64 ones. Cross-compiling keeps one toolchain path per OS.
 
