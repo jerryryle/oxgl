@@ -11,7 +11,7 @@ The repository SHALL record a single pinned ANGLE source revision (commit hash a
 
 #### Scenario: Pin is inspectable
 - **WHEN** a reviewer reads the recipe pin and the bundle manifest
-- **THEN** the pin names the ANGLE commit and the Chromium branch, and the manifest names one bundle URL and SHA-256 digest for each of Linux x64, macOS arm64, and Windows x64
+- **THEN** the pin names the ANGLE commit and the Chromium branch, and the manifest names one bundle URL and SHA-256 digest for each of Linux x64, Linux arm64, macOS arm64, Windows x64, and Windows arm64
 
 ### Requirement: ANGLE is built only when its recipe changes
 ANGLE SHALL be built from source only by the ANGLE build workflow, which SHALL run only for changes to the build recipe (the pinned revision, build configuration, build scripts, license data and the bundle smoke test). Recording the digests of published bundles and changes to oxgl's own code SHALL NOT build ANGLE.
@@ -43,7 +43,7 @@ Each platform bundle SHALL contain the ANGLE EGL and GLES shared libraries, the 
 - **THEN** the EGL library, GLES library, SwiftShader ICD, headers, build-info file, and license notices are all present, and build-info names the pinned commit
 
 ### Requirement: Backends enabled per platform
-Every bundle SHALL include SwiftShader (via ANGLE's Vulkan backend). The Linux bundle SHALL also enable ANGLE's Vulkan backend for hardware devices, the macOS bundle its Metal backend, and the Windows bundle its D3D11 backend.
+Every bundle SHALL include SwiftShader (via ANGLE's Vulkan backend). The Linux bundles (x64 and arm64) SHALL also enable ANGLE's Vulkan backend for hardware devices, the macOS bundle its Metal backend, and the Windows bundles (x64 and arm64) their D3D11 backend.
 
 #### Scenario: Software backend available everywhere
 - **WHEN** an EGL display is requested with the Vulkan platform type and SwiftShader device type from any platform bundle
@@ -51,7 +51,7 @@ Every bundle SHALL include SwiftShader (via ANGLE's Vulkan backend). The Linux b
 
 #### Scenario: Platform GPU backend compiled in
 - **WHEN** the build-info of each bundle is read
-- **THEN** it shows Vulkan enabled on Linux, Metal enabled on macOS, and D3D11 enabled on Windows
+- **THEN** it shows Vulkan enabled on both Linux bundles, Metal enabled on macOS, and D3D11 enabled on both Windows bundles
 
 ### Requirement: No window-system dependency
 Bundled libraries SHALL load and create contexts without a window system: the Linux libraries SHALL NOT have link-time dependencies on X11, Wayland, or any display server library, and no platform SHALL require a display or session to be present.
@@ -114,3 +114,21 @@ Every component in a platform bundle SHALL carry a license on the project's lice
 #### Scenario: Per-component license recorded
 - **WHEN** a bundle's build-info is read
 - **THEN** it lists every linked component with its SPDX license identifier
+
+### Requirement: Linux arm64 bundle loads with any arm64 page size
+Every shared library in the Linux arm64 bundle SHALL have loadable segments aligned to at least 64 KiB, the largest arm64 page size, so it loads on kernels using 4, 16 or 64 KiB pages. The bundle build SHALL fail if any library's alignment is smaller.
+
+#### Scenario: Under-aligned library rejected
+- **WHEN** a Linux arm64 bundle library has a `LOAD` segment aligned to 4 KiB or 16 KiB
+- **THEN** the bundle build fails and names the library and its alignment
+
+#### Scenario: Alignment recorded
+- **WHEN** the Linux arm64 bundle's build-info is read
+- **THEN** it states the smallest `LOAD` segment alignment across the bundled libraries
+
+### Requirement: Bundles are smoke-tested on their target architecture
+The ANGLE build workflow SHALL run each bundle's smoke test on a host of the bundle's own operating system and architecture, including bundles cross-compiled on a host of another architecture. A smoke-test failure SHALL fail the workflow and prevent a release.
+
+#### Scenario: Cross-compiled arm64 bundle
+- **WHEN** the Linux arm64 bundle is built on an x64 host
+- **THEN** its smoke test runs on a Linux arm64 runner, and the release job runs only if that smoke test passed
