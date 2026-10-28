@@ -12,8 +12,10 @@ import { join } from 'node:path';
 // ask it rather than guessing.
 const TRIPLES = {
   'linux-x64': 'x86_64-unknown-linux-gnu',
+  'linux-arm64': 'aarch64-unknown-linux-gnu',
   'darwin-arm64': 'aarch64-apple-darwin',
   'win32-x64': 'x86_64-pc-windows-msvc',
+  'win32-arm64': 'aarch64-pc-windows-msvc',
 };
 const triple = TRIPLES[`${process.platform}-${process.arch}`];
 const metadata = execFileSync('cargo', ['metadata', '--format-version', '1', '--no-deps'], {

@@ -11,7 +11,7 @@ oxgl promises to behave exactly as a browser's WebGL does, and the Khronos WebGL
 - Run two suites: WebGL 1 (the 1.0.x test list with WebGL 1 contexts) and WebGL 2 (the 2.0.x test list, which includes `conformance/` run against WebGL 2 contexts).
 - Add a checked-in expectations file listing every page that is not expected to pass, each with its status (`FAIL`, `TIMEOUT`, `CRASH`, `SKIP`) and a reason. A normal run fails on any difference from the expectations: a regression or an unexpected pass. The list therefore only shrinks as the API is filled in. Skipped pages that are explicitly included are reported without being judged, and an update run is judged against the file it writes.
 - Add `npm run conformance` with options to filter pages, choose a suite, and rewrite the expectations from a run. The run writes a JSON results report.
-- Add a required `conformance` CI job: Linux x64, `OXGL_BACKEND=software`, both suites, report uploaded as a workflow artifact.
+- Add a required `conformance` CI job: Linux arm64, `OXGL_BACKEND=software`, both suites, report uploaded as a workflow artifact.
 
 ## Capabilities
 
@@ -34,5 +34,5 @@ oxgl promises to behave exactly as a browser's WebGL does, and the Khronos WebGL
 - **DOM media sources.** Pages that need decoded images, video, `ImageBitmap`, `OffscreenCanvas` or 2D canvas get no support from the shim and stay in the expectations. Whether oxgl supports any of these is a later product decision. The shim is the extension point.
 - **Canvas resizing.** Setting `canvas.width`/`height` after `getContext` is not forwarded to the context, because oxgl cannot resize a drawing buffer yet. Pages that do this fail until a later change adds resizing.
 - **Per-subtest expectations.** Results are judged per page, not per assertion. The JSON report records per-page pass/fail counts for visibility, but they do not gate CI.
-- **GPU and non-Linux conformance runs.** The CI job runs SwiftShader on Linux only. The existing `gpu` job slot and the other platforms can add conformance runs later with their own expectations.
+- **GPU and non-Linux conformance runs.** The CI job runs SwiftShader on Linux arm64 only. The existing `gpu` job slot and the other platforms can add conformance runs later with their own expectations.
 - **Extension conformance** (`conformance/extensions/`) runs like any other page. Making it pass belongs to the extensions change.
