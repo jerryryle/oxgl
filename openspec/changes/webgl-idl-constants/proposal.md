@@ -29,7 +29,7 @@ None.
 
 ## Impact
 
-- `src/context.ts`: the `CONSTANTS` table and per-constant `declare` lines are replaced by the generated tables. Each class gets its own set. The two classes are exported as typed constants with matching type aliases, so `src/index.ts`'s re-exports and the conformance loader's rewrite change with them.
+- `src/context.ts`: the `CONSTANTS` table and per-constant `declare` lines are replaced by the generated tables. Each class gets its own set. Each class is exported as a same-named instance interface and typed constructor constant, so `src/index.ts`'s re-exports and the conformance loader's rewrite change with them.
 - New `src/generated/webgl-constants.ts` and `scripts/webgl-constants.mjs`.
 - `conformance/page.mjs`: `contextSource()` inlines the generated module.
 - `conformance/expectations.txt`: most entries change reason or disappear. `conformance/context/constants-and-properties.html` and `conformance2/context/constants-and-properties-2.html` are expected to pass.

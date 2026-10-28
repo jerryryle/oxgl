@@ -29,16 +29,26 @@ Licensing: the IDL files are under the Khronos MIT-style licence, which asks tha
 
 ### Each class gets its own set; attributes unchanged
 
-`WebGLRenderingContext` and its prototype get `WEBGL1_CONSTANTS`. `WebGL2RenderingContext` and its prototype get `WEBGL2_CONSTANTS`. The existing `defineProperty` loop is kept, with the same attributes, run once per class with that class's table. Instances inherit the constants from the prototype and hold no own copies, as in browsers.
+`WebGLRenderingContext` and its prototype get `WEBGL1_CONSTANTS`. `WebGL2RenderingContext` and its prototype get `WEBGL2_CONSTANTS`. The attributes stay the same; `withConstants` (next section) defines them, once per class with that class's table. Instances inherit the constants from the prototype and hold no own copies, as in browsers.
 
 ### Types derived from the tables
 
-The per-constant `declare static` and `declare` lines and `ConstantsDeclared` are removed. A class declaration cannot have its static side widened by a type, so each class is defined unexported (for example `class WebGLRenderingContextImpl extends ContextBase {}`). It is then exported as a typed constant with a same-named type alias:
+The per-constant `declare static` and `declare` lines and `ConstantsDeclared` are removed. A type can't widen a class declaration's static side, so each interface gets one instance interface and one constructor constant of the same name, with the class written as a class expression:
 
-- `export const WebGLRenderingContext: typeof WebGLRenderingContextImpl & WebGL1Constants`
-- `export type WebGLRenderingContext = WebGLRenderingContextImpl & WebGL1Constants`
+```ts
+type WebGL1Constants = typeof WEBGL1_CONSTANTS; // already readonly literals
+export interface WebGLRenderingContext extends ContextBase, WebGL1Constants {}
+export const WebGLRenderingContext: WebGL1Constants & {
+  readonly prototype: WebGLRenderingContext;
+  new (/* ContextBase's internal constructor parameters */): WebGLRenderingContext;
+} = withConstants(class WebGLRenderingContext extends ContextBase {}, WEBGL1_CONSTANTS);
+```
 
-Here `WebGL1Constants` is `Readonly<typeof WEBGL1_CONSTANTS>`; WebGL 2 follows the same pattern. The runtime `name` of each class stays `WebGLRenderingContext` / `WebGL2RenderingContext`, because `webgl-test-utils.js` keys its enum cache by `name`. `createContext`'s overloads return the aliases, and `src/index.ts` re-exports both the value and the type, so `import { WebGLRenderingContext }` still works as both. The emitted `.d.ts` must declare every constant with its literal type on both sides. `test/types.ts` checks this, including that a WebGL 2-only constant is absent from `WebGLRenderingContext` and that `gl instanceof WebGLRenderingContext` still narrows. The conformance loader's `export class` rewrite becomes an `export const` rewrite (next section).
+WebGL 2 follows the same pattern. `withConstants(cls, table)` replaces today's `defineProperty` loop. It defines the table on `cls` and `cls.prototype` with the WebIDL attributes and returns `cls` typed as the annotated constructor. That return is the one type assertion, and it sits next to the code that makes it true. A sketch of this pattern compiled under `tsc --strict` with the expected runtime `name`, `instanceof` narrowing and `.d.ts`. This gives:
+
+- **One instance type.** `new`, `createContext`'s overloads and `instanceof` narrowing all produce the same interface, constants included. The `prototype` member is what `instanceof` narrows to, so no casts are needed.
+- **The right name.** The class expression carries the interface's name, so the runtime `name` is `WebGLRenderingContext` / `WebGL2RenderingContext`, which `webgl-test-utils.js` uses as its enum cache key. The emitted `.d.ts` contains no internal class name.
+- **Unchanged imports.** `src/index.ts` re-exports the name, which carries both the value and the type, so `import { WebGLRenderingContext }` still works as both. The emitted `.d.ts` must declare every constant with its literal type on both sides. `test/types.ts` checks this, including that a WebGL 2-only constant is absent from `WebGLRenderingContext` and that `gl instanceof WebGLRenderingContext` still narrows. The conformance loader's `export class` rewrite becomes an `export const` rewrite (next section).
 
 ### Conformance loader inlines the generated module
 
