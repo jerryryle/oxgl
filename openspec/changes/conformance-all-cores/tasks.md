@@ -2,7 +2,7 @@
 
 ## 1. Runner
 
-- [ ] 1.1 In `conformance/pool.mjs`, make `defaultJobs()` return `max(1, os.availableParallelism())` and update its comment. Update the `--jobs` default in `CONTRIBUTING.md`'s "Conformance tests" section to "the number of CPUs". Verify that `npm run lint` and `npm test` pass, and that `npm run conformance -- --help` still lists `--jobs`.
+- [x] 1.1 In `conformance/pool.mjs`, make `defaultJobs()` return `max(1, os.availableParallelism())` and update its comment. Update the `--jobs` default in `CONTRIBUTING.md`'s "Conformance tests" section to "the number of CPUs". Verify that `npm run lint` and `npm test` pass, and that `npm run conformance -- --help` still lists `--jobs`.
 
 ## 2. CI verification
 

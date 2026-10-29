@@ -8,8 +8,8 @@ import { SUITES } from './lists.mjs';
 
 export const PAGE_SCRIPT = fileURLToPath(new URL('page.mjs', import.meta.url));
 
-/** Half the cores: SwiftShader runs a thread pool per context. */
-export const defaultJobs = () => Math.max(1, Math.floor(availableParallelism() / 2));
+/** One page per CPU: pages are mostly single-threaded startup (conformance-all-cores). */
+export const defaultJobs = () => Math.max(1, availableParallelism());
 
 /** The URL a suite's page loads from: `webglVersion` selects the context version, as in the official harness. */
 export function pageURL(origin, suite, path) {
