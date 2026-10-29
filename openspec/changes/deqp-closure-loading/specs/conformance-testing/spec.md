@@ -12,7 +12,7 @@ When a page loads scripts through the Closure Library's uncompiled loader (`goog
 ### Requirement: Closure imports end with parsing
 A Closure import requested once the document's `readyState` is no longer `loading` (from `DOMContentLoaded` on) SHALL throw instead of running, except Closure's own `deps.js`, which SHALL be skipped without an error, as Closure's `document.write` loader skips it.
 
-#### Scenario: Require after parsing
+#### Scenario: Require after DOMContentLoaded
 - **WHEN** a page calls `goog.require` for a file not yet loaded from a timer that runs after `DOMContentLoaded`
 - **THEN** the call throws, the file is not run, and the error is recorded as the page's escaped error. A browser fails such a page too, by throwing after `load` or by wiping the page before it, so the outcome matches though the mechanism differs
 
