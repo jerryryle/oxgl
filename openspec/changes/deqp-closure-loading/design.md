@@ -26,9 +26,11 @@ jsdom 30.1.3 behaviour, read from its source and checked against the pinned suit
 
 This gives browser order. Each required file runs inside `goog.require`, dependencies first, so the namespaces exist when the `<head>` script returns and before the parser-queued `<body>` script runs. It also gives browser error semantics. An error in one file is an escaped error of the page, reported as one, and loading continues with the next file. In a browser, too, each written script fails on its own. Being a global the page can see does not matter: only Closure reads it, and no other suite page loads Closure.
 
-The suite root reaches the child as a `root` field in the options JSON it already receives (`pool.mjs`), set by `run.mjs` from the directory it serves.
+The suite root reaches the child as a `root` field in the options JSON it already receives (`pool.mjs`), set by `run.mjs` from the directory it serves. `runPage` stores it in `state`, which `installShim` already receives for the page and for every frame window, so frames that load Closure get the same hook.
 
-Prototyped outside the repository against the pinned suite: with the hook, `functional` and `modules` are defined at the `<body>` script of `attriblocation.html`, `arrays.html` and `textureformat/unsized_2d.html`, and each page goes on to its first WebGL call.
+Inserting the script has one jsdom side effect. Its `_innerEval` sets `document._writeAfterElement` to itself and deletes it afterwards, which also clears the marker the requiring script set. A `document.write` later in that same script would then be written into the last open element instead of after the script. No page in the pinned suite calls `document.write` outside Closure (proposal.md), so this is accepted, not worked around (Accepted trade-offs).
+
+Checked in jsdom 30.1.3: an error thrown by, or a SyntaxError in, a script ending in `//# sourceURL=<src>` is reported with `<src>` in its stack or location, not the page URL. Prototyped outside the repository against the pinned suite: with the hook, `functional` and `modules` are defined at the `<body>` script of `attriblocation.html`, `arrays.html` and `textureformat/unsized_2d.html`, and each page goes on to its first WebGL call.
 
 Alternatives considered:
 
@@ -44,4 +46,6 @@ Alternatives considered:
 
 ## Accepted trade-offs
 
-None. A file that cannot be read fails the page the same way a failed script load fails it in a browser.
+- A `document.write` by a page script after it calls `goog.require` would be misplaced, because inserting an imported script clears jsdom's writer marker. No pinned page does this. A later pin that adds one shows up in its expectations rerun.
+
+A file that cannot be read fails the page the same way a failed script load fails it in a browser.
