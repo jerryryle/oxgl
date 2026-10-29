@@ -9,7 +9,7 @@ use oxgl_core::{
 use oxgl_sys::ViewKind;
 use oxgl_sys::bindings::{
     GL_COLOR_BUFFER_BIT, GL_DEPTH_BUFFER_BIT, GL_INVALID_ENUM, GL_INVALID_OPERATION,
-    GL_INVALID_VALUE, GL_NO_ERROR, GL_STENCIL_BUFFER_BIT,
+    GL_INVALID_VALUE, GL_NO_ERROR, GL_STENCIL_BUFFER_BIT, GL_VIEWPORT,
 };
 use oxgl_sys::{ReadPixels, live_contexts, live_surfaces};
 
@@ -304,6 +304,19 @@ fn device_loss_enters_the_lost_state() {
         gl.clear(GL_COLOR_BUFFER_BIT);
         gl.read_pixels(rgba(0, 0, 2, 2), Some(&memory));
         assert!(memory.bytes().iter().all(|&b| b == 9));
+        assert_eq!(gl.get_error(), GL_NO_ERROR);
+    });
+}
+
+#[test]
+fn device_loss_is_reported_by_is_context_lost() {
+    with_context(2.0, 2.0, |gl| {
+        assert!(!gl.is_context_lost());
+        gl.lose_context();
+        assert!(gl.is_context_lost());
+        assert!(gl.is_context_lost());
+        assert_eq!(gl.get_parameter(GL_VIEWPORT), None);
+        assert_eq!(gl.get_error(), CONTEXT_LOST_WEBGL);
         assert_eq!(gl.get_error(), GL_NO_ERROR);
     });
 }

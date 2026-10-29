@@ -14,14 +14,7 @@ use std::sync::Arc;
 use libloading::Library;
 
 use crate::bindings::{
-    EGLBoolean, EGLContext, EGLDisplay, EGLSurface, EGLint, GLenum, PFNEGLCHOOSECONFIGPROC,
-    PFNEGLCREATECONTEXTPROC, PFNEGLCREATEPBUFFERSURFACEPROC, PFNEGLDESTROYCONTEXTPROC,
-    PFNEGLDESTROYSURFACEPROC, PFNEGLGETCONFIGATTRIBPROC, PFNEGLGETCURRENTCONTEXTPROC,
-    PFNEGLGETCURRENTSURFACEPROC, PFNEGLGETERRORPROC, PFNEGLGETPLATFORMDISPLAYEXTPROC,
-    PFNEGLGETPROCADDRESSPROC, PFNEGLINITIALIZEPROC, PFNEGLMAKECURRENTPROC, PFNGLCLEARCOLORPROC,
-    PFNGLCLEARPROC, PFNGLGETERRORPROC, PFNGLGETGRAPHICSRESETSTATUSEXTPROC,
-    PFNGLGETINTEGERVROBUSTANGLEPROC, PFNGLGETSTRINGPROC, PFNGLLOSECONTEXTCHROMIUMPROC,
-    PFNGLREADPIXELSROBUSTANGLEPROC, PFNGLREQUESTEXTENSIONANGLEPROC,
+    EGLBoolean, EGLContext, EGLDisplay, EGLSurface, EGLint, GLenum, PFNEGLGETPROCADDRESSPROC,
 };
 
 #[cfg(target_os = "macos")]
@@ -107,17 +100,17 @@ fn entry_point_name(name: &'static str) -> Result<&'static CStr, LoadError> {
 }
 
 macro_rules! entry_points {
-    ($($field:ident: $pfn:ty,)*) => {
+    ($($field:ident: $pfn:ident,)*) => {
         /// Resolved EGL and GLES entry points.
         #[allow(non_snake_case, reason = "fields carry the C entry point names")]
         pub(crate) struct Fns {
-            $(pub(crate) $field: Inner<$pfn>,)*
+            $(pub(crate) $field: Inner<crate::bindings::$pfn>,)*
         }
 
         impl Fns {
             fn load(get_proc: Inner<PFNEGLGETPROCADDRESSPROC>) -> Result<Self, LoadError> {
                 Ok(Self {
-                    $($field: resolve::<$pfn>(get_proc, entry_point_name(
+                    $($field: resolve::<crate::bindings::$pfn>(get_proc, entry_point_name(
                         concat!(stringify!($field), "\0"),
                     )?)?,)*
                 })
@@ -139,15 +132,51 @@ entry_points! {
     eglDestroyContext: PFNEGLDESTROYCONTEXTPROC,
     eglDestroySurface: PFNEGLDESTROYSURFACEPROC,
     eglGetError: PFNEGLGETERRORPROC,
-    glClearColor: PFNGLCLEARCOLORPROC,
+    glActiveTexture: PFNGLACTIVETEXTUREPROC,
+    glBlendColor: PFNGLBLENDCOLORPROC,
+    glBlendEquation: PFNGLBLENDEQUATIONPROC,
+    glBlendEquationSeparate: PFNGLBLENDEQUATIONSEPARATEPROC,
+    glBlendFunc: PFNGLBLENDFUNCPROC,
+    glBlendFuncSeparate: PFNGLBLENDFUNCSEPARATEPROC,
     glClear: PFNGLCLEARPROC,
+    glClearColor: PFNGLCLEARCOLORPROC,
+    glClearDepthf: PFNGLCLEARDEPTHFPROC,
+    glClearStencil: PFNGLCLEARSTENCILPROC,
+    glColorMask: PFNGLCOLORMASKPROC,
+    glCullFace: PFNGLCULLFACEPROC,
+    glDepthFunc: PFNGLDEPTHFUNCPROC,
+    glDepthMask: PFNGLDEPTHMASKPROC,
+    glDepthRangef: PFNGLDEPTHRANGEFPROC,
+    glDisable: PFNGLDISABLEPROC,
+    glEnable: PFNGLENABLEPROC,
+    glFinish: PFNGLFINISHPROC,
+    glFlush: PFNGLFLUSHPROC,
+    glFrontFace: PFNGLFRONTFACEPROC,
+    glGetBooleanvRobustANGLE: PFNGLGETBOOLEANVROBUSTANGLEPROC,
     glGetError: PFNGLGETERRORPROC,
+    glGetFloatvRobustANGLE: PFNGLGETFLOATVROBUSTANGLEPROC,
     glGetGraphicsResetStatusEXT: PFNGLGETGRAPHICSRESETSTATUSEXTPROC,
+    glGetInteger64vRobustANGLE: PFNGLGETINTEGER64VROBUSTANGLEPROC,
     glGetIntegervRobustANGLE: PFNGLGETINTEGERVROBUSTANGLEPROC,
+    glGetShaderPrecisionFormat: PFNGLGETSHADERPRECISIONFORMATPROC,
     glGetString: PFNGLGETSTRINGPROC,
+    glHint: PFNGLHINTPROC,
+    glIsEnabled: PFNGLISENABLEDPROC,
+    glLineWidth: PFNGLLINEWIDTHPROC,
     glLoseContextCHROMIUM: PFNGLLOSECONTEXTCHROMIUMPROC,
+    glPixelStorei: PFNGLPIXELSTOREIPROC,
+    glPolygonOffset: PFNGLPOLYGONOFFSETPROC,
     glReadPixelsRobustANGLE: PFNGLREADPIXELSROBUSTANGLEPROC,
     glRequestExtensionANGLE: PFNGLREQUESTEXTENSIONANGLEPROC,
+    glSampleCoverage: PFNGLSAMPLECOVERAGEPROC,
+    glScissor: PFNGLSCISSORPROC,
+    glStencilFunc: PFNGLSTENCILFUNCPROC,
+    glStencilFuncSeparate: PFNGLSTENCILFUNCSEPARATEPROC,
+    glStencilMask: PFNGLSTENCILMASKPROC,
+    glStencilMaskSeparate: PFNGLSTENCILMASKSEPARATEPROC,
+    glStencilOp: PFNGLSTENCILOPPROC,
+    glStencilOpSeparate: PFNGLSTENCILOPSEPARATEPROC,
+    glViewport: PFNGLVIEWPORTPROC,
 }
 
 struct Loaded {

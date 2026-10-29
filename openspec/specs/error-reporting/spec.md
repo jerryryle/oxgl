@@ -35,10 +35,3 @@ Failures inside oxgl or the backend that the WebGL specification does not model 
 #### Scenario: Backend device loss
 - **WHEN** the backend reports that the underlying device or context was lost during a call
 - **THEN** the call returns normally, the context enters the lost state, and the next `getError()` returns `CONTEXT_LOST_WEBGL`
-
-### Requirement: Error constants
-The context instances and their constructors SHALL expose, with WebGL IDL values, `NO_ERROR`, `INVALID_ENUM`, `INVALID_VALUE`, `INVALID_OPERATION`, `INVALID_FRAMEBUFFER_OPERATION`, `OUT_OF_MEMORY`, and `CONTEXT_LOST_WEBGL`.
-
-#### Scenario: Constant values
-- **WHEN** `gl.INVALID_VALUE` and `gl.CONTEXT_LOST_WEBGL` are read
-- **THEN** they equal `0x0501` and `0x9242`

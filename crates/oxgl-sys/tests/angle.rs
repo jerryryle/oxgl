@@ -1,15 +1,21 @@
 //! Loads the staged ANGLE bundle and drives the safe wrappers on `SwiftShader`.
 
-#![allow(clippy::unwrap_used, clippy::indexing_slicing, reason = "test helpers")]
+#![allow(
+    clippy::unwrap_used,
+    clippy::indexing_slicing,
+    clippy::panic,
+    reason = "test helpers"
+)]
 
 use std::path::Path;
 
 use oxgl_sys::bindings::{
-    GL_COLOR_BUFFER_BIT, GL_INVALID_OPERATION, GL_NO_ERROR, GL_RENDERER, GL_RGBA, GL_UNSIGNED_BYTE,
+    GL_COLOR_BUFFER_BIT, GL_INVALID_OPERATION, GL_MAX_RENDERBUFFER_SIZE, GL_MAX_VIEWPORT_DIMS,
+    GL_NO_ERROR, GL_RENDERER, GL_RGBA, GL_UNSIGNED_BYTE,
 };
 use oxgl_sys::test_support::bundle_dir;
 use oxgl_sys::{
-    Angle, ClientVersion, Display, DisplayKind, IntegerParam, LoadErrorKind, ReadPixels,
+    Angle, ClientVersion, Display, DisplayKind, LoadErrorKind, ReadPixels, ValueType, Values,
 };
 
 #[test]
@@ -60,10 +66,16 @@ fn swiftshader_clear_and_bounded_read_body() {
     let mut context = display.create_context(ClientVersion::Es2).unwrap();
     {
         let current = context.make_current().unwrap();
-        let [max_rb, _] = current
-            .get_integers(IntegerParam::MaxRenderbufferSize)
-            .unwrap();
-        let [vw, vh] = current.get_integers(IntegerParam::MaxViewportDims).unwrap();
+        let Some(Values::Integers([max_rb, ..])) =
+            current.get_values(GL_MAX_RENDERBUFFER_SIZE, ValueType::Integer)
+        else {
+            panic!("MAX_RENDERBUFFER_SIZE query failed");
+        };
+        let Some(Values::Integers([vw, vh, ..])) =
+            current.get_values(GL_MAX_VIEWPORT_DIMS, ValueType::Integer)
+        else {
+            panic!("MAX_VIEWPORT_DIMS query failed");
+        };
         assert!(max_rb > 0 && vw > 0 && vh > 0);
     }
     context.attach_pbuffer(4, 4).unwrap();

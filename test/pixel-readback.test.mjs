@@ -192,3 +192,55 @@ test('readback constants', (t) => {
   assert.equal(gl.UNSIGNED_BYTE, 0x1401);
   assert.equal(gl.constructor.RGBA, 0x1908);
 });
+
+test('pack alignment changes the required size', (t) => {
+  const gl = createContext({ width: 4, height: 4 });
+  t.after(() => gl.destroy());
+  gl.clearColor(1, 1, 1, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.pixelStorei(gl.PACK_ALIGNMENT, 8);
+  const fits = new Uint8Array(28).fill(7);
+  gl.readPixels(0, 0, 3, 2, gl.RGBA, gl.UNSIGNED_BYTE, fits);
+  assert.equal(gl.getError(), gl.NO_ERROR);
+  // Row 0 at bytes 0-11, padding 12-15, row 1 at 16-27.
+  assert.ok(fits.subarray(0, 12).every((b) => b === 255));
+  assert.ok(fits.subarray(12, 16).every((b) => b === 7));
+  assert.ok(fits.subarray(16, 28).every((b) => b === 255));
+  const small = new Uint8Array(27).fill(7);
+  gl.readPixels(0, 0, 3, 2, gl.RGBA, gl.UNSIGNED_BYTE, small);
+  assert.equal(gl.getError(), gl.INVALID_OPERATION);
+  assert.ok(small.every((b) => b === 7));
+});
+
+test('WebGL 2 pack parameters', (t) => {
+  const gl = createContext({ width: 4, height: 4, webgl2: true });
+  t.after(() => gl.destroy());
+  gl.clearColor(1, 1, 1, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.pixelStorei(gl.PACK_ROW_LENGTH, 4);
+  gl.pixelStorei(gl.PACK_SKIP_PIXELS, 1);
+  const pixels = new Uint8Array(28).fill(7);
+  gl.readPixels(0, 0, 2, 2, gl.RGBA, gl.UNSIGNED_BYTE, pixels);
+  assert.equal(gl.getError(), gl.NO_ERROR);
+  for (let i = 0; i < pixels.length; i += 1) {
+    const written = (i >= 4 && i < 12) || (i >= 20 && i < 28);
+    assert.equal(pixels[i], written ? 255 : 7, `byte ${String(i)}`);
+  }
+  const small = new Uint8Array(27).fill(7);
+  gl.readPixels(0, 0, 2, 2, gl.RGBA, gl.UNSIGNED_BYTE, small);
+  assert.equal(gl.getError(), gl.INVALID_OPERATION);
+});
+
+test('implementation read format', (t) => {
+  for (const webgl2 of [false, true]) {
+    const gl = createContext({ width: 4, height: 4, webgl2 });
+    t.after(() => gl.destroy());
+    const format = gl.getParameter(gl.IMPLEMENTATION_COLOR_READ_FORMAT);
+    const type = gl.getParameter(gl.IMPLEMENTATION_COLOR_READ_TYPE);
+    const components = { [gl.RGBA]: 4, [gl.RGB]: 3, [gl.ALPHA]: 1 }[format] ?? 4;
+    const View = type === gl.FLOAT ? Float32Array : type === gl.UNSIGNED_BYTE ? Uint8Array : Uint16Array;
+    gl.pixelStorei(gl.PACK_ALIGNMENT, 1);
+    gl.readPixels(0, 0, 1, 1, format, type, new View(components));
+    assert.equal(gl.getError(), gl.NO_ERROR, `webgl2: ${String(webgl2)}`);
+  }
+});

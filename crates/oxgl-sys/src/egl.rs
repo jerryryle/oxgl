@@ -430,15 +430,6 @@ impl fmt::Debug for Current<'_> {
     }
 }
 
-/// A GL integer state value [`Current::get_integers`] can read.
-#[derive(Debug, Clone, Copy, PartialEq, Eq)]
-pub enum IntegerParam {
-    /// `GL_MAX_RENDERBUFFER_SIZE` (one value).
-    MaxRenderbufferSize,
-    /// `GL_MAX_VIEWPORT_DIMS` (two values).
-    MaxViewportDims,
-}
-
 /// Arguments of a `glReadPixels` call.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub struct ReadPixels {
@@ -457,7 +448,7 @@ pub struct ReadPixels {
 }
 
 impl Current<'_> {
-    fn fns(&self) -> &crate::loader::Fns {
+    pub(crate) fn fns(&self) -> &crate::loader::Fns {
         self.context.display.angle.fns()
     }
 
@@ -501,23 +492,6 @@ impl Current<'_> {
         // this borrow of the context ends.
         let text = unsafe { CStr::from_ptr(raw.cast::<c_char>()) };
         Some(text.to_string_lossy().into_owned())
-    }
-
-    /// Reads up to two integer values of `param`; `None` if the query failed.
-    #[must_use]
-    pub fn get_integers(&self, param: IntegerParam) -> Option<[i32; 2]> {
-        let pname = match param {
-            IntegerParam::MaxRenderbufferSize => crate::bindings::GL_MAX_RENDERBUFFER_SIZE,
-            IntegerParam::MaxViewportDims => crate::bindings::GL_MAX_VIEWPORT_DIMS,
-        };
-        let mut values = [0; 2];
-        let mut length: GLsizei = 0;
-        // SAFETY: a context is current; ANGLE writes at most `bufSize` (2)
-        // values into `values` and one GLsizei into `length`.
-        unsafe {
-            (self.fns().glGetIntegervRobustANGLE)(pname, 2, &raw mut length, values.as_mut_ptr());
-        };
-        (length > 0).then_some(values)
     }
 
     /// `glReadPixels` into `buffer`, bounded by its length (ANGLE generates

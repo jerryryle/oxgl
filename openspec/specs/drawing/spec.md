@@ -38,10 +38,3 @@ Covers WebGL operations that write to the drawing buffer. This change introduces
 #### Scenario: Combined mask
 - **WHEN** `clear(COLOR_BUFFER_BIT | DEPTH_BUFFER_BIT | STENCIL_BUFFER_BIT)` is called on a buffer without stencil
 - **THEN** the color is cleared and `getError()` returns `NO_ERROR`
-
-### Requirement: Constants for drawing members
-The context instances and their constructors SHALL expose, with WebGL IDL values, the constants `COLOR_BUFFER_BIT`, `DEPTH_BUFFER_BIT`, and `STENCIL_BUFFER_BIT` (WebGL 1.0 §5.14).
-
-#### Scenario: Constant values
-- **WHEN** `gl.COLOR_BUFFER_BIT` and `WebGLRenderingContext.COLOR_BUFFER_BIT` are read
-- **THEN** both equal `0x00004000` (cf. Khronos `conformance/context/constants-and-properties.html`)

@@ -4,8 +4,10 @@
 pub mod backend;
 pub mod context;
 pub mod error;
+pub mod parameters;
 pub mod pixels;
 pub mod runtime;
+pub mod state;
 
 pub use backend::{Backend, ContextRequest, RequestedBackend};
 pub use context::Context;

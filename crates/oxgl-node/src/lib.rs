@@ -16,19 +16,20 @@ use std::path::PathBuf;
 
 use napi::bindgen_prelude::{Env, Unknown};
 use napi_derive::napi;
+use oxgl_core::parameters::Parameter;
 use oxgl_core::{
     ContextKey, ContextRequest, CoreError, RequestedBackend, Runtime, key_from_parts, key_to_parts,
 };
-use oxgl_sys::ReadPixels;
 use oxgl_sys::bindings::GL_NO_ERROR;
 use oxgl_sys::napi_view::WriteTarget;
+use oxgl_sys::{ReadPixels, StateCall};
 
 /// Version of the JS ↔ native interface. The JS loader checks it to confirm the
 /// addon it loaded matches the package.
 #[napi]
 #[must_use]
 pub fn native_abi_version() -> u32 {
-    2
+    3
 }
 
 /// The environment's runtime, created by [`init`]. Node-API instance data is
@@ -223,4 +224,220 @@ pub fn read_pixels(
         );
     }
     Ok(())
+}
+
+/// Runs `f` on the context, if it is still live.
+fn with_context(
+    env: Env,
+    index: u32,
+    version: u32,
+    f: impl FnOnce(&mut oxgl_core::Context),
+) -> napi::Result<()> {
+    if let Some(context) = runtime(env)?.context(key(index, version)) {
+        f(context);
+    }
+    Ok(())
+}
+
+/// Narrows a float32-exact value (`Math.fround` in TS); NaN and infinities
+/// survive.
+#[allow(clippy::cast_possible_truncation, reason = "float32-exact values")]
+fn f32_of(value: f64) -> f32 {
+    value as f32
+}
+
+/// Declares one `#[napi]` export per value-only state call. Arguments are
+/// already converted per `WebIDL` in TS.
+macro_rules! state_exports {
+    ($($(#[$doc:meta])* $name:ident($($arg:ident: $ty:ty),*) => $call:expr;)*) => {
+        $(
+            $(#[$doc])*
+            #[napi]
+            #[allow(clippy::too_many_arguments, reason = "mirrors the WebGL signature")]
+            pub fn $name(env: Env, index: u32, version: u32, $($arg: $ty),*) -> napi::Result<()> {
+                with_context(env, index, version, |context| context.set_state($call))
+            }
+        )*
+    };
+}
+
+state_exports! {
+    /// `activeTexture`.
+    active_texture(texture: u32) => StateCall::ActiveTexture(texture);
+    /// `blendColor`.
+    blend_color(red: f64, green: f64, blue: f64, alpha: f64) =>
+        StateCall::BlendColor(f32_of(red), f32_of(green), f32_of(blue), f32_of(alpha));
+    /// `blendEquation`.
+    blend_equation(mode: u32) => StateCall::BlendEquation(mode);
+    /// `blendEquationSeparate`.
+    blend_equation_separate(mode_rgb: u32, mode_alpha: u32) =>
+        StateCall::BlendEquationSeparate(mode_rgb, mode_alpha);
+    /// `blendFunc`.
+    blend_func(sfactor: u32, dfactor: u32) => StateCall::BlendFunc(sfactor, dfactor);
+    /// `blendFuncSeparate`.
+    blend_func_separate(src_rgb: u32, dst_rgb: u32, src_alpha: u32, dst_alpha: u32) =>
+        StateCall::BlendFuncSeparate(src_rgb, dst_rgb, src_alpha, dst_alpha);
+    /// `clearDepth`.
+    clear_depth(depth: f64) => StateCall::ClearDepth(f32_of(depth));
+    /// `clearStencil`.
+    clear_stencil(s: i32) => StateCall::ClearStencil(s);
+    /// `colorMask`.
+    color_mask(red: bool, green: bool, blue: bool, alpha: bool) =>
+        StateCall::ColorMask(red, green, blue, alpha);
+    /// `cullFace`.
+    cull_face(mode: u32) => StateCall::CullFace(mode);
+    /// `depthFunc`.
+    depth_func(func: u32) => StateCall::DepthFunc(func);
+    /// `depthMask`.
+    depth_mask(flag: bool) => StateCall::DepthMask(flag);
+    /// `depthRange`.
+    depth_range(z_near: f64, z_far: f64) => StateCall::DepthRange(f32_of(z_near), f32_of(z_far));
+    /// `disable`.
+    disable(cap: u32) => StateCall::Disable(cap);
+    /// `enable`.
+    enable(cap: u32) => StateCall::Enable(cap);
+    /// `finish`.
+    finish() => StateCall::Finish;
+    /// `flush`.
+    flush() => StateCall::Flush;
+    /// `frontFace`.
+    front_face(mode: u32) => StateCall::FrontFace(mode);
+    /// `hint`.
+    hint(target: u32, mode: u32) => StateCall::Hint(target, mode);
+    /// `lineWidth`.
+    line_width(width: f64) => StateCall::LineWidth(f32_of(width));
+    /// `polygonOffset`.
+    polygon_offset(factor: f64, units: f64) =>
+        StateCall::PolygonOffset(f32_of(factor), f32_of(units));
+    /// `sampleCoverage`.
+    sample_coverage(value: f64, invert: bool) => StateCall::SampleCoverage(f32_of(value), invert);
+    /// `scissor`.
+    scissor(x: i32, y: i32, width: i32, height: i32) => StateCall::Scissor(x, y, width, height);
+    /// `stencilFunc`.
+    stencil_func(func: u32, reference: i32, mask: u32) => StateCall::StencilFunc(func, reference, mask);
+    /// `stencilFuncSeparate`.
+    stencil_func_separate(face: u32, func: u32, reference: i32, mask: u32) =>
+        StateCall::StencilFuncSeparate(face, func, reference, mask);
+    /// `stencilMask`.
+    stencil_mask(mask: u32) => StateCall::StencilMask(mask);
+    /// `stencilMaskSeparate`.
+    stencil_mask_separate(face: u32, mask: u32) => StateCall::StencilMaskSeparate(face, mask);
+    /// `stencilOp`.
+    stencil_op(fail: u32, zfail: u32, zpass: u32) => StateCall::StencilOp(fail, zfail, zpass);
+    /// `stencilOpSeparate`.
+    stencil_op_separate(face: u32, fail: u32, zfail: u32, zpass: u32) =>
+        StateCall::StencilOpSeparate(face, fail, zfail, zpass);
+    /// `viewport`.
+    viewport(x: i32, y: i32, width: i32, height: i32) => StateCall::Viewport(x, y, width, height);
+}
+
+/// `pixelStorei`.
+#[napi]
+pub fn pixel_storei(
+    env: Env,
+    index: u32,
+    version: u32,
+    pname: u32,
+    param: i32,
+) -> napi::Result<()> {
+    with_context(env, index, version, |context| {
+        context.pixel_store(pname, param);
+    })
+}
+
+/// `isEnabled`; `false` for a destroyed context.
+#[napi]
+pub fn is_enabled(env: Env, index: u32, version: u32, cap: u32) -> napi::Result<bool> {
+    Ok(runtime(env)?
+        .context(key(index, version))
+        .is_some_and(|context| context.is_enabled(cap)))
+}
+
+/// A `getParameter` result for TS to turn into a JS value: `kind` names the
+/// type (`number`, `boolean`, `booleans`, `string`, `float32`, `int32`,
+/// `uint32`), `numbers` holds the values (booleans as 0 or 1), `text` a string.
+#[napi(object)]
+pub struct ParameterValue {
+    /// The JS type.
+    pub kind: String,
+    /// Numeric values.
+    pub numbers: Vec<f64>,
+    /// The string value.
+    pub text: Option<String>,
+}
+
+fn parameter_value(parameter: Parameter) -> Option<ParameterValue> {
+    let (kind, numbers, text) = match parameter {
+        Parameter::Null => return None,
+        Parameter::Number(n) => ("number", vec![n], None),
+        Parameter::Boolean(b) => ("boolean", vec![f64::from(u8::from(b))], None),
+        Parameter::Booleans(v) => (
+            "booleans",
+            v.into_iter().map(|b| f64::from(u8::from(b))).collect(),
+            None,
+        ),
+        Parameter::String(s) => ("string", Vec::new(), Some(s)),
+        Parameter::Float32(v) => ("float32", v.into_iter().map(f64::from).collect(), None),
+        Parameter::Int32(v) => ("int32", v.into_iter().map(f64::from).collect(), None),
+        Parameter::Uint32(v) => ("uint32", v.into_iter().map(f64::from).collect(), None),
+    };
+    Some(ParameterValue {
+        kind: kind.to_owned(),
+        numbers,
+        text,
+    })
+}
+
+/// `getParameter`; `null` for an unknown parameter, a rejected query, a WebGL
+/// object binding, or a destroyed context.
+#[napi]
+pub fn get_parameter(
+    env: Env,
+    index: u32,
+    version: u32,
+    pname: u32,
+) -> napi::Result<Option<ParameterValue>> {
+    Ok(runtime(env)?
+        .context(key(index, version))
+        .and_then(|context| context.get_parameter(pname))
+        .and_then(parameter_value))
+}
+
+/// A `WebGLShaderPrecisionFormat`'s attributes.
+#[napi(object)]
+pub struct PrecisionValue {
+    /// `rangeMin`.
+    pub range_min: i32,
+    /// `rangeMax`.
+    pub range_max: i32,
+    /// `precision`.
+    pub precision: i32,
+}
+
+/// `getShaderPrecisionFormat`; `null` for an invalid enum or a destroyed
+/// context.
+#[napi]
+pub fn get_shader_precision_format(
+    env: Env,
+    index: u32,
+    version: u32,
+    shader_type: u32,
+    precision_type: u32,
+) -> napi::Result<Option<PrecisionValue>> {
+    Ok(runtime(env)?
+        .context(key(index, version))
+        .and_then(|context| context.shader_precision_format(shader_type, precision_type))
+        .map(|format| PrecisionValue {
+            range_min: format.range_min,
+            range_max: format.range_max,
+            precision: format.precision,
+        }))
+}
+
+/// `isContextLost`; `true` for a destroyed context.
+#[napi]
+pub fn is_context_lost(env: Env, index: u32, version: u32) -> napi::Result<bool> {
+    Ok(runtime(env)?
+        .context(key(index, version))
+        .is_none_or(oxgl_core::Context::is_context_lost))
 }

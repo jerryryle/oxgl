@@ -9,6 +9,11 @@ Standards-compliant WebGL 1/2 for Node.js: Rust + napi-rs over ANGLE (EGL/GLES),
 - Validate with `npx openspec validate <change> --strict` before presenting a change.
 - When editing `package.json`, edit in place and keep the `@fission-ai/openspec` devDependency.
 
+## Testing on Linux arm64
+
+- When a check must run on Linux arm64 and the host is something else, Docker can be used: an arm64 host runs `linux/arm64` containers natively. For example, `docker run --rm --platform linux/arm64 -v "$PWD":/src -w /src -e CARGO_TARGET_DIR=/tmp/target ubuntu:24.04 …`, then install `build-essential clang libclang-dev pkg-config curl` and rustup, which picks up `rust-toolchain.toml`. Keep `CARGO_TARGET_DIR` inside the container so the host's `target/` is untouched.
+- Don't substitute another platform's result for a Linux arm64 one. ANGLE's backends differ between platforms: SwiftShader offers alpha-less EGL configs on macOS but not on Linux arm64.
+
 ## Safety rules
 
 - `unsafe` only in `oxgl-sys`. `oxgl-core` and `oxgl-node` use `#![forbid(unsafe_code)]` (napi-rs macro exemptions in `oxgl-node` must be scoped and justified).

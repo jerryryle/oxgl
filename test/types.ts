@@ -5,6 +5,7 @@ import {
   type ContextOptions,
   WebGL2RenderingContext,
   WebGLRenderingContext,
+  WebGLShaderPrecisionFormat,
 } from '../src/index.js';
 
 /* eslint-disable @typescript-eslint/no-unnecessary-type-parameters -- the standard type-equality idiom */
@@ -63,3 +64,12 @@ createContext({ width: 1, height: 1, backend: 'metal' });
 createContext({ width: 1 });
 // @ts-expect-error -- readPixels needs a destination
 gl1.readPixels(0, 0, 1, 1, gl1.RGBA, gl1.UNSIGNED_BYTE);
+
+expectType<Equal<ReturnType<typeof gl1.getParameter>, unknown>>();
+expectType<Equal<ReturnType<typeof gl1.getShaderPrecisionFormat>, WebGLShaderPrecisionFormat | null>>();
+expectType<Equal<ReturnType<typeof gl2.isEnabled>, boolean>>();
+expectType<Equal<ReturnType<typeof gl2.getSupportedExtensions>, string[] | null>>();
+declare const precision: WebGLShaderPrecisionFormat;
+expectType<Equal<typeof precision.rangeMin, number>>();
+// @ts-expect-error -- the attributes are read-only
+precision.precision = 1;
