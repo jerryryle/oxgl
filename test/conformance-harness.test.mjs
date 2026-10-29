@@ -474,6 +474,27 @@ test('page runner: outcomes, early errors, media, canvas shim, crashes, timeouts
   }
 });
 
+test('Closure imports run in browser order and fail on their own', async () => {
+  const { report } = await runFixtures(
+    { webgl1: ['closure-order.html', 'closure-throws.html', 'closure-missing.html', 'closure-cross-origin.html'] },
+    ['webgl1 closure-missing.html FAIL # x', 'webgl1 closure-cross-origin.html FAIL # x'].join('\n'),
+  );
+  // deqp namespace defined before the page uses it.
+  const order = pageOf(report, 'webgl1', 'closure-order.html');
+  assert.equal(order.outcome, 'PASS', order.message ?? order.error);
+  // Error in an imported file: recorded, naming the file, and later imports still run.
+  const throws = pageOf(report, 'webgl1', 'closure-throws.html');
+  assert.equal(throws.outcome, 'PASS', throws.message);
+  assert.match(throws.error, /^Error: import failed\n\s+at \S*\/closure\/throws\.js:1/);
+  // Imported file missing or on another origin: not run, and not a harness error.
+  for (const path of ['closure-missing.html', 'closure-cross-origin.html']) {
+    const page = pageOf(report, 'webgl1', path);
+    assert.equal(page.outcome, 'FAIL', path);
+    assert.match(page.message, /ReferenceError: fixture is not defined/, path);
+  }
+  assert.deepEqual(report.harnessErrors, []);
+});
+
 test('--fast-errors ends every page at its first error', async () => {
   const { report } = await runFixtures({ webgl1: ['recovers.html'] }, '', { fastErrors: true });
   assert.equal(pageOf(report, 'webgl1', 'recovers.html').outcome, 'FAIL');

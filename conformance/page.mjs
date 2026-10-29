@@ -1,6 +1,7 @@
 // Runs one conformance page in a jsdom window and reports it to the parent
 // over IPC, then exits. Usage (from the parent): fork(page.mjs, [url, options])
-// where options is JSON: { endEarly: boolean }.
+// where options is JSON: { endEarly: boolean, root?: string }, root being the
+// directory the parent serves.
 //
 // Messages: { type: 'error', message } at the page's first escaped error;
 // { type: 'counts', passed, failed } as results arrive (throttled);
@@ -10,11 +11,14 @@
 // nothing: the parent's time limit decides it.
 import { readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { resolve } from 'node:path';
 import { compileFunction } from 'node:vm';
 
 import { JSDOM, VirtualConsole } from 'jsdom';
 
 import { native } from '../dist/native.js';
+
+import { resolveFile } from './server.mjs';
 
 const CONTEXT_URL = new URL('../dist/context.js', import.meta.url);
 const CONSTANTS_URL = new URL('../dist/generated/webgl-constants.js', import.meta.url);
@@ -28,8 +32,9 @@ const jsdomWindow = createRequire(import.meta.url)('jsdom/lib/jsdom/browser/Wind
  * installed and `hooks.beforeExit()` after the outcome is sent; the runner's
  * own tests use them to inject faults.
  */
-export async function runPage(url, { endEarly = false } = {}, hooks = {}) {
+export async function runPage(url, { endEarly = false, root } = {}, hooks = {}) {
   const state = {
+    root: root === undefined ? undefined : resolve(root),
     passed: 0,
     failed: 0,
     firstFailure: undefined,
@@ -215,7 +220,7 @@ function release(state, ref) {
   }
 }
 
-/** Installs the canvas shim, the context class globals and failing media. */
+/** Installs the canvas shim, the context class globals, Closure's loader hook and failing media. */
 function installShim(window, state) {
   const { createContext, WebGLRenderingContext, WebGL2RenderingContext } = loadOxgl(window);
   const contexts = new WeakMap();
@@ -250,7 +255,37 @@ function installShim(window, state) {
   };
   window.WebGLRenderingContext = WebGLRenderingContext;
   window.WebGL2RenderingContext = WebGL2RenderingContext;
+  if (state.root !== undefined) window.CLOSURE_IMPORT_SCRIPT = closureImport(window, state.root);
   failMedia(window);
+}
+
+/**
+ * Closure's uncompiled loader (deqp's goog.require) imports each file with
+ * document.write. jsdom queues those scripts behind the ones the parser has
+ * already queued, so a page's later scripts would run before its imports; a
+ * browser runs them before parsing goes on. Closure's import hook runs each
+ * file at once instead, read from the served directory, as an inline script:
+ * jsdom runs that synchronously and reports its errors as the page's.
+ * Returns false, so nothing loads, for source text (goog.module, which the
+ * suite does not use), another origin, or a file outside `root` or missing.
+ */
+function closureImport(window, root) {
+  return (src, text) => {
+    const url = new URL(src, window.location.href);
+    if (text !== undefined || url.origin !== window.location.origin) return false;
+    const file = resolveFile(root, url.href);
+    if (file === undefined) return false;
+    let source;
+    try {
+      source = readFileSync(file, 'utf8');
+    } catch {
+      return false;
+    }
+    const script = window.document.createElement('script');
+    script.text = `${source}\n//# sourceURL=${url.href}`;
+    window.document.head.appendChild(script);
+    return true;
+  };
 }
 
 /**
