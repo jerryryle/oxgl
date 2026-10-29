@@ -91,3 +91,13 @@ test('constant values', (t) => {
     assert.equal(holder.STENCIL_BUFFER_BIT, 0x00000400);
   }
 });
+
+test('flush and finish', (t) => {
+  const gl = context(t);
+  gl.clearColor(0, 1, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  assert.equal(gl.flush(), undefined);
+  assert.equal(gl.finish(), undefined);
+  assert.equal(gl.getError(), gl.NO_ERROR);
+  assert.ok(allPixels(readAll(gl), [0, 255, 0, 255]));
+});

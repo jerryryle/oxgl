@@ -10,8 +10,32 @@ use oxgl_sys::bindings::{
     GL_UNSIGNED_SHORT_4_4_4_4, GL_UNSIGNED_SHORT_5_5_5_1, GL_UNSIGNED_SHORT_5_6_5,
 };
 
-/// `PACK_ALIGNMENT`'s initial (and, until `pixelStorei`, only) value.
-pub const PACK_ALIGNMENT: u64 = 4;
+/// The pack parameters that lay out `readPixels` rows (OpenGL ES 3.0
+/// §4.3.2, §3.7.1). WebGL 1 has only `alignment`; the rest stay 0.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct PackLayout {
+    /// `PACK_ALIGNMENT`.
+    pub alignment: u64,
+    /// `PACK_ROW_LENGTH`; 0 means the read's width.
+    pub row_length: u64,
+    /// `PACK_SKIP_PIXELS`.
+    pub skip_pixels: u64,
+    /// `PACK_SKIP_ROWS`.
+    pub skip_rows: u64,
+}
+
+impl PackLayout {
+    /// A layout with only `alignment` set.
+    #[must_use]
+    pub fn aligned(alignment: u64) -> Self {
+        Self {
+            alignment,
+            row_length: 0,
+            skip_pixels: 0,
+            skip_rows: 0,
+        }
+    }
+}
 
 /// Components per pixel of `format`, if it is a `readPixels` format of the
 /// WebGL version.
@@ -72,16 +96,17 @@ pub fn type_info(ty: u32, webgl2: bool) -> Option<TypeInfo> {
     }
 }
 
-/// Bytes a `width`×`height` read of `components`/`ty` needs at `alignment`:
-/// every row but the last padded to `alignment` (the last row is not padded).
-/// `None` on overflow.
+/// Bytes a `width`×`height` read of `components`/`ty` needs under `layout`:
+/// the skipped rows and pixels, then every row but the last padded to the
+/// alignment at the row length's stride, then the last row unpadded (OpenGL
+/// ES 3.0 §4.3.2). `None` on overflow.
 #[must_use]
 pub fn required_bytes(
     width: u64,
     height: u64,
     components: u64,
     ty: TypeInfo,
-    alignment: u64,
+    layout: PackLayout,
 ) -> Option<u64> {
     if width == 0 || height == 0 {
         return Some(0);
@@ -91,9 +116,22 @@ pub fn required_bytes(
     } else {
         components.checked_mul(ty.bytes)?
     };
-    let row = width.checked_mul(pixel)?;
-    let padded = row.checked_next_multiple_of(alignment)?;
-    padded.checked_mul(height - 1)?.checked_add(row)
+    let row_pixels = if layout.row_length > 0 {
+        layout.row_length
+    } else {
+        width
+    };
+    let stride = row_pixels
+        .checked_mul(pixel)?
+        .checked_next_multiple_of(layout.alignment)?;
+    let skipped = layout
+        .skip_rows
+        .checked_mul(stride)?
+        .checked_add(layout.skip_pixels.checked_mul(pixel)?)?;
+    stride
+        .checked_mul(height - 1)?
+        .checked_add(width.checked_mul(pixel)?)?
+        .checked_add(skipped)
 }
 
 /// Whether a destination of `byte_len` bytes holds `required` bytes.
@@ -113,9 +151,12 @@ mod tests {
     #[test]
     fn rgba_rows_need_no_padding() {
         let ty = type_info(GL_UNSIGNED_BYTE, false).unwrap();
-        assert_eq!(required_bytes(3, 2, 4, ty, 4), Some(24));
-        assert_eq!(required_bytes(0, 5, 4, ty, 4), Some(0));
-        assert_eq!(required_bytes(5, 0, 4, ty, 4), Some(0));
+        assert_eq!(
+            required_bytes(3, 2, 4, ty, PackLayout::aligned(4)),
+            Some(24)
+        );
+        assert_eq!(required_bytes(0, 5, 4, ty, PackLayout::aligned(4)), Some(0));
+        assert_eq!(required_bytes(5, 0, 4, ty, PackLayout::aligned(4)), Some(0));
     }
 
     #[test]
@@ -123,7 +164,8 @@ mod tests {
         let (components, ty) = rgb_ubyte();
         // 3x2 RGB: rows of 9 bytes.
         for (alignment, expected) in [(1, 18), (2, 19), (4, 21), (8, 25)] {
-            let required = required_bytes(3, 2, components, ty, alignment).unwrap();
+            let required =
+                required_bytes(3, 2, components, ty, PackLayout::aligned(alignment)).unwrap();
             assert_eq!(
                 required,
                 u64::try_from(expected).unwrap(),
@@ -139,7 +181,7 @@ mod tests {
         let ty = type_info(GL_UNSIGNED_BYTE, false).unwrap();
         // 5x3 ALPHA: rows of 5 bytes.
         for (alignment, expected) in [(1, 15), (2, 17), (4, 21), (8, 21)] {
-            let required = required_bytes(5, 3, 1, ty, alignment).unwrap();
+            let required = required_bytes(5, 3, 1, ty, PackLayout::aligned(alignment)).unwrap();
             assert_eq!(
                 required,
                 u64::try_from(expected).unwrap(),
@@ -153,14 +195,62 @@ mod tests {
     #[test]
     fn packed_types_count_whole_pixels() {
         let ty = type_info(GL_UNSIGNED_SHORT_5_6_5, false).unwrap();
-        assert_eq!(required_bytes(3, 2, 3, ty, 4), Some(14));
+        assert_eq!(
+            required_bytes(3, 2, 3, ty, PackLayout::aligned(4)),
+            Some(14)
+        );
+    }
+
+    #[test]
+    fn row_length_and_skips() {
+        let ty = type_info(GL_UNSIGNED_BYTE, false).unwrap();
+        // 2x2 RGBA, row length 4, skip 1 pixel: stride 16, offset 4.
+        let layout = PackLayout {
+            alignment: 4,
+            row_length: 4,
+            skip_pixels: 1,
+            skip_rows: 0,
+        };
+        assert_eq!(required_bytes(2, 2, 4, ty, layout), Some(28));
+        // Skipping a row adds one stride.
+        let layout = PackLayout {
+            skip_rows: 1,
+            ..layout
+        };
+        assert_eq!(required_bytes(2, 2, 4, ty, layout), Some(44));
+        // A row length shorter than the width still sets the stride.
+        let layout = PackLayout {
+            alignment: 1,
+            row_length: 1,
+            skip_pixels: 0,
+            skip_rows: 0,
+        };
+        assert_eq!(required_bytes(2, 2, 4, ty, layout), Some(12));
+    }
+
+    #[test]
+    fn skip_overflow_is_reported() {
+        let ty = type_info(GL_UNSIGNED_BYTE, false).unwrap();
+        let layout = PackLayout {
+            alignment: 4,
+            row_length: 0,
+            skip_pixels: 0,
+            skip_rows: u64::MAX / 2,
+        };
+        assert_eq!(required_bytes(4, 2, 4, ty, layout), None);
     }
 
     #[test]
     fn overflow_is_reported() {
         let ty = type_info(GL_UNSIGNED_BYTE, false).unwrap();
-        assert_eq!(required_bytes(u64::MAX / 2, 3, 4, ty, 4), None);
-        assert_eq!(required_bytes(u64::MAX, 1, 1, ty, 4), None);
+        assert_eq!(
+            required_bytes(u64::MAX / 2, 3, 4, ty, PackLayout::aligned(4)),
+            None
+        );
+        assert_eq!(
+            required_bytes(u64::MAX, 1, 1, ty, PackLayout::aligned(4)),
+            None
+        );
     }
 
     #[test]

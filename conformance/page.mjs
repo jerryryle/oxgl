@@ -203,7 +203,7 @@ function contextSource() {
   if (/^\s*(import|export)\b/m.test(body)) {
     throw new Error('dist/context.js has imports or exports the conformance runner does not handle');
   }
-  return `${body}\nreturn { createContext, WebGLRenderingContext, WebGL2RenderingContext };`;
+  return `${body}\nreturn { createContext, WebGLRenderingContext, WebGL2RenderingContext, WebGLShaderPrecisionFormat };`;
 }
 
 /**
@@ -222,7 +222,7 @@ function release(state, ref) {
 
 /** Installs the canvas shim, the context class globals, Closure's loader hook and failing media. */
 function installShim(window, state) {
-  const { createContext, WebGLRenderingContext, WebGL2RenderingContext } = loadOxgl(window);
+  const { createContext, WebGLRenderingContext, WebGL2RenderingContext, WebGLShaderPrecisionFormat } = loadOxgl(window);
   const contexts = new WeakMap();
   // jsdom closes a frame's window when the frame navigates; its contexts go
   // with it, as a browser releases them with the document. Contexts are held
@@ -255,6 +255,7 @@ function installShim(window, state) {
   };
   window.WebGLRenderingContext = WebGLRenderingContext;
   window.WebGL2RenderingContext = WebGL2RenderingContext;
+  window.WebGLShaderPrecisionFormat = WebGLShaderPrecisionFormat;
   if (state.root !== undefined) window.CLOSURE_IMPORT_SCRIPT = closureImport(window, state.root);
   failMedia(window);
 }
