@@ -4,6 +4,7 @@ export {
   createContext,
   WebGL2RenderingContext,
   WebGLRenderingContext,
+  WebGLShaderPrecisionFormat,
   type ContextBackend,
   type ContextOptions,
 } from './context.js';

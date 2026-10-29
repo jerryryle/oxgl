@@ -1,6 +1,7 @@
-// error-reporting spec scenarios. Backend device loss cannot be triggered from
+// error-reporting and context-loss spec scenarios. Backend device loss cannot be triggered from
 // JS yet (no WEBGL_lose_context); the Rust test device_loss_enters_the_lost_state
-// in oxgl-core covers it through GL_CHROMIUM_lose_context.
+// in oxgl-core covers it through GL_CHROMIUM_lose_context, and
+// device_loss_is_reported_by_is_context_lost covers isContextLost.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
@@ -60,4 +61,15 @@ test('error constants', (t) => {
   assert.throws(() => {
     WebGLRenderingContext.NO_ERROR = 1;
   }, TypeError);
+});
+
+test('isContextLost on a live context', (t) => {
+  const gl = context(t);
+  assert.equal(gl.isContextLost(), false);
+});
+
+test('isContextLost after destroy', () => {
+  const gl = createContext({ width: 2, height: 2 });
+  gl.destroy();
+  assert.equal(gl.isContextLost(), true);
 });

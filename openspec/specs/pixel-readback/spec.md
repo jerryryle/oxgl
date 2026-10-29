@@ -65,10 +65,3 @@ The implementation SHALL NOT access the destination's memory after `readPixels` 
 #### Scenario: Buffer transferred after read
 - **WHEN** `readPixels` completes and the destination's `ArrayBuffer` is then transferred via `structuredClone(buf, { transfer: [buf] })`
 - **THEN** no crash or memory error occurs
-
-### Requirement: Readback constants
-The context instances and their constructors SHALL expose, with WebGL IDL values, `RGBA` and `UNSIGNED_BYTE`.
-
-#### Scenario: Constant values
-- **WHEN** `gl.RGBA` and `gl.UNSIGNED_BYTE` are read
-- **THEN** they equal `0x1908` and `0x1401`

@@ -1,18 +1,23 @@
 //! A WebGL context: its drawing buffer, error state, and objects.
 
 use oxgl_sys::bindings::{
-    GL_COLOR_BUFFER_BIT, GL_DEPTH_BUFFER_BIT, GL_GUILTY_CONTEXT_RESET_EXT,
-    GL_INNOCENT_CONTEXT_RESET_EXT, GL_INVALID_OPERATION, GL_INVALID_VALUE, GL_NO_ERROR,
-    GL_STENCIL_BUFFER_BIT,
+    GL_COLOR_BUFFER_BIT, GL_DEPTH_BUFFER_BIT, GL_FRAGMENT_SHADER, GL_GUILTY_CONTEXT_RESET_EXT,
+    GL_HIGH_INT, GL_INNOCENT_CONTEXT_RESET_EXT, GL_INVALID_ENUM, GL_INVALID_OPERATION,
+    GL_INVALID_VALUE, GL_LOW_FLOAT, GL_MAX_RENDERBUFFER_SIZE, GL_MAX_VIEWPORT_DIMS, GL_NO_ERROR,
+    GL_PACK_ALIGNMENT, GL_PACK_ROW_LENGTH, GL_PACK_SKIP_PIXELS, GL_PACK_SKIP_ROWS,
+    GL_SHADING_LANGUAGE_VERSION, GL_STENCIL_BUFFER_BIT, GL_VERSION, GL_VERTEX_SHADER,
 };
 use oxgl_sys::{
-    ClientVersion, Current, Display, GlContext, IntegerParam, PixelDestination, ReadPixels,
+    ClientVersion, Current, Display, GlContext, PixelDestination, PrecisionFormat, ReadPixels,
+    StateCall, ValueType, Values,
 };
 use slotmap::{SlotMap, new_key_type};
 
 use crate::backend::ContextRequest;
 use crate::error::ErrorState;
+use crate::parameters::{self, Kind, Parameter};
 use crate::pixels;
+use crate::state::{PixelStore, UNPACK_FLIP_Y_WEBGL, UNPACK_PREMULTIPLY_ALPHA_WEBGL, UnpackState};
 
 new_key_type! {
     /// Generational handle of a WebGL object within its context.
@@ -57,8 +62,8 @@ impl DrawingBuffer {
         let (renderbuffer, viewport) = {
             let current = context.make_current().map_err(|e| e.to_string())?;
             (
-                current.get_integers(IntegerParam::MaxRenderbufferSize),
-                current.get_integers(IntegerParam::MaxViewportDims),
+                integers(&current, GL_MAX_RENDERBUFFER_SIZE),
+                integers(&current, GL_MAX_VIEWPORT_DIMS),
             )
         };
         let limits = renderbuffer
@@ -82,10 +87,15 @@ impl DrawingBuffer {
         // A new pbuffer's contents are undefined; the drawing buffer starts
         // transparent black (WebGL 1.0 §2.2). The context is fresh, so the
         // clear values are still their defaults (0,0,0,0, depth 1, stencil 0).
-        context
-            .make_current()
-            .map_err(|e| e.to_string())?
-            .clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+        // The context was first made current without a surface, which left
+        // its viewport and scissor box at 0×0; both start at the drawing
+        // buffer's size (WebGL 1.0 §5.14.4).
+        {
+            let current = context.make_current().map_err(|e| e.to_string())?;
+            current.apply(StateCall::Viewport(0, 0, width, height));
+            current.apply(StateCall::Scissor(0, 0, width, height));
+            current.clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+        }
         Ok(Self {
             context,
             width,
@@ -128,6 +138,7 @@ pub struct Context {
     buffer: DrawingBuffer,
     errors: ErrorState,
     objects: SlotMap<ObjectKey, Object>,
+    unpack: UnpackState,
     webgl2: bool,
 }
 
@@ -142,6 +153,36 @@ fn current<'a>(buffer: &'a DrawingBuffer, errors: &mut ErrorState) -> Option<Cur
         .make_current()
         .inspect_err(|_| errors.mark_lost())
         .ok()
+}
+
+/// The first two integer values of `pname`; `None` if the query failed.
+fn integers(current: &Current<'_>, pname: u32) -> Option<[i32; 2]> {
+    match current.get_values(pname, ValueType::Integer)? {
+        Values::Integers([a, b, ..]) => Some([a, b]),
+        _ => None,
+    }
+}
+
+/// The current pack parameters, read from the GL so ANGLE stays their only
+/// owner. A failed query (none is expected) falls back to the initial value.
+fn pack_layout(current: &Current<'_>, webgl2: bool) -> pixels::PackLayout {
+    let read = |pname| match current.get_values(pname, ValueType::Integer) {
+        Some(Values::Integers([value, ..])) => u64::try_from(value).unwrap_or(0),
+        _ => 0,
+    };
+    let alignment = match read(GL_PACK_ALIGNMENT) {
+        0 => 4,
+        value => value,
+    };
+    if !webgl2 {
+        return pixels::PackLayout::aligned(alignment);
+    }
+    pixels::PackLayout {
+        alignment,
+        row_length: read(GL_PACK_ROW_LENGTH),
+        skip_pixels: read(GL_PACK_SKIP_PIXELS),
+        skip_rows: read(GL_PACK_SKIP_ROWS),
+    }
 }
 
 /// Sets the lost flag if the GL reports a graphics reset.
@@ -159,6 +200,7 @@ impl Context {
             buffer,
             errors: ErrorState::default(),
             objects: SlotMap::with_key(),
+            unpack: UnpackState::default(),
             webgl2,
         }
     }
@@ -186,6 +228,90 @@ impl Context {
         if let Some(current) = current(&self.buffer, &mut self.errors) {
             current.clear_color(red, green, blue, alpha);
         }
+    }
+
+    /// A value-only state call (WebGL 1.0 §5.14.3–§5.14.4, §5.14.11),
+    /// forwarded for ANGLE to validate.
+    pub fn set_state(&mut self, call: StateCall) {
+        if let Some(current) = current(&self.buffer, &mut self.errors) {
+            current.apply(call);
+        }
+    }
+
+    /// `pixelStorei` (WebGL 1.0 §5.14.3): oxgl keeps the WebGL-only
+    /// parameters and forwards the rest.
+    pub fn pixel_store(&mut self, pname: u32, param: i32) {
+        let Some(current) = current(&self.buffer, &mut self.errors) else {
+            return;
+        };
+        match self.unpack.store(pname, param) {
+            PixelStore::Stored => {}
+            PixelStore::Error(code) => self.errors.synthesize(code),
+            PixelStore::Forward => current.pixel_store(pname, param),
+        }
+    }
+
+    /// `isEnabled` (WebGL 1.0 §5.14.3); `false` when lost.
+    pub fn is_enabled(&mut self, cap: u32) -> bool {
+        current(&self.buffer, &mut self.errors).is_some_and(|current| current.is_enabled(cap))
+    }
+
+    /// `getParameter` (WebGL 1.0 §5.14.3, WebGL 2.0 §3.7.2). `None` (JS
+    /// `null`) for an unknown parameter, after synthesizing `INVALID_ENUM`,
+    /// for a query ANGLE rejected, and on a lost context.
+    pub fn get_parameter(&mut self, pname: u32) -> Option<Parameter> {
+        let current = current(&self.buffer, &mut self.errors)?;
+        let Some(entry) = parameters::lookup(pname, self.webgl2) else {
+            self.errors.synthesize(GL_INVALID_ENUM);
+            return None;
+        };
+        Some(match entry.kind {
+            Kind::Object => Parameter::Null,
+            Kind::CompressedFormats => Parameter::Uint32(Vec::new()),
+            Kind::ClientWaitTimeout => Parameter::Number(0.0),
+            Kind::Shadow => match pname {
+                UNPACK_FLIP_Y_WEBGL => Parameter::Boolean(self.unpack.flip_y),
+                UNPACK_PREMULTIPLY_ALPHA_WEBGL => Parameter::Boolean(self.unpack.premultiply_alpha),
+                _ => Parameter::Number(f64::from(self.unpack.colorspace_conversion)),
+            },
+            Kind::String => Parameter::String(match pname {
+                GL_VERSION | GL_SHADING_LANGUAGE_VERSION => parameters::version_string(
+                    pname,
+                    self.webgl2,
+                    current.get_string(pname).as_deref(),
+                ),
+                _ => "oxgl".to_owned(),
+            }),
+            kind => {
+                let ty = parameters::value_type(kind)?;
+                parameters::from_values(kind, current.get_values(pname, ty)?)
+            }
+        })
+    }
+
+    /// `getShaderPrecisionFormat` (WebGL 1.0 §5.14.9). oxgl checks the enums,
+    /// because the GLES entry point cannot report an error.
+    pub fn shader_precision_format(
+        &mut self,
+        shader: u32,
+        precision: u32,
+    ) -> Option<PrecisionFormat> {
+        let current = current(&self.buffer, &mut self.errors)?;
+        let valid = matches!(shader, GL_VERTEX_SHADER | GL_FRAGMENT_SHADER)
+            && (GL_LOW_FLOAT..=GL_HIGH_INT).contains(&precision);
+        if !valid {
+            self.errors.synthesize(GL_INVALID_ENUM);
+            return None;
+        }
+        Some(current.shader_precision_format(shader, precision))
+    }
+
+    /// `isContextLost` (WebGL 1.0 §5.14.13), detecting device loss first.
+    pub fn is_context_lost(&mut self) -> bool {
+        if let Some(current) = current(&self.buffer, &mut self.errors) {
+            check_reset(&current, &mut self.errors);
+        }
+        self.errors.is_lost()
     }
 
     /// `clear` (WebGL 1.0 §5.14.11); ANGLE validates the mask.
@@ -236,7 +362,7 @@ impl Context {
                         height,
                         components,
                         ty,
-                        pixels::PACK_ALIGNMENT,
+                        pack_layout(&current, self.webgl2),
                     ),
                     // Negative sizes: ANGLE generates INVALID_VALUE.
                     _ => Some(0),

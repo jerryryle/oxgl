@@ -3,6 +3,7 @@
 // WebIDL argument conversion happens here, before native code runs, so native
 // code never re-enters JS (conversions can call user `valueOf`). This file is
 // the seam a WebIDL generator will own (src/generated/).
+import type { NativeParameter } from './load-native.js';
 import { native } from './native.js';
 import { WEBGL1_CONSTANTS, WEBGL2_CONSTANTS } from './generated/webgl-constants.js';
 
@@ -50,6 +51,67 @@ function toLong(value: unknown): number {
 }
 function toUnsignedLong(value: unknown): number {
   return toNumber(value) >>> 0;
+}
+function toBoolean(value: unknown): boolean {
+  return Boolean(value);
+}
+function toDOMString(value: unknown): string {
+  if (typeof value === 'symbol') throw new TypeError('Cannot convert a Symbol value to a string');
+  return String(value);
+}
+
+/** The JS value of a native `getParameter` result (WebGL 1.0 §5.14.3 table). */
+function parameterValue(result: NativeParameter | null): unknown {
+  if (result === null) return null;
+  const { kind, numbers, text } = result;
+  switch (kind) {
+    case 'number':
+      return numbers[0];
+    case 'boolean':
+      return numbers[0] !== 0;
+    case 'booleans':
+      return numbers.map((n) => n !== 0);
+    case 'string':
+      return text ?? '';
+    case 'float32':
+      return new Float32Array(numbers);
+    case 'int32':
+      return new Int32Array(numbers);
+    case 'uint32':
+      return new Uint32Array(numbers);
+  }
+}
+
+/** A shader numeric format's range and precision (WebGL 1.0 §5.12). */
+export class WebGLShaderPrecisionFormat {
+  readonly #rangeMin: number;
+  readonly #rangeMax: number;
+  readonly #precision: number;
+
+  /** @internal Returned by `getShaderPrecisionFormat`. */
+  constructor(token: symbol, rangeMin: number, rangeMax: number, precision: number) {
+    if (token !== CONSTRUCTING) {
+      throw new TypeError('Illegal constructor');
+    }
+    this.#rangeMin = rangeMin;
+    this.#rangeMax = rangeMax;
+    this.#precision = precision;
+  }
+
+  /** Base-2 log of the absolute value of the smallest representable number. */
+  get rangeMin(): number {
+    return this.#rangeMin;
+  }
+
+  /** Base-2 log of the absolute value of the largest representable number. */
+  get rangeMax(): number {
+    return this.#rangeMax;
+  }
+
+  /** Bits of precision. */
+  get precision(): number {
+    return this.#precision;
+  }
 }
 
 function requireArguments(name: string, required: number, given: number): void {
@@ -143,6 +205,259 @@ abstract class ContextBase {
     }
     if (this.#destroyed) return;
     native.readPixels(this.#index, this.#version, ...args, destination);
+  }
+
+  /**
+   * Forwards a converted state call to native code, unless the context is
+   * destroyed (WebGL 1.0 §5.14, `[WebGLHandlesContextLoss]`).
+   */
+  #state<A extends unknown[]>(call: (index: number, version: number, ...args: A) => void, ...args: A): void {
+    if (!this.#destroyed) call(this.#index, this.#version, ...args);
+  }
+
+  /** WebGL 1.0 §5.14.3. */
+  activeTexture(texture: number): void {
+    requireArguments('activeTexture', 1, arguments.length);
+    this.#state(native.activeTexture, toUnsignedLong(texture));
+  }
+
+  /** WebGL 1.0 §5.14.3. */
+  blendColor(red: number, green: number, blue: number, alpha: number): void {
+    requireArguments('blendColor', 4, arguments.length);
+    this.#state(native.blendColor, toFloat(red), toFloat(green), toFloat(blue), toFloat(alpha));
+  }
+
+  /** WebGL 1.0 §5.14.3. */
+  blendEquation(mode: number): void {
+    requireArguments('blendEquation', 1, arguments.length);
+    this.#state(native.blendEquation, toUnsignedLong(mode));
+  }
+
+  /** WebGL 1.0 §5.14.3. */
+  blendEquationSeparate(modeRGB: number, modeAlpha: number): void {
+    requireArguments('blendEquationSeparate', 2, arguments.length);
+    this.#state(native.blendEquationSeparate, toUnsignedLong(modeRGB), toUnsignedLong(modeAlpha));
+  }
+
+  /** WebGL 1.0 §5.14.3. */
+  blendFunc(sfactor: number, dfactor: number): void {
+    requireArguments('blendFunc', 2, arguments.length);
+    this.#state(native.blendFunc, toUnsignedLong(sfactor), toUnsignedLong(dfactor));
+  }
+
+  /** WebGL 1.0 §5.14.3. */
+  blendFuncSeparate(srcRGB: number, dstRGB: number, srcAlpha: number, dstAlpha: number): void {
+    requireArguments('blendFuncSeparate', 4, arguments.length);
+    this.#state(
+      native.blendFuncSeparate,
+      toUnsignedLong(srcRGB),
+      toUnsignedLong(dstRGB),
+      toUnsignedLong(srcAlpha),
+      toUnsignedLong(dstAlpha),
+    );
+  }
+
+  /** WebGL 1.0 §5.14.3. */
+  clearDepth(depth: number): void {
+    requireArguments('clearDepth', 1, arguments.length);
+    this.#state(native.clearDepth, toFloat(depth));
+  }
+
+  /** WebGL 1.0 §5.14.3. */
+  clearStencil(s: number): void {
+    requireArguments('clearStencil', 1, arguments.length);
+    this.#state(native.clearStencil, toLong(s));
+  }
+
+  /** WebGL 1.0 §5.14.3. */
+  colorMask(red: boolean, green: boolean, blue: boolean, alpha: boolean): void {
+    requireArguments('colorMask', 4, arguments.length);
+    this.#state(native.colorMask, toBoolean(red), toBoolean(green), toBoolean(blue), toBoolean(alpha));
+  }
+
+  /** WebGL 1.0 §5.14.3. */
+  cullFace(mode: number): void {
+    requireArguments('cullFace', 1, arguments.length);
+    this.#state(native.cullFace, toUnsignedLong(mode));
+  }
+
+  /** WebGL 1.0 §5.14.3. */
+  depthFunc(func: number): void {
+    requireArguments('depthFunc', 1, arguments.length);
+    this.#state(native.depthFunc, toUnsignedLong(func));
+  }
+
+  /** WebGL 1.0 §5.14.3. */
+  depthMask(flag: boolean): void {
+    requireArguments('depthMask', 1, arguments.length);
+    this.#state(native.depthMask, toBoolean(flag));
+  }
+
+  /** WebGL 1.0 §5.14.3. */
+  depthRange(zNear: number, zFar: number): void {
+    requireArguments('depthRange', 2, arguments.length);
+    this.#state(native.depthRange, toFloat(zNear), toFloat(zFar));
+  }
+
+  /** WebGL 1.0 §5.14.3. */
+  disable(cap: number): void {
+    requireArguments('disable', 1, arguments.length);
+    this.#state(native.disable, toUnsignedLong(cap));
+  }
+
+  /** WebGL 1.0 §5.14.3. */
+  enable(cap: number): void {
+    requireArguments('enable', 1, arguments.length);
+    this.#state(native.enable, toUnsignedLong(cap));
+  }
+
+  /** WebGL 1.0 §5.14.11. */
+  finish(): void {
+    this.#state(native.finish);
+  }
+
+  /** WebGL 1.0 §5.14.11. */
+  flush(): void {
+    this.#state(native.flush);
+  }
+
+  /** WebGL 1.0 §5.14.3. */
+  frontFace(mode: number): void {
+    requireArguments('frontFace', 1, arguments.length);
+    this.#state(native.frontFace, toUnsignedLong(mode));
+  }
+
+  /** WebGL 1.0 §5.14.3; `null` for an unknown parameter or a lost context. */
+  getParameter(pname: number): unknown {
+    requireArguments('getParameter', 1, arguments.length);
+    const converted = toUnsignedLong(pname);
+    if (this.#destroyed) return null;
+    return parameterValue(native.getParameter(this.#index, this.#version, converted));
+  }
+
+  /** WebGL 1.0 §5.14.9; `null` for an invalid enum or a lost context. */
+  getShaderPrecisionFormat(shadertype: number, precisiontype: number): WebGLShaderPrecisionFormat | null {
+    requireArguments('getShaderPrecisionFormat', 2, arguments.length);
+    const args = [toUnsignedLong(shadertype), toUnsignedLong(precisiontype)] as const;
+    if (this.#destroyed) return null;
+    const format = native.getShaderPrecisionFormat(this.#index, this.#version, ...args);
+    if (format === null) return null;
+    return new WebGLShaderPrecisionFormat(CONSTRUCTING, format.rangeMin, format.rangeMax, format.precision);
+  }
+
+  /** WebGL 1.0 §5.14.14: no extension is supported yet; `null` when lost. */
+  getSupportedExtensions(): string[] | null {
+    return this.#destroyed || this.isContextLost() ? null : [];
+  }
+
+  /** WebGL 1.0 §5.14.14: no extension is supported yet, so always `null`. */
+  getExtension(name: string): null {
+    requireArguments('getExtension', 1, arguments.length);
+    toDOMString(name);
+    return null;
+  }
+
+  /** WebGL 1.0 §5.14.13. */
+  isContextLost(): boolean {
+    return this.#destroyed || native.isContextLost(this.#index, this.#version);
+  }
+
+  /** WebGL 1.0 §5.14.3. */
+  hint(target: number, mode: number): void {
+    requireArguments('hint', 2, arguments.length);
+    this.#state(native.hint, toUnsignedLong(target), toUnsignedLong(mode));
+  }
+
+  /** WebGL 1.0 §5.14.3; `false` on a lost context. */
+  isEnabled(cap: number): boolean {
+    requireArguments('isEnabled', 1, arguments.length);
+    const converted = toUnsignedLong(cap);
+    if (this.#destroyed) return false;
+    return native.isEnabled(this.#index, this.#version, converted);
+  }
+
+  /** WebGL 1.0 §5.14.3. */
+  lineWidth(width: number): void {
+    requireArguments('lineWidth', 1, arguments.length);
+    this.#state(native.lineWidth, toFloat(width));
+  }
+
+  /** WebGL 1.0 §5.14.3. */
+  pixelStorei(pname: number, param: number): void {
+    requireArguments('pixelStorei', 2, arguments.length);
+    this.#state(native.pixelStorei, toUnsignedLong(pname), toLong(param));
+  }
+
+  /** WebGL 1.0 §5.14.3. */
+  polygonOffset(factor: number, units: number): void {
+    requireArguments('polygonOffset', 2, arguments.length);
+    this.#state(native.polygonOffset, toFloat(factor), toFloat(units));
+  }
+
+  /** WebGL 1.0 §5.14.3. */
+  sampleCoverage(value: number, invert: boolean): void {
+    requireArguments('sampleCoverage', 2, arguments.length);
+    this.#state(native.sampleCoverage, toFloat(value), toBoolean(invert));
+  }
+
+  /** WebGL 1.0 §5.14.4. */
+  scissor(x: number, y: number, width: number, height: number): void {
+    requireArguments('scissor', 4, arguments.length);
+    this.#state(native.scissor, toLong(x), toLong(y), toLong(width), toLong(height));
+  }
+
+  /** WebGL 1.0 §5.14.3. */
+  stencilFunc(func: number, ref: number, mask: number): void {
+    requireArguments('stencilFunc', 3, arguments.length);
+    this.#state(native.stencilFunc, toUnsignedLong(func), toLong(ref), toUnsignedLong(mask));
+  }
+
+  /** WebGL 1.0 §5.14.3. */
+  stencilFuncSeparate(face: number, func: number, ref: number, mask: number): void {
+    requireArguments('stencilFuncSeparate', 4, arguments.length);
+    this.#state(
+      native.stencilFuncSeparate,
+      toUnsignedLong(face),
+      toUnsignedLong(func),
+      toLong(ref),
+      toUnsignedLong(mask),
+    );
+  }
+
+  /** WebGL 1.0 §5.14.3. */
+  stencilMask(mask: number): void {
+    requireArguments('stencilMask', 1, arguments.length);
+    this.#state(native.stencilMask, toUnsignedLong(mask));
+  }
+
+  /** WebGL 1.0 §5.14.3. */
+  stencilMaskSeparate(face: number, mask: number): void {
+    requireArguments('stencilMaskSeparate', 2, arguments.length);
+    this.#state(native.stencilMaskSeparate, toUnsignedLong(face), toUnsignedLong(mask));
+  }
+
+  /** WebGL 1.0 §5.14.3. */
+  stencilOp(fail: number, zfail: number, zpass: number): void {
+    requireArguments('stencilOp', 3, arguments.length);
+    this.#state(native.stencilOp, toUnsignedLong(fail), toUnsignedLong(zfail), toUnsignedLong(zpass));
+  }
+
+  /** WebGL 1.0 §5.14.3. */
+  stencilOpSeparate(face: number, fail: number, zfail: number, zpass: number): void {
+    requireArguments('stencilOpSeparate', 4, arguments.length);
+    this.#state(
+      native.stencilOpSeparate,
+      toUnsignedLong(face),
+      toUnsignedLong(fail),
+      toUnsignedLong(zfail),
+      toUnsignedLong(zpass),
+    );
+  }
+
+  /** WebGL 1.0 §5.14.4. */
+  viewport(x: number, y: number, width: number, height: number): void {
+    requireArguments('viewport', 4, arguments.length);
+    this.#state(native.viewport, toLong(x), toLong(y), toLong(width), toLong(height));
   }
 
   /**
