@@ -1,0 +1,9 @@
+<!DOCTYPE html>
+<html><head><script src="harness.js"></script><script src="closure/loader.js"></script>
+<script>
+goog.deps = { throws: { src: 'closure/throws.js', requires: [] }, a: { src: 'closure/a.js', requires: [] } };
+goog.require('throws');
+goog.require('a');
+</script></head><body>
+<script>if (fixture.a === 'a') testPassed('later import ran'); else testFailed('later import did not run'); finishTest();</script>
+</body></html>

@@ -1,0 +1,8 @@
+<!DOCTYPE html>
+<html><head><script src="harness.js"></script><script src="closure/loader.js"></script>
+<script>
+goog.deps = { a: { src: 'closure/a.js', requires: [] }, b: { src: 'closure/b.js', requires: ['a'] } };
+goog.require('b');
+</script></head><body>
+<script>if (fixture.b === 'a+b') testPassed('imports ran in order'); else testFailed(String(fixture.b)); finishTest();</script>
+</body></html>
