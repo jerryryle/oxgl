@@ -1,0 +1,8 @@
+<!DOCTYPE html>
+<html><head><script src="harness.js"></script><script src="closure/loader.js"></script>
+<script>
+goog.deps = { missing: { src: 'closure/missing.js', requires: [] } };
+goog.require('missing');
+</script></head><body>
+<script>testPassed(fixture.missing); finishTest();</script>
+</body></html>

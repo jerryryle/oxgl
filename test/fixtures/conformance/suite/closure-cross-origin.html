@@ -1,0 +1,9 @@
+<!DOCTYPE html>
+<html><head><script src="harness.js"></script><script src="closure/loader.js"></script>
+<script>
+// The path exists under the suite root, but on another origin.
+goog.deps = { a: { src: 'http://other.test/closure/a.js', requires: [] } };
+goog.require('a');
+</script></head><body>
+<script>testPassed(fixture.a); finishTest();</script>
+</body></html>

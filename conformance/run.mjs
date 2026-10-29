@@ -58,6 +58,7 @@ export async function runConformance({
   try {
     records = await runPages(toRun, {
       origin: server.origin,
+      root,
       jobs,
       timeoutMs: timeoutS * 1000,
       fastErrors,

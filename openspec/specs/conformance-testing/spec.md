@@ -63,6 +63,24 @@ Image, video and audio elements in a page SHALL report a load error shortly afte
 - **WHEN** a page reads `gl.canvas` and oxgl does not provide it
 - **THEN** the page sees `undefined`, as it would from oxgl outside the runner
 
+### Requirement: Closure-loaded scripts run in browser order
+When a page loads scripts through the Closure Library's uncompiled loader (`goog.require` in `closure-library/closure/goog/base.js`, as every `deqp/` page does), each file the loader imports SHALL run before the import returns, dependencies first, as a script written with `document.write` during parsing runs in a browser (HTML Standard §8.4.3).
+
+#### Scenario: deqp namespace defined before the page uses it
+- **WHEN** a page calls `goog.require('functional.gles3.es3fAttribLocationTests')` from a `<head>` script and calls that namespace's `run` from a later `<body>` script (Khronos `deqp/functional/gles3/attriblocation.html`)
+- **THEN** the `<body>` script finds the namespace defined and the page goes on to create its context, instead of throwing `ReferenceError: functional is not defined`
+
+### Requirement: Closure-loaded scripts fail on their own
+An uncaught error in a file the Closure loader imports SHALL be recorded as the page's escaped error (Escaped script errors) and SHALL NOT stop the remaining imports. A file the loader names that is missing, outside the suite root or on another origin SHALL NOT be run.
+
+#### Scenario: Error in an imported file
+- **WHEN** one file the loader imports throws at its top level and the page expects to pass
+- **THEN** that error is recorded as the page's escaped error with the imported file named in it, the files imported after it still run, and the page is judged as any page with an escaped error is
+
+#### Scenario: Imported file missing
+- **WHEN** the dependency table names a file that does not exist under the suite root, or one on another origin
+- **THEN** the file is not run, the namespaces it would provide stay undefined, and the page fails from its own scripts rather than with a harness error
+
 ### Requirement: Page outcome
 Each page run SHALL have exactly one outcome, taken from the first rule that applies. `CRASH`: its process dies from a signal or abort the runner did not send, even after the page reported, or does not exit 30 s after completing. `FAIL`: a script error escapes in a page that ends early on errors. `TIMEOUT`: it goes the time limit without a new result. `FAIL`: it completes with a failing result or no results. `PASS`: it completes with at least one result, all succeeding.
 

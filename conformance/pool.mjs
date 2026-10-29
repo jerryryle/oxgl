@@ -28,7 +28,7 @@ export function pageURL(origin, suite, path) {
  */
 export async function runPages(
   pages,
-  { origin, jobs = defaultJobs(), timeoutMs, teardownMs = TEARDOWN_MS, fastErrors = false, script = PAGE_SCRIPT, onResult },
+  { origin, root, jobs = defaultJobs(), timeoutMs, teardownMs = TEARDOWN_MS, fastErrors = false, script = PAGE_SCRIPT, onResult },
 ) {
   const results = new Array(pages.length);
   let next = 0;
@@ -38,7 +38,7 @@ export async function runPages(
       next += 1;
       const page = pages[index];
       const endEarly = fastErrors || page.expected === 'FAIL';
-      const result = await runOne(script, pageURL(origin, page.suite, page.path), { endEarly, timeoutMs, teardownMs });
+      const result = await runOne(script, pageURL(origin, page.suite, page.path), { endEarly, root, timeoutMs, teardownMs });
       results[index] = { suite: page.suite, path: page.path, expected: page.expected, ...result };
       onResult?.(results[index]);
     }
@@ -51,10 +51,10 @@ const STDERR_TAIL = 4096;
 /** Time a page that has reported its outcome gets to tear down and exit. */
 export const TEARDOWN_MS = 30_000;
 
-function runOne(script, url, { endEarly, timeoutMs, teardownMs }) {
+function runOne(script, url, { endEarly, root, timeoutMs, teardownMs }) {
   const started = performance.now();
   return new Promise((done) => {
-    const child = fork(script, [url, JSON.stringify({ endEarly })], { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+    const child = fork(script, [url, JSON.stringify({ endEarly, root })], { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
     let message;
     let stderr = '';
     let timedOut = false;

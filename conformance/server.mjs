@@ -70,7 +70,7 @@ export async function startServer(root) {
 }
 
 /** The file under `base` a request URL names, or undefined when it is outside `base` or malformed. */
-function resolveFile(base, url) {
+export function resolveFile(base, url) {
   let path;
   try {
     path = decodeURIComponent(new URL(url, 'http://localhost').pathname);
