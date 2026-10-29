@@ -193,6 +193,13 @@ The root `package.json` SHALL expose `npm run conformance`, which runs both suit
 - **WHEN** a developer runs the command with the update option
 - **THEN** the run is judged against the expectations it writes, the expectations entries for the pages that ran are replaced with their outcomes, existing reasons are kept for entries whose outcome is unchanged, entries for pages that now pass are removed, on a run of whole suites entries for pages those suites no longer contain are removed, and new or changed entries take the page's first escaped error as their reason, or its first failure message when it has none (for `TIMEOUT` and `CRASH`, `no new result within the time limit` / `crashed`, followed by the first escaped error's message when there is one), reduced to its first line and at most 200 characters; the command then exits zero unless the expectations file could not be parsed or a page had a harness error
 
+### Requirement: Pages run in parallel
+The conformance command SHALL accept an option setting how many pages run at once, defaulting to the number of CPUs available to the process (at least one).
+
+#### Scenario: Default parallelism
+- **WHEN** a developer runs the command without the parallelism option on a machine where 4 CPUs are available to the process
+- **THEN** up to 4 pages run at once, and the report records 4 as the number of pages run in parallel
+
 ### Requirement: Backend follows the environment
 The runner SHALL create contexts with the backend selected by `OXGL_BACKEND` (backend-selection), and the report SHALL record that requested backend (`auto` when unset). Under `auto` the report does not say which backend served each context; runs meant to be compared set `OXGL_BACKEND` explicitly.
 
