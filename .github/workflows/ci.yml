@@ -286,7 +286,7 @@ jobs:
           key: conformance-suite-${{ hashFiles('conformance/suite.json') }}
       - run: npm ci
       - run: npm run build
-      - run: npm run conformance -- --suite "$SUITE"
+      - run: npm run conformance -- --suite "$SUITE" --jobs 4
         env:
           SUITE: ${{ matrix.suite }}
           OXGL_BACKEND: software
