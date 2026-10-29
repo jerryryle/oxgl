@@ -2,7 +2,7 @@
 
 ## Why
 
-Once `webgl-idl-constants` (jerryryle/oxgl#22) lands, the harness's own runner keeps every Khronos `deqp/` page from reaching a WebGL call. (On `main` today they fail even earlier, as `webgl-test-utils.js` fails at load.) On #22's branch, CI run 40783921762 showed 718 pages under `deqp/functional/gles3/` failing with `ReferenceError: functional is not defined` and 64 under `deqp/data/` (the `gles2` shader pages in `webgl1`, the `gles3` ones in `webgl2`) failing with `modules is not defined`. So about 780 of the 3,836 page runs measure the runner, not oxgl. (`expectations.txt` on `main` lists 759 `deqp/functional/gles3/` entries; the other 41 fail that run for other reasons.) For the WebGL 2 suite, the deqp pages are most of the API coverage beyond `conformance2/`.
+Once `webgl-idl-constants` (jerryryle/oxgl#22) lands, the harness's own runner keeps every Khronos `deqp/` page from reaching a WebGL call. (On `main` today they fail even earlier, as `webgl-test-utils.js` fails at load.) On #22's branch, CI run 40783921762 showed 718 pages under `deqp/functional/gles3/` failing with `ReferenceError: functional is not defined` and 64 under `deqp/data/` (the `gles2` shader pages in `webgl1`, the `gles3` ones in `webgl2`) failing with `modules is not defined`. So about 780 of the 3,836 page runs measure the runner, not oxgl. For the WebGL 2 suite, the deqp pages are most of the API coverage beyond `conformance2/`.
 
 Each deqp page loads `closure-library/closure/goog/base.js` and `deqp/deqp-deps.js` in its `<head>`, then calls `goog.require('functional.gles3.…')` from an inline script. A later inline script in `<body>` uses that namespace. Uncompiled Closure loads each required file by calling `document.write('<script src=…>')` (`goog.writeScriptTag_`). A browser treats a script written this way as parser-blocking: it runs before the parser moves past the writing script (HTML Standard §8.4.3 `document.write()`, §4.12.1.1 "prepare the script element"). The official harness runs pages in a browser iframe, so the namespace exists by the time `<body>` runs.
 
@@ -21,7 +21,7 @@ jsdom (30.1.3) does run the written scripts, but too late. It parses the whole d
 
 ## Impact
 
-- `conformance/page.mjs` (the hook), `conformance/server.mjs` (exports its path resolution), `conformance/pool.mjs` and `conformance/run.mjs` (pass the suite root), a fixture page and a test in `test/conformance-harness.test.mjs`, and `conformance/expectations.txt`.
+- `conformance/page.mjs` (the hook), `conformance/server.mjs` (exports its path resolution), `conformance/pool.mjs` and `conformance/run.mjs` (pass the suite root), fixture pages with a minimal Closure-style loader under `test/fixtures/conformance/` and tests for them in `test/conformance-harness.test.mjs` (offline, like the existing harness tests), and `conformance/expectations.txt`.
 - No change to oxgl's API or native code.
 - Depends on `webgl-idl-constants` landing first. Until it does, `webgl-test-utils.js` still fails before any deqp page reaches `goog.require`, so the expectations rerun waits for it.
 - CI time: deqp pages that now load run until their first escaped error (they are expected `FAIL`, so they end early) or report many cases. The rerun compares each suite's wall-clock time with a run of `main` after #22, without this change.

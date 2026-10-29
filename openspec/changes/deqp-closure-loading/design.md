@@ -48,4 +48,4 @@ Alternatives considered:
 
 - A `document.write` by a page script after it calls `goog.require` would be misplaced, because inserting an imported script clears jsdom's writer marker. No pinned page does this. A later pin that adds one shows up in its expectations rerun.
 
-A file that cannot be read fails the page the same way a failed script load fails it in a browser.
+A file that cannot be read is not a trade-off: it fails the page the same way a failed script load fails it in a browser.
