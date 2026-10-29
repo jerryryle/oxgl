@@ -10,7 +10,7 @@ jsdom (30.1.3) does run the written scripts, but too late. It parses the whole d
 
 ## What Changes
 
-- The page child sets Closure's documented loader hook, `CLOSURE_IMPORT_SCRIPT`, on every window it shims. Closure calls the hook in place of `goog.writeScriptTag_` and offers it for exactly this case: a context where `document.write` will not load scripts. The hook reads the requested file from the suite root through the same path resolution as the runner's server. It then runs the file at once as an inline `<script>` element inserted into the document, which jsdom runs synchronously and which reports errors through the page's normal error path. Required files therefore run in dependency order, before `goog.require` returns, as they do in a browser.
+- The page child sets Closure's documented loader hook, `CLOSURE_IMPORT_SCRIPT`, on every window it shims. Closure calls the hook in place of `goog.writeScriptTag_`; base.js documents it as the override for loading scripts without `document.write` (there, for non-HTML contexts such as web workers). The hook reads the requested file from the suite root through the same path resolution as the runner's server. It then runs the file at once as an inline `<script>` element inserted into the document, which jsdom runs synchronously and which reports errors through the page's normal error path. Required files therefore run in dependency order, before `goog.require` returns, as they do in a browser.
 - The child is told the suite root alongside its existing options.
 - The deqp expectations are regenerated, and the reasons that appear once the pages load are reviewed.
 
