@@ -17,7 +17,7 @@ Pages run about 25% slower each, but the longest gap stays about 1 s against the
 ## What Changes
 
 - `npm run conformance` runs as many pages at once as there are CPUs available to the process (`os.availableParallelism()`), instead of half of them. `--jobs` still overrides it.
-- The `Conformance command` requirement names the parallelism option and its default, so the default cannot drift back silently.
+- A new `Pages run in parallel` requirement names the parallelism option and its default, so the default cannot drift back silently.
 - `CONTRIBUTING.md` states the new default.
 
 ## Capabilities
@@ -28,7 +28,7 @@ None.
 
 ### Modified Capabilities
 
-- `conformance-testing`: the "Conformance command" requirement gains the parallelism option and its default, with a scenario for the default.
+- `conformance-testing`: gains the "Pages run in parallel" requirement, naming the parallelism option and its default, with a scenario for the default.
 
 ## Impact
 

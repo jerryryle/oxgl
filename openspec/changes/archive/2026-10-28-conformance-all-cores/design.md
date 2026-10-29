@@ -15,7 +15,7 @@ See proposal.md for the measurements. The `conformance-harness` design chose `ma
 - **Default to `max(1, os.availableParallelism())`.** On the 4-CPU CI runner, 4 pages at once gave identical outcomes on all 3,836 pages and a longest passing gap of 1,119 ms, under a tenth of the 20 s limit, against the half-limit check the harness design set. Most of a page's time is process startup and jsdom parsing, which is single-threaded, so the extra SwiftShader threads rarely compete.
   - *Rejected: more pages than CPUs.* Pages are CPU-bound during startup, so oversubscribing would slow every page without shortening the run much, and it moves gaps toward the limit.
   - *Rejected: setting `--jobs 4` only in CI.* It would leave local runs at half speed and the default argued from a risk the measurement did not find.
-- **The default goes into the spec.** The number of pages run at once affects which pages can time out, which is why the report already records it. Naming the default in the "Conformance command" requirement makes a future change to it a spec change.
+- **The default goes into the spec.** The number of pages run at once affects which pages can time out, which is why the report already records it. Naming the default in its own requirement ("Pages run in parallel") makes a future change to it a spec change.
 
 Safety rules: JS-only change to the test runner; no `unsafe`, handles or ArrayBuffer lifetimes are touched.
 
