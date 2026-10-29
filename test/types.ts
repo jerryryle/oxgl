@@ -28,7 +28,26 @@ expectType<Equal<typeof either, WebGLRenderingContext | WebGL2RenderingContext>>
 expectType<Equal<typeof gl1.COLOR_BUFFER_BIT, 0x00004000>>();
 expectType<Equal<typeof WebGL2RenderingContext.CONTEXT_LOST_WEBGL, 0x9242>>();
 expectType<Equal<ReturnType<typeof gl2.getError>, number>>();
-export { gl1Explicit, gl2, either };
+expectType<Equal<typeof WebGLRenderingContext.RGBA, 0x1908>>();
+expectType<Equal<typeof WebGLRenderingContext.prototype.RGBA, 0x1908>>();
+expectType<Equal<typeof gl1.RGBA, 0x1908>>();
+expectType<Equal<typeof gl2.READ_BUFFER, 0x0c02>>();
+expectType<Equal<typeof WebGL2RenderingContext.TIMEOUT_IGNORED, -1>>();
+// @ts-expect-error -- WebGL 2-only constant on the WebGL 1 interface object
+expectType<Equal<typeof WebGLRenderingContext.READ_BUFFER, 0x0c02>>();
+// @ts-expect-error -- WebGL 2-only constant on a WebGL 1 context
+expectType<Equal<typeof gl1.READ_BUFFER, 0x0c02>>();
+
+function narrowed(value: unknown): number | undefined {
+  if (value instanceof WebGLRenderingContext) {
+    expectType<Equal<typeof value, WebGLRenderingContext>>();
+    return value.COLOR_BUFFER_BIT;
+  }
+  if (value instanceof WebGL2RenderingContext) return value.READ_BUFFER;
+  return undefined;
+}
+const asType: WebGLRenderingContext | WebGL2RenderingContext = either;
+export { gl1Explicit, gl2, either, narrowed, asType };
 
 gl1.clearColor(0, 0, 0, 1);
 gl1.clear(gl1.COLOR_BUFFER_BIT);

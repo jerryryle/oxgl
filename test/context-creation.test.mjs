@@ -28,6 +28,49 @@ test('contexts cannot be constructed directly', () => {
   assert.throws(() => new WebGL2RenderingContext(), TypeError);
 });
 
+test('WebGL IDL constants: complete sets on the interface objects', () => {
+  // The IDL's WebGLRenderingContextBase and WebGL2RenderingContextBase mixins
+  // declare 297 and 262 constants; nothing else is an enumerable own property.
+  assert.equal(Object.keys(WebGLRenderingContext).length, 297);
+  assert.equal(Object.keys(WebGL2RenderingContext).length, 297 + 262);
+  assert.equal(WebGLRenderingContext.POINTS, 0);
+  assert.equal(WebGLRenderingContext.COLOR_BUFFER_BIT, 0x00004000);
+  assert.equal(WebGL2RenderingContext.INVALID_INDEX, 0xffffffff);
+  assert.equal(WebGL2RenderingContext.TIMEOUT_IGNORED, -1);
+  assert.equal(WebGLRenderingContext.name, 'WebGLRenderingContext');
+  assert.equal(WebGL2RenderingContext.name, 'WebGL2RenderingContext');
+});
+
+test('WebGL IDL constants: WebIDL property attributes', () => {
+  for (const target of [
+    WebGLRenderingContext,
+    WebGLRenderingContext.prototype,
+    WebGL2RenderingContext,
+    WebGL2RenderingContext.prototype,
+  ]) {
+    assert.deepEqual(Object.getOwnPropertyDescriptor(target, 'RGBA'), {
+      value: 0x1908,
+      writable: false,
+      enumerable: true,
+      configurable: false,
+    });
+  }
+  for (const webgl2 of [false, true]) {
+    const gl = createContext({ width: 1, height: 1, webgl2 });
+    assert.equal(gl.RGBA, 0x1908);
+    assert.equal(Object.hasOwn(gl, 'RGBA'), false);
+    gl.destroy();
+  }
+});
+
+test('WebGL IDL constants: WebGL 2-only constants absent from WebGL 1', () => {
+  const gl = createContext({ width: 1, height: 1 });
+  assert.equal(WebGLRenderingContext.READ_BUFFER, undefined);
+  assert.equal(gl.READ_BUFFER, undefined);
+  assert.equal(WebGL2RenderingContext.READ_BUFFER, 0x0c02);
+  gl.destroy();
+});
+
 test('headless host: no DISPLAY or WAYLAND_DISPLAY', () => {
   const env = { ...process.env };
   delete env.DISPLAY;

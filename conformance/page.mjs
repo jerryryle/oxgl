@@ -17,6 +17,7 @@ import { JSDOM, VirtualConsole } from 'jsdom';
 import { native } from '../dist/native.js';
 
 const CONTEXT_URL = new URL('../dist/context.js', import.meta.url);
+const CONSTANTS_URL = new URL('../dist/generated/webgl-constants.js', import.meta.url);
 
 // jsdom gives a frame a new window each time it navigates, through this
 // module's createWindow, and offers no public hook for it.
@@ -179,11 +180,21 @@ function loadOxgl(window) {
 
 let contextBody;
 
-/** dist/context.js as a function body returning its exports; computed once per process. */
+/**
+ * dist/context.js as a function body returning its exports; computed once per
+ * process. The generated constants module it imports is inlined on the import's
+ * line, joined into one line so stack traces keep context.js line numbers.
+ */
 function contextSource() {
+  const constants = readFileSync(CONSTANTS_URL, 'utf8')
+    // The generated module holds no strings, so every `//` starts a comment.
+    .replace(/\/\/.*$/gm, '')
+    .replace(/^export const /gm, 'const ')
+    .replace(/\s*\n\s*/g, ' ');
   const body = readFileSync(CONTEXT_URL, 'utf8')
     .replace("import { native } from './native.js';", '')
-    .replace(/^export (class|function) /gm, '$1 ');
+    .replace(/^import \{[^}]*\} from '\.\/generated\/webgl-constants\.js';$/m, constants)
+    .replace(/^export (class|function|const) /gm, '$1 ');
   if (/^\s*(import|export)\b/m.test(body)) {
     throw new Error('dist/context.js has imports or exports the conformance runner does not handle');
   }

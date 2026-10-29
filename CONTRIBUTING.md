@@ -103,6 +103,10 @@ fetches it into `.cache/conformance/`, and later runs reuse that copy until the
 pin changes. Each page runs in jsdom in its own Node process, with
 `canvas.getContext` returning oxgl contexts.
 
+The WebGL constants in `src/generated/webgl-constants.ts` come from the IDL
+files at the same commit. When you move the pin, regenerate them with `node
+scripts/webgl-constants.mjs` and commit the result.
+
 There are two suites. `webgl1` runs the 1.0.x test list with WebGL 1 contexts,
 and `webgl2` runs the 2.0.x list, which includes `conformance/`, with WebGL 2
 contexts. Every page gets one outcome: `PASS`, `FAIL`, `TIMEOUT` or `CRASH`.
