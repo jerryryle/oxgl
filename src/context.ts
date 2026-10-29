@@ -4,6 +4,7 @@
 // code never re-enters JS (conversions can call user `valueOf`). This file is
 // the seam a WebIDL generator will own (src/generated/).
 import { native } from './native.js';
+import { WEBGL1_CONSTANTS, WEBGL2_CONSTANTS } from './generated/webgl-constants.js';
 
 /** Backend for `createContext`; `OXGL_BACKEND` overrides it. */
 export type ContextBackend = 'auto' | 'gpu' | 'software';
@@ -21,24 +22,6 @@ export interface ContextOptions {
 }
 
 const BACKENDS: readonly string[] = ['auto', 'gpu', 'software'];
-
-/** WebGL IDL constants the current members use (WebGL 1.0 §5.14). */
-const CONSTANTS = {
-  DEPTH_BUFFER_BIT: 0x00000100,
-  STENCIL_BUFFER_BIT: 0x00000400,
-  COLOR_BUFFER_BIT: 0x00004000,
-  NO_ERROR: 0,
-  INVALID_ENUM: 0x0500,
-  INVALID_VALUE: 0x0501,
-  INVALID_OPERATION: 0x0502,
-  OUT_OF_MEMORY: 0x0505,
-  INVALID_FRAMEBUFFER_OPERATION: 0x0506,
-  CONTEXT_LOST_WEBGL: 0x9242,
-  UNSIGNED_BYTE: 0x1401,
-  RGBA: 0x1908,
-} as const;
-
-type Constants = typeof CONSTANTS;
 
 type ContextKey = readonly [index: number, version: number];
 
@@ -82,33 +65,6 @@ function requireArguments(name: string, required: number, given: number): void {
  * mixin). Not exported: as in browsers, the two context classes are unrelated.
  */
 abstract class ContextBase {
-  // Constants, defined on the classes and prototypes below from CONSTANTS;
-  // `ConstantsDeclared` fails to compile if one is missing here.
-  declare static readonly DEPTH_BUFFER_BIT: Constants['DEPTH_BUFFER_BIT'];
-  declare static readonly STENCIL_BUFFER_BIT: Constants['STENCIL_BUFFER_BIT'];
-  declare static readonly COLOR_BUFFER_BIT: Constants['COLOR_BUFFER_BIT'];
-  declare static readonly NO_ERROR: Constants['NO_ERROR'];
-  declare static readonly INVALID_ENUM: Constants['INVALID_ENUM'];
-  declare static readonly INVALID_VALUE: Constants['INVALID_VALUE'];
-  declare static readonly INVALID_OPERATION: Constants['INVALID_OPERATION'];
-  declare static readonly OUT_OF_MEMORY: Constants['OUT_OF_MEMORY'];
-  declare static readonly INVALID_FRAMEBUFFER_OPERATION: Constants['INVALID_FRAMEBUFFER_OPERATION'];
-  declare static readonly CONTEXT_LOST_WEBGL: Constants['CONTEXT_LOST_WEBGL'];
-  declare static readonly UNSIGNED_BYTE: Constants['UNSIGNED_BYTE'];
-  declare static readonly RGBA: Constants['RGBA'];
-  declare readonly DEPTH_BUFFER_BIT: Constants['DEPTH_BUFFER_BIT'];
-  declare readonly STENCIL_BUFFER_BIT: Constants['STENCIL_BUFFER_BIT'];
-  declare readonly COLOR_BUFFER_BIT: Constants['COLOR_BUFFER_BIT'];
-  declare readonly NO_ERROR: Constants['NO_ERROR'];
-  declare readonly INVALID_ENUM: Constants['INVALID_ENUM'];
-  declare readonly INVALID_VALUE: Constants['INVALID_VALUE'];
-  declare readonly INVALID_OPERATION: Constants['INVALID_OPERATION'];
-  declare readonly OUT_OF_MEMORY: Constants['OUT_OF_MEMORY'];
-  declare readonly INVALID_FRAMEBUFFER_OPERATION: Constants['INVALID_FRAMEBUFFER_OPERATION'];
-  declare readonly CONTEXT_LOST_WEBGL: Constants['CONTEXT_LOST_WEBGL'];
-  declare readonly UNSIGNED_BYTE: Constants['UNSIGNED_BYTE'];
-  declare readonly RGBA: Constants['RGBA'];
-
   readonly #index: number;
   readonly #version: number;
   // Zeroed by destroy(), as Chromium reports for a lost context.
@@ -161,9 +117,9 @@ abstract class ContextBase {
   /** WebGL 1.0 §5.14.3. */
   getError(): number {
     if (this.#destroyed) {
-      if (this.#lostReported) return CONSTANTS.NO_ERROR;
+      if (this.#lostReported) return WEBGL1_CONSTANTS.NO_ERROR;
       this.#lostReported = true;
-      return CONSTANTS.CONTEXT_LOST_WEBGL;
+      return WEBGL1_CONSTANTS.CONTEXT_LOST_WEBGL;
     }
     return native.getError(this.#index, this.#version);
   }
@@ -203,24 +159,41 @@ abstract class ContextBase {
   }
 }
 
-/** A WebGL 1 context (WebGL 1.0 §5.14). */
-export class WebGLRenderingContext extends ContextBase {}
+type WithConstants<A extends unknown[], I, K> = K & { readonly prototype: I & K; new (...args: A): I & K };
 
-/** A WebGL 2 context (WebGL 2.0 §4.7). */
-export class WebGL2RenderingContext extends ContextBase {}
-
-/** Compile-time check: every constant is declared on instances and classes. */
-type Assert<T extends true> = T;
-export type ConstantsDeclared = Assert<
-  [Exclude<keyof Constants, keyof ContextBase & keyof typeof ContextBase>] extends [never] ? true : false
->;
-
-// WebIDL constants: on the interface object and its prototype, read-only.
-for (const target of [WebGLRenderingContext, WebGLRenderingContext.prototype, WebGL2RenderingContext, WebGL2RenderingContext.prototype]) {
-  for (const [name, value] of Object.entries(CONSTANTS)) {
-    Object.defineProperty(target, name, { value, writable: false, enumerable: true, configurable: false });
+/**
+ * Defines `table` as WebIDL constants (WebIDL §3.7.1) on the interface object
+ * `cls` and its prototype: read-only, enumerable, not configurable.
+ */
+function withConstants<A extends unknown[], I extends object, K extends Readonly<Record<string, number>>>(
+  cls: new (...args: A) => I,
+  table: K,
+): WithConstants<A, I, K> {
+  for (const target of [cls, cls.prototype] as object[]) {
+    for (const [name, value] of Object.entries(table)) {
+      Object.defineProperty(target, name, { value, writable: false, enumerable: true, configurable: false });
+    }
   }
+  return cls as unknown as WithConstants<A, I, K>;
 }
+
+type ContextArguments = ConstructorParameters<typeof ContextBase>;
+type WebGL1Constants = typeof WEBGL1_CONSTANTS;
+type WebGL2Constants = typeof WEBGL2_CONSTANTS;
+
+/** A WebGL 1 context (WebGL 1.0 §5.14). */
+export interface WebGLRenderingContext extends ContextBase, WebGL1Constants {}
+export const WebGLRenderingContext: WebGL1Constants & {
+  readonly prototype: WebGLRenderingContext;
+  new (...args: ContextArguments): WebGLRenderingContext;
+} = withConstants(class WebGLRenderingContext extends ContextBase {}, WEBGL1_CONSTANTS);
+
+/** A WebGL 2 context (WebGL 2.0 §3.7). */
+export interface WebGL2RenderingContext extends ContextBase, WebGL2Constants {}
+export const WebGL2RenderingContext: WebGL2Constants & {
+  readonly prototype: WebGL2RenderingContext;
+  new (...args: ContextArguments): WebGL2RenderingContext;
+} = withConstants(class WebGL2RenderingContext extends ContextBase {}, WEBGL2_CONSTANTS);
 
 function codedError(code: string, message: string): Error {
   return Object.assign(new Error(message), { code });
