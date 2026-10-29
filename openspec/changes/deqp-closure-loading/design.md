@@ -20,9 +20,10 @@ jsdom 30.1.3 behaviour, read from its source and checked against the pinned suit
 
 `installShim` sets `window.CLOSURE_IMPORT_SCRIPT = (src, text) => …`:
 
-1. Resolve `src` against the window's URL. If it is not same-origin with the page, return `false`. Closure then neither loads nor marks the file, and the missing namespace fails the page as a failed load would in a browser.
-2. Unless `text` is given, read the file with `readFileSync` from the suite root, using the path resolution `server.mjs` already applies to requests (exported from there, so the two cannot disagree about what is inside the root). A missing file or a path outside the root returns `false`, the equivalent of a 404.
-3. Create a `<script>` element, set its text to the source followed by `//# sourceURL=<src>` so stack traces and recorded errors name the deqp file and not the page, append it to `document.head`, and return `true`.
+1. If `document.readyState` is `complete`, throw `Error('Cannot write "<src>" after document load')`, as `goog.writeScriptTag_` does; for a `deps.js` src return `false` instead, as it also does. A `goog.require` after load then fails as it does in a browser. During the deqp pages' own requires `readyState` is `loading` (checked in jsdom 30.1.3 on `attriblocation.html`).
+2. Resolve `src` against the window's URL. If it is not same-origin with the page, return `false`. Closure then neither loads nor marks the file, and the missing namespace fails the page as a failed load would in a browser.
+3. Unless `text` is given, read the file with `readFileSync` from the suite root, using the path resolution `server.mjs` already applies to requests (exported from there, so the two cannot disagree about what is inside the root). A missing file or a path outside the root returns `false`, the equivalent of a 404.
+4. Create a `<script>` element, set its text to the source followed by `//# sourceURL=<src>` so stack traces and recorded errors name the deqp file and not the page, append it to `document.head`, and return `true`.
 
 This gives browser order. Each required file runs inside `goog.require`, dependencies first, so the namespaces exist when the `<head>` script returns and before the parser-queued `<body>` script runs. It also gives browser error semantics. An error in one file is an escaped error of the page, reported as one, and loading continues with the next file. In a browser, too, each written script fails on its own. Being a global the page can see does not matter: only Closure reads it, and no other suite page loads Closure.
 
