@@ -9,13 +9,6 @@ When a page loads scripts through the Closure Library's uncompiled loader (`goog
 - **WHEN** a page calls `goog.require('functional.gles3.es3fAttribLocationTests')` from a `<head>` script and calls that namespace's `run` from a later `<body>` script (Khronos `deqp/functional/gles3/attriblocation.html`)
 - **THEN** the `<body>` script finds the namespace defined and the page goes on to create its context, instead of throwing `ReferenceError: functional is not defined`
 
-### Requirement: Closure imports end with parsing
-A Closure import requested once the document's `readyState` is no longer `loading` (from `DOMContentLoaded` on) SHALL throw instead of running, except Closure's own `deps.js`, which SHALL be skipped without an error, as Closure's `document.write` loader skips it.
-
-#### Scenario: Require after DOMContentLoaded
-- **WHEN** a page calls `goog.require` for a file not yet loaded from a timer that runs after `DOMContentLoaded`
-- **THEN** the call throws, the file is not run, and the error is recorded as the page's escaped error. A browser fails such a page too, by throwing after `load` or by wiping the page before it, so the outcome matches though the mechanism differs
-
 ### Requirement: Closure-loaded scripts fail on their own
 An uncaught error in a file the Closure loader imports SHALL be recorded as the page's escaped error (Escaped script errors) and SHALL NOT stop the remaining imports. A file the loader names that is missing, outside the suite root or on another origin SHALL NOT be run.
 

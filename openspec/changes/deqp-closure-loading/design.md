@@ -6,7 +6,7 @@ See proposal.md for the failure and its cause. The parts of the pinned suite tha
 
 - `closure-library/closure/goog/base.js` (uncompiled, `goog.ENABLE_DEBUG_LOADER` true). `goog.require(name)` looks the name up in the dependency table that `deqp/deqp-deps.js` fills with `goog.addDependency`, then `goog.writeScripts_` walks the requirements depth-first and calls `goog.importScript_(src)` once per file, dependencies first. `goog.importScript_` calls `goog.global.CLOSURE_IMPORT_SCRIPT` if it is set and `goog.writeScriptTag_` (`document.write`) otherwise. A `true` return marks the file as written so it is never imported twice. At load, base.js also imports its own `deps.js` through the same function.
 - `src` is the URL of `base.js`'s directory joined with the relative path from `deqp-deps.js`. In jsdom `script.src` is absolute, so it is an absolute `http://127.0.0.1:<port>/…` URL on the runner's own server.
-- No deqp file is a `goog.module` (every `addDependency` call passes `false`), so the source-text form of the hook, `CLOSURE_IMPORT_SCRIPT('', text)`, is not used by this suite. It is handled anyway at no cost, by running the given text instead of reading a file.
+- No deqp file is a `goog.module` (every `addDependency` call passes `false`), so the source-text form of the hook, `CLOSURE_IMPORT_SCRIPT('', text)`, is not used by this suite. The hook returns `false` for it, so that form loads nothing, as Closure's own loader does outside an HTML document.
 
 jsdom 30.1.3 behaviour, read from its source and checked against the pinned suite:
 
@@ -20,10 +20,9 @@ jsdom 30.1.3 behaviour, read from its source and checked against the pinned suit
 
 `installShim` sets `window.CLOSURE_IMPORT_SCRIPT = (src, text) => …`:
 
-1. If `document.readyState` is not `loading`, throw `Error('Cannot write "<src>" after document load')`, as `goog.writeScriptTag_` does once the document is `complete`; for a `deps.js` src return `false` instead, as it also does. A `goog.require` from `DOMContentLoaded` on then fails as it does in a browser: after `load` Closure throws, and between `DOMContentLoaded` and `load` (`interactive`) its `document.write` would open a new document and wipe the page. During the deqp pages' own requires `readyState` is `loading` (checked in jsdom 30.1.3 on `attriblocation.html`).
-2. Resolve `src` against the window's URL. If it is not same-origin with the page, return `false`. Closure then neither loads nor marks the file, and the missing namespace fails the page as a failed load would in a browser.
-3. Unless `text` is given, read the file with `readFileSync` from the suite root, using the path resolution `server.mjs` already applies to requests (exported from there, so the two cannot disagree about what is inside the root). A missing file or a path outside the root returns `false`, the equivalent of a 404.
-4. Create a `<script>` element, set its text to the source followed by `//# sourceURL=<src>` so stack traces and recorded errors name the deqp file and not the page, append it to `document.head`, and return `true`.
+1. Resolve `src` against the window's URL. If it is not same-origin with the page, return `false`. Closure then neither loads nor marks the file, and the missing namespace fails the page as a failed load would in a browser.
+2. If `text` is given, return `false` (see Context). Otherwise read the file with `readFileSync` from the suite root, using the path resolution `server.mjs` already applies to requests (exported from there, so the two cannot disagree about what is inside the root). A missing file or a path outside the root returns `false`, the equivalent of a 404.
+3. Create a `<script>` element, set its text to the source followed by `//# sourceURL=<src>` so stack traces and recorded errors name the deqp file and not the page, append it to `document.head`, and return `true`.
 
 This gives browser order. Each required file runs inside `goog.require`, dependencies first, so the namespaces exist when the `<head>` script returns and before the parser-queued `<body>` script runs. It also gives browser error semantics. An error in one file is an escaped error of the page, reported as one, and loading continues with the next file. In a browser, too, each written script fails on its own. Being a global the page can see does not matter: only Closure reads it, and no other suite page loads Closure.
 
@@ -47,6 +46,7 @@ Alternatives considered:
 
 ## Accepted trade-offs
 
-- A `document.write` by a page script after it calls `goog.require` would be misplaced, because inserting an imported script clears jsdom's writer marker. No pinned page does this. A later pin that adds one shows up in its expectations rerun.
+- A `document.write` by a page script after it calls `goog.require` is misplaced, because jsdom clears its writer marker when an imported script runs. No pinned page does this.
+- A `goog.require` from `DOMContentLoaded` on still loads its file, where a browser fails the page (Closure throws after `load`, and its `document.write` wipes the page before it). No pinned page requires that late.
 
 A file that cannot be read is not a trade-off: it fails the page the same way a failed script load fails it in a browser.
