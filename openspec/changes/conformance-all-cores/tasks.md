@@ -6,7 +6,8 @@
 
 ## 2. CI verification
 
-- [ ] 2.1 In the PR's CI, verify that both `conformance` jobs pass with the reports recording `jobs: 4`, that no page's outcome differs from main's latest run, and that every passing page's `maxGapMs` is under 10 s (half the limit). Record both suites' wall-clock times in this task.
+- [x] 2.1 In the PR's CI, verify that both `conformance` jobs pass with the reports recording `jobs: 4`, that no page's outcome differs from main's latest run, and that every passing page's `maxGapMs` is under 10 s (half the limit). Record both suites' wall-clock times in this task.
+  - Result: verified by the measurement run 40812778860 (draft PR #24, `--jobs 4` at commit 90e95e9) against main's run 40812499245 at the same commit: both jobs passed, 0 of 3,836 outcomes differ, the longest passing `maxGapMs` is 1,119 ms, and `webgl1` took 418 s and `webgl2` 1,048 s.
 
 ## Workflow follow-up
 
