@@ -1,0 +1,12 @@
+# Tasks
+
+## 1. Loader hook
+
+- [ ] 1.1 Export `server.mjs`'s request path resolution, pass the suite root from `run.mjs` through `pool.mjs` to the page child in its options JSON, and set `CLOSURE_IMPORT_SCRIPT` in `installShim` as design.md describes (same-origin check, file read through the shared resolution or the given source text, inline `<script>` with a `sourceURL` comment appended to `document.head`, `true` on success and `false` otherwise). Verify with `npm run lint`.
+- [ ] 1.2 Add fixture pages under `test/fixtures/conformance/` with a minimal `base.js`-style loader that imports through `goog.importScript_`'s contract (`CLOSURE_IMPORT_SCRIPT` if set). Use one external script before the `goog.require` script, as deqp pages have, so the jsdom ordering bug reproduces without the hook. Cover the spec's three scenarios: a namespace used by a later `<body>` script (`PASS`), an imported file that throws while the page then completes with passing results (`PASS` with the error recorded and naming the imported file), and a missing imported file (`FAIL`, no harness error). Add them to `test/conformance-harness.test.mjs`, confirm the first fixture fails with the hook removed, and run `npm test` with `OXGL_BACKEND=software`.
+
+## 2. Expectations
+
+- [ ] 2.1 After `webgl-idl-constants` is merged and this branch is updated from `main`, rerun `npm run conformance -- --filter deqp/ --update` on Linux arm64 with `OXGL_BACKEND=software`, locally or in CI, for both suites. Record each suite's wall-clock time for the deqp pages and for the full CI conformance job in this task, against the current 447 s (`webgl1`) and 1,139 s (`webgl2`). If the `webgl2` job grows by more than about half, stop and bring the timings back for a decision before continuing.
+- [ ] 2.2 Review the reasons that appear once the pages load. Group the new entries by reason and record in this task the most common reasons with their counts. Confirm that no entry still reads `functional is not defined` or `modules is not defined`, and that none is a harness error. Convert any confirmed hang to `SKIP` with a reason, and make sure every `CRASH` entry names the follow-up that fixes it. Note any reason that points at the runner rather than oxgl (for example a missing DOM feature) as a follow-up instead of fixing it here.
+- [ ] 2.3 Verify that a plain `npm run conformance` passes in CI on the pull request with the updated expectations.
