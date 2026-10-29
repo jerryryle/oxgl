@@ -10,14 +10,14 @@ jsdom (30.1.3) does run the written scripts, but too late. It parses the whole d
 
 ## What Changes
 
-- The page child sets Closure's documented loader hook, `CLOSURE_IMPORT_SCRIPT`, on every window it shims. Closure calls the hook in place of `goog.writeScriptTag_` and offers it for exactly this case: a context where `document.write` will not load scripts. The hook reads the requested file from the suite root through the same path resolution as the runner's server. It then runs the file at once as an inline `<script>` element inserted into the document, which jsdom runs synchronously and which reports errors through the page's normal error path. Required files therefore run in dependency order, before `goog.require` returns, as they do in a browser.
+- The page child sets Closure's documented loader hook, `CLOSURE_IMPORT_SCRIPT`, on every window it shims. Closure calls the hook in place of `goog.writeScriptTag_` and offers it for exactly this case: a context where `document.write` will not load scripts. The hook reads the requested file from the suite root through the same path resolution as the runner's server. It then runs the file at once as an inline `<script>` element inserted into the document, which jsdom runs synchronously and which reports errors through the page's normal error path. Required files therefore run in dependency order, before `goog.require` returns, as they do in a browser. A `goog.require` made after the document has finished parsing throws instead, which pages see as an escaped error, where a browser would throw or wipe the page.
 - The child is told the suite root alongside its existing options.
 - The deqp expectations are regenerated, and the reasons that appear once the pages load are reviewed.
 
 ## Capabilities
 
 ### Modified Capabilities
-- `conformance-testing`: adds requirements that scripts a page loads through Closure's debug loader run in the order a browser runs them, and fail one at a time as they do in a browser.
+- `conformance-testing`: adds requirements that scripts a page loads through Closure's debug loader run in the order a browser runs them, are refused once parsing has ended, and fail one at a time as they do in a browser.
 
 ## Impact
 

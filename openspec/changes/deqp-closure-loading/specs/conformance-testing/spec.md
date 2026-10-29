@@ -3,14 +3,17 @@
 ## ADDED Requirements
 
 ### Requirement: Closure-loaded scripts run in browser order
-When a page loads scripts through the Closure Library's uncompiled loader (`goog.require` in `closure-library/closure/goog/base.js`, as every `deqp/` page does), each file the loader imports SHALL run before the import returns, dependencies first, as a script written with `document.write` during parsing runs in a browser (HTML Standard §8.4.3). An import requested after the document has loaded SHALL throw, as Closure's own `document.write` loader does.
+When a page loads scripts through the Closure Library's uncompiled loader (`goog.require` in `closure-library/closure/goog/base.js`, as every `deqp/` page does), each file the loader imports SHALL run before the import returns, dependencies first, as a script written with `document.write` during parsing runs in a browser (HTML Standard §8.4.3).
 
 #### Scenario: deqp namespace defined before the page uses it
 - **WHEN** a page calls `goog.require('functional.gles3.es3fAttribLocationTests')` from a `<head>` script and calls that namespace's `run` from a later `<body>` script (Khronos `deqp/functional/gles3/attriblocation.html`)
 - **THEN** the `<body>` script finds the namespace defined and the page goes on to create its context, instead of throwing `ReferenceError: functional is not defined`
 
-#### Scenario: Require after load
-- **WHEN** a page calls `goog.require` for a file not yet loaded from a timer that runs after the document's `load` event
+### Requirement: Closure imports end with parsing
+A Closure import requested after the document has finished parsing SHALL throw instead of running, except Closure's own `deps.js`, which SHALL be skipped without an error, as Closure's `document.write` loader skips it.
+
+#### Scenario: Require after parsing
+- **WHEN** a page calls `goog.require` for a file not yet loaded from a timer that runs after the document has finished parsing
 - **THEN** the call throws as it does in a browser, the file is not run, and the error is recorded as the page's escaped error
 
 ### Requirement: Closure-loaded scripts fail on their own
