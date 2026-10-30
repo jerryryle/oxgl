@@ -187,6 +187,8 @@ three.js scene.
 - libclang, which generates the EGL/GLES bindings at build time: Xcode's
   command-line tools on macOS, `libclang-dev` (or any LLVM install) on Linux,
   LLVM on Windows. Set `LIBCLANG_PATH` if it is not found.
+- For `npm run conformance`: ffmpeg (with ffprobe), which decodes the
+  suite's videos.
 - For the license check: cargo-deny and cargo-about at the versions CI pins
   (`CARGO_DENY_VERSION` and `CARGO_ABOUT_VERSION` in
   `.github/workflows/ci.yml`), installed with

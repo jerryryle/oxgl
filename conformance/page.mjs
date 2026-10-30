@@ -9,6 +9,7 @@
 // errors, at that first error; { type: 'harness-error', message } when the
 // runner itself fails. A page that never completes sends
 // nothing: the parent's time limit decides it.
+import { resolveObjectURL } from 'node:buffer';
 import { appendFileSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
@@ -21,6 +22,7 @@ import { native } from '../dist/native.js';
 import { bitmapPixels, imageBitmapClass, offscreenCanvasClass } from './offscreen.mjs';
 import { decodePng, encodePng } from './png.mjs';
 import { resolveFile } from './server.mjs';
+import { frameAt, probe, videoFile } from './video.mjs';
 import { decodeMessage, workerClass } from './workers.mjs';
 
 const { JSDOM, VirtualConsole, requestInterceptor } = jsdom;
@@ -338,8 +340,13 @@ function installShim(window, state) {
   // A WebGL canvas drawn into a 2D canvas, or exported with toDataURL,
   // shows its drawing buffer, which jsdom's own canvas does not have.
   const { canvasPixels } = oxgl;
-  const asImage = (canvas) => {
-    const pixels = canvasPixels(canvas);
+  // A WebGL canvas, a video or an ImageBitmap, which the canvas package
+  // cannot draw, as a 2D canvas of its pixels.
+  const asImage = (source) => {
+    const pixels =
+      source instanceof window.HTMLCanvasElement ? canvasPixels(source)
+      : source instanceof window.HTMLVideoElement ? videoFrame(source)
+      : bitmapPixels.get(source);
     if (pixels === undefined) return undefined;
     const scratch = window.document.createElement('canvas');
     scratch.width = pixels.width;
@@ -368,7 +375,7 @@ function installShim(window, state) {
     const own = context.drawImage;
     context.drawImage = function (image, ...rest) {
       if (!originClean(image)) tainted.add(this.canvas);
-      return own.call(this, (image instanceof window.HTMLCanvasElement && asImage(image)) || image, ...rest);
+      return own.call(this, asImage(image) ?? image, ...rest);
     };
     const getImageData = context.getImageData;
     context.getImageData = function (...args) {
@@ -390,6 +397,7 @@ function installShim(window, state) {
   oxgl.setImageDecoder((image) => {
     const bitmap = bitmapPixels.get(image);
     if (bitmap !== undefined) return bitmap;
+    if (image instanceof window.HTMLVideoElement) return videoFrame(image);
     if (!(image instanceof window.HTMLImageElement)) return undefined;
     let fetched = imageBytes.get(image);
     if (fetched?.url !== image.src) {
@@ -466,7 +474,7 @@ function installShim(window, state) {
   window.ImageData = canvasPackage().ImageData;
   if (state.root !== undefined) window.CLOSURE_IMPORT_SCRIPT = closureImport(window, state.root);
   deliverMessages(window);
-  failMedia(window);
+  playMedia(window);
   installWorkers(window, state.root);
   loadOnce(window);
 }
@@ -705,6 +713,7 @@ function installImageBitmap(window, decodeElement, canvasPixels) {
     if (bitmapPixels.has(source)) pixels = bitmapPixels.get(source);
     else if (typeof source?.arrayBuffer === 'function') pixels = decodeImage(Buffer.from(await source.arrayBuffer()));
     else if (source instanceof window.HTMLImageElement) pixels = decodeElement(source);
+    else if (source instanceof window.HTMLVideoElement) pixels = videoFrame(source);
     else if (ArrayBuffer.isView(source?.data)) pixels = { data: source.data, width: source.width, height: source.height };
     else if (source instanceof window.HTMLCanvasElement || source instanceof window.OffscreenCanvas) {
       pixels = canvasPixels(source) ?? source.getContext('2d')?.getImageData(0, 0, source.width, source.height);
@@ -844,46 +853,203 @@ function toRealm(window, value) {
   return value;
 }
 
-function failMedia(window) {
-  const failed = new WeakSet();
-  const fail = (element) => {
-    failed.add(element);
-    window.setTimeout(() => element.dispatchEvent(new window.Event('error')), 0);
-  };
-  const isMedia = (node) => node instanceof window.HTMLMediaElement;
+/** Media elements' loaded videos, by element. */
+const mediaState = new WeakMap();
+
+/**
+ * The current frame of a playing video element, as RGBA8 top row first, or
+ * `undefined` before it has loaded. Frames are decoded once per half second
+ * of media time.
+ */
+function videoFrame(video) {
+  const state = mediaState.get(video);
+  if (state?.info === undefined) return undefined;
+  const time = Math.floor(currentTime(state) * 2) / 2;
+  let frame = state.frames.get(time);
+  if (frame === undefined) {
+    frame = frameAt(state.file, time, state.info);
+    state.frames.set(time, frame);
+  }
+  return frame;
+}
+
+/** A media element's position in seconds, looping while it plays. */
+function currentTime(state) {
+  if (state.paused || state.info === undefined) return state.position;
+  const elapsed = state.position + (performance.now() - state.started) / 1000;
+  return state.loop ? elapsed % state.info.duration : Math.min(elapsed, state.info.duration);
+}
+
+/**
+ * Media elements that load, play and report their video's size, decoded by
+ * ffmpeg (HTML §4.8.11), enough for pages that upload video frames:
+ * `canPlayType` answers "maybe" for video types, `play()` resolves once
+ * the video has loaded, and `requestVideoFrameCallback` calls back on the
+ * next frame. Audio does not play.
+ */
+function playMedia(window) {
   const proto = window.HTMLMediaElement.prototype;
-  proto.play = function play() {
-    return window.Promise.reject(new window.DOMException('The element has no supported sources.', 'NotSupportedError'));
+  const videoProto = window.HTMLVideoElement.prototype;
+  const stateOf = (element) => {
+    let state = mediaState.get(element);
+    if (state === undefined) {
+      state = { file: undefined, info: undefined, error: null, loading: undefined, paused: true, position: 0, started: 0, loop: false, frames: new Map(), timer: undefined };
+      mediaState.set(element, state);
+    }
+    return state;
   };
+  const fire = (element, type) => element.dispatchEvent(new window.Event(type));
+  // A browser takes the first <source> whose type it can play (HTML §4.8.11.5).
+  const playable = (type) => type === null || canPlay(type);
+  const sourceOf = (element) =>
+    element.getAttribute('src') ||
+    [...element.querySelectorAll('source[src]')].find((source) => playable(source.getAttribute('type')))?.getAttribute('src') ||
+    '';
+  const bytesOf = async (href) => {
+    if (href.startsWith('data:')) return dataUrlBytes(href);
+    if (href.startsWith('blob:')) return Buffer.from(await resolveObjectURL(href)?.arrayBuffer() ?? new ArrayBuffer(0));
+    const response = await fetch(href);
+    if (!response.ok) throw new Error(`HTTP ${String(response.status)}`);
+    return Buffer.from(await response.arrayBuffer());
+  };
+  const load = (element) => {
+    const state = stateOf(element);
+    const src = sourceOf(element);
+    Object.assign(state, { file: undefined, info: undefined, error: null, paused: true, position: 0, frames: new Map() });
+    if (src === '') return;
+    const href = new URL(src, window.document.baseURI).href;
+    state.loading = (async () => {
+      const bytes = await bytesOf(href);
+      const file = videoFile(bytes ?? Buffer.alloc(0));
+      const info = probe(file);
+      if (info === undefined) throw new Error('no decodable video');
+      if (sourceOf(element) !== src) return;
+      Object.assign(state, { file, info });
+      for (const type of ['loadstart', 'durationchange', 'loadedmetadata', 'loadeddata', 'canplay', 'canplaythrough']) fire(element, type);
+    })().catch(() => {
+      state.error = { code: 4, message: 'MEDIA_ERR_SRC_NOT_SUPPORTED' };
+      fire(element, 'error');
+    });
+  };
+  const define = (target, name, get, set) => Object.defineProperty(target, name, { configurable: true, enumerable: true, get, set });
+  // Video, but not HEVC, whose alpha this ffmpeg does not decode: Chrome on
+  // Linux does not play it either.
+  const canPlay = (type) => /^video\//i.test(String(type)) && !/\b(hvc1|hev1)\b/i.test(String(type));
+  proto.canPlayType = function canPlayType(type) {
+    return canPlay(type) ? 'maybe' : '';
+  };
+  proto.load = function () {
+    load(this);
+  };
+  proto.play = function play() {
+    const state = stateOf(this);
+    if (state.loading === undefined) load(this);
+    // Without a source yet, play() waits for one to load or fail.
+    const loaded =
+      state.loading ??
+      new Promise((resolve) => {
+        this.addEventListener('loadeddata', resolve, { once: true });
+        this.addEventListener('error', resolve, { once: true });
+      });
+    return loaded.then(() => {
+      if (state.error !== null) throw new window.DOMException('The element has no supported sources.', 'NotSupportedError');
+      if (!state.paused) return;
+      state.paused = false;
+      state.started = performance.now();
+      fire(this, 'play');
+      fire(this, 'playing');
+      state.timer = setInterval(() => fire(this, 'timeupdate'), 250);
+      state.timer.unref?.();
+    });
+  };
+  proto.pause = function pause() {
+    const state = stateOf(this);
+    if (state.paused) return;
+    state.position = currentTime(state);
+    state.paused = true;
+    clearInterval(state.timer);
+    fire(this, 'pause');
+  };
+  define(proto, 'paused', function () {
+    return stateOf(this).paused;
+  });
+  define(proto, 'ended', () => false);
+  define(proto, 'error', function () {
+    return stateOf(this).error;
+  });
+  define(proto, 'readyState', function () {
+    return stateOf(this).info === undefined ? 0 : 4;
+  });
+  define(proto, 'duration', function () {
+    return stateOf(this).info?.duration ?? Number.NaN;
+  });
+  define(
+    proto,
+    'loop',
+    function () {
+      return this.hasAttribute('loop');
+    },
+    function (value) {
+      stateOf(this).loop = Boolean(value);
+      this.toggleAttribute('loop', Boolean(value));
+    },
+  );
+  define(
+    proto,
+    'currentTime',
+    function () {
+      return currentTime(stateOf(this));
+    },
+    function (value) {
+      const state = stateOf(this);
+      state.position = Number(value) || 0;
+      state.started = performance.now();
+      fire(this, 'seeking');
+      fire(this, 'seeked');
+      fire(this, 'timeupdate');
+    },
+  );
+  define(videoProto, 'videoWidth', function () {
+    return stateOf(this).info?.width ?? 0;
+  });
+  define(videoProto, 'videoHeight', function () {
+    return stateOf(this).info?.height ?? 0;
+  });
+  videoProto.requestVideoFrameCallback = function (callback) {
+    return setTimeout(() => {
+      const state = stateOf(this);
+      callback(performance.now(), { mediaTime: currentTime(state), width: state.info?.width ?? 0, height: state.info?.height ?? 0, presentedFrames: 1 });
+    }, 16);
+  };
+  videoProto.cancelVideoFrameCallback = (handle) => clearTimeout(handle);
+  // A new source loads the element, through the property or the attribute,
+  // and so does a parsed or inserted element that has one.
   const descriptor = Object.getOwnPropertyDescriptor(proto, 'src');
   if (descriptor?.set) {
     Object.defineProperty(proto, 'src', {
       ...descriptor,
       set(value) {
         descriptor.set.call(this, value);
-        if (String(value) !== '') fail(this);
+        load(this);
       },
     });
   }
   const setAttribute = window.Element.prototype.setAttribute;
   window.Element.prototype.setAttribute = function (name, value) {
     setAttribute.call(this, name, value);
-    if (isMedia(this) && String(name).toLowerCase() === 'src' && String(value) !== '') fail(this);
+    if (this instanceof window.HTMLMediaElement && String(name).toLowerCase() === 'src') load(this);
   };
-  // Elements from markup get their src without the setters above. The
-  // parser's are failed once parsing is done: in a browser their load ends
-  // after the scripts before them have run, which jsdom does not guarantee.
-  // Later ones (innerHTML) fail as they are inserted.
-  const failInserted = (node) => {
-    if (isMedia(node) && !failed.has(node) && node.getAttribute('src')) fail(node);
+  const loadInserted = (node) => {
+    if (node instanceof window.HTMLMediaElement && stateOf(node).loading === undefined && sourceOf(node) !== '') load(node);
   };
   window.document.addEventListener('DOMContentLoaded', () => {
-    window.document.querySelectorAll('video, audio').forEach(failInserted);
+    window.document.querySelectorAll('video, audio').forEach(loadInserted);
     new window.MutationObserver((records) => {
-      for (const record of records) record.addedNodes.forEach(failInserted);
+      for (const record of records) record.addedNodes.forEach(loadInserted);
     }).observe(window.document, { childList: true, subtree: true });
   });
 }
+
 
 /** The child's entry point: runs the page named on the command line. */
 export async function main(hooks = {}) {

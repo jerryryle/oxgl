@@ -366,6 +366,7 @@ test('page runner: outcomes, early errors, media, canvas shim, crashes, timeouts
         'context-2d.html',
         'image-2d.html',
         'video.html',
+        'video-frame.html',
         'messages.html',
         'rejected.html',
         'canvas-owner.html',
@@ -431,9 +432,11 @@ test('page runner: outcomes, early errors, media, canvas shim, crashes, timeouts
   assert.equal(outcome('webgl1', 'context-2d.html'), 'PASS', pageOf(report, 'webgl1', 'context-2d.html').message);
   // Image drawn into a 2D canvas: natural size and decoded pixels.
   assert.equal(outcome('webgl1', 'image-2d.html'), 'PASS', pageOf(report, 'webgl1', 'image-2d.html').message);
-  // Texture upload from a video: play() rejects and error fires promptly.
+  // A video that cannot load: play() rejects and error fires promptly.
   assert.equal(outcome('webgl1', 'video.html'), 'PASS', pageOf(report, 'webgl1', 'video.html').message);
   assert.ok(pageOf(report, 'webgl1', 'video.html').durationMs < PROMPT_MS);
+  // A video decoded by ffmpeg: it plays, and its frame uploads.
+  assert.equal(outcome('webgl1', 'video-frame.html'), 'PASS', pageOf(report, 'webgl1', 'video-frame.html').message);
   // Zero-timeout helper, message from a frame, mismatched target origin.
   assert.equal(outcome('webgl1', 'messages.html'), 'PASS', pageOf(report, 'webgl1', 'messages.html').message);
   // Creation rejected by oxgl: getContext returns null and the message is
@@ -566,6 +569,10 @@ test('Canvas package missing: the command stops before any page, naming canvas a
     throw new Error("Cannot find module 'canvas'");
   };
   await assert.rejects(main([], { fetchSuite: neverFetch, loadCanvas: missing }), /'canvas' package.*npm ci/);
+});
+
+test('ffmpeg missing: the command stops before any page, naming ffmpeg', async () => {
+  await assert.rejects(main([], { fetchSuite: neverFetch, hasFfmpeg: false }), /ffmpeg.*cannot be run/);
 });
 
 test('Entry without a reason: the command fails before running any page', async () => {

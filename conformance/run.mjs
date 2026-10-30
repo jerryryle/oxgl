@@ -11,6 +11,7 @@ import { listPages, SUITES } from './lists.mjs';
 import { defaultJobs, runPages } from './pool.mjs';
 import { startServer } from './server.mjs';
 import { ensureSuite, readPin, REPO_ROOT } from './suite.mjs';
+import { ffmpegAvailable } from './video.mjs';
 
 export const EXPECTATIONS_PATH = join(REPO_ROOT, 'conformance', 'expectations.txt');
 export const REPORT_PATH = join(REPO_ROOT, 'conformance-results.json');
@@ -153,9 +154,19 @@ export function requireCanvas(load = () => createRequire(import.meta.url)('canva
   }
 }
 
+/**
+ * Checks for ffmpeg and ffprobe, which decode the pages' videos. Without
+ * them the video pages would skip their video cases and pass.
+ */
+export function requireFfmpeg(available = ffmpegAvailable) {
+  if (!available) {
+    throw new Error('ffmpeg and ffprobe, which decode the pages\' videos, cannot be run; install ffmpeg (for example `apt-get install ffmpeg`)');
+  }
+}
+
 export async function main(
   argv = process.argv.slice(2),
-  { expectationsPath = EXPECTATIONS_PATH, fetchSuite = ensureSuite, loadCanvas } = {},
+  { expectationsPath = EXPECTATIONS_PATH, fetchSuite = ensureSuite, loadCanvas, hasFfmpeg } = {},
 ) {
   const { values } = parseArgs({
     args: argv,
@@ -184,6 +195,7 @@ export async function main(
   }
 
   requireCanvas(loadCanvas);
+  requireFfmpeg(hasFfmpeg);
 
   // Parse before fetching or running anything, so a bad entry fails fast.
   const expectations = parseExpectations(readFileSync(expectationsPath, 'utf8'), expectationsPath);

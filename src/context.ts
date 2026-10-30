@@ -357,9 +357,10 @@ function imagePixels(source: unknown, method: string, position: number): Pixels 
     if (width === 0 || height === 0) return EMPTY;
     return { data: canvas.getImageData(0, 0, width, height).data, width, height };
   }
-  // A video element: Node decodes no video, so it never has a frame and
+  // A video element: its current frame from the host's decoder (the
+  // conformance runner's ffmpeg); without one, Node decodes no video, and it
   // uploads as 0×0, as one without data does in browsers.
-  if (typeof (shaped as { videoWidth?: unknown }).videoWidth === 'number') return EMPTY;
+  if (typeof (shaped as { videoWidth?: unknown }).videoWidth === 'number') return imageDecoder?.(source) ?? EMPTY;
   const document = shaped.ownerDocument as { createElement?: (name: string) => unknown; URL?: unknown } | null | undefined;
   if (typeof shaped.naturalWidth === 'number' && typeof document?.createElement === 'function') {
     const w = shaped.naturalWidth >>> 0;

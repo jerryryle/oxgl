@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html><head><script src="harness.js"></script></head><body>
+<script>
+// red-green.webm: 16x8, red above green.
+var video = document.createElement("video");
+video.src = "red-green.webm";
+video.play().then(function () {
+  if (video.videoWidth === 16 && video.videoHeight === 8) testPassed("size"); else testFailed("size " + video.videoWidth + "x" + video.videoHeight);
+  var gl = document.createElement("canvas").getContext("webgl");
+  var tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, video);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, gl.createFramebuffer());
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+  var px = new Uint8Array(4);
+  // Texture row 0 is the video's top row.
+  gl.readPixels(8, 1, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  if (px[0] > 200 && px[1] < 60) testPassed("top red"); else testFailed("top " + Array.from(px));
+  gl.readPixels(8, 6, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+  if (px[1] > 200 && px[0] < 60) testPassed("bottom green"); else testFailed("bottom " + Array.from(px));
+  finishTest();
+}, function (e) { testFailed("play rejected: " + e.name); finishTest(); });
+</script>
+</body></html>

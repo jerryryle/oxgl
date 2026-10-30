@@ -67,21 +67,6 @@ When oxgl rejects a context creation requested through `getContext`, `getContext
 - **WHEN** a page running on the software backend calls `getContext('webgl', { failIfMajorPerformanceCaveat: true })` and oxgl's `createContext` throws
 - **THEN** `getContext` returns `null` instead of throwing, and the report's entry for the page includes oxgl's error message
 
-### Requirement: Unsupported media fails promptly
-Video and audio elements in a page SHALL report no playable type (`canPlayType` returns `""`), SHALL reject `play()` with a `NotSupportedError` `DOMException`, and SHALL report a load error shortly after a source is set, instead of never loading, as a browser without codecs does. The runner SHALL NOT add or change any member of an oxgl context object; pages see oxgl's API as shipped.
-
-#### Scenario: Texture upload from an image
-- **WHEN** a page sets an `<img>` source and waits for its load event before uploading a texture
-- **THEN** the image is not failed by this requirement: it loads as "Images load and decode" requires, and the page reaches its `texImage2D` call
-
-#### Scenario: Texture upload from a video
-- **WHEN** a page sets a `<video>` source and waits for it to load or play before uploading a texture
-- **THEN** the video fires `error` or `play()` rejects, and the page fails or reports its own failure well before the time limit (cf. Khronos `conformance/textures/video/tex-2d-rgba-rgba-unsigned_byte.html`)
-
-#### Scenario: Member oxgl lacks
-- **WHEN** a page reads `gl.canvas` and oxgl does not provide it
-- **THEN** the page sees `undefined`, as it would from oxgl outside the runner
-
 ### Requirement: Closure-loaded scripts run in browser order
 When a page loads scripts through the Closure Library's uncompiled loader (`goog.require` in `closure-library/closure/goog/base.js`, as every `deqp/` page does), each file the loader imports SHALL run before the import returns, dependencies first, as a script written with `document.write` during parsing runs in a browser (HTML Standard §8.4.3).
 
@@ -380,3 +365,29 @@ The runner's workers SHALL load oxgl in their thread and have the WebGL interfac
 #### Scenario: ImageBitmap from a nested worker
 - **WHEN** a worker starts a worker from a Blob URL, which transfers an ImageBitmap back
 - **THEN** the page receives an ImageBitmap with the drawn pixels (cf. Khronos `conformance/offscreencanvas/offscreencanvas-transfer-image-bitmap.html`)
+
+### Requirement: Video plays through ffmpeg
+Video elements in a page SHALL load, play and report their size, duration and current time, decoded by ffmpeg with rotation applied. `canPlayType` SHALL answer "maybe" for video types, `play()` SHALL resolve once the video has loaded, and `requestVideoFrameCallback` SHALL call back on the next frame. A source that does not decode SHALL fire `error` and reject `play()` promptly.
+
+#### Scenario: Video in a 2D canvas and an ImageBitmap
+- **WHEN** a page draws a playing video into a 2D canvas, or creates an ImageBitmap from it
+- **THEN** the current frame is drawn, or held (cf. Khronos `conformance/textures/image_bitmap_from_video/tex-2d-rgba-rgba-unsigned_byte.html`)
+
+#### Scenario: Missing video
+- **WHEN** a page sets a `<video>` source that does not exist and calls `play()`
+- **THEN** `error` fires and `play()` rejects with `NotSupportedError` well before the time limit
+
+#### Scenario: Texture upload from a video
+- **WHEN** a page plays a red-above-green video and uploads it with `texImage2D`
+- **THEN** the texture's top rows are red and its bottom rows green (cf. Khronos `conformance/textures/video/tex-2d-rgba-rgba-unsigned_byte.html`)
+
+#### Scenario: Rotated video
+- **WHEN** a page uploads a video with rotation metadata
+- **THEN** the frame uploads upright (cf. Khronos `conformance/textures/misc/video-rotation.html`)
+
+### Requirement: The runner requires ffmpeg
+The runner SHALL refuse to run pages when `ffmpeg` or `ffprobe` cannot be run, reporting a runner error that names them, instead of running video pages that would skip their video cases.
+
+#### Scenario: ffmpeg missing
+- **WHEN** `npm run conformance` runs and `ffprobe -version` fails
+- **THEN** the run stops before any page with an error naming ffmpeg, and no page outcome is recorded
