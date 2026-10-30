@@ -198,6 +198,10 @@ const INTERFACES = [
   'WebGLSampler',
   'WebGLFramebuffer',
   'WebGLRenderbuffer',
+  'WebGLVertexArrayObject',
+  'WebGLTransformFeedback',
+  'WebGLQuery',
+  'WebGLSync',
   'WebGLUniformLocation',
   'WebGLActiveInfo',
 ];

@@ -369,22 +369,7 @@ impl Context {
                 self.errors.synthesize(GL_INVALID_OPERATION);
                 None
             }
-            _ => {
-                // A depth-stencil renderbuffer sits at the depth-stencil
-                // point when both were requested.
-                let point =
-                    if attributes.depth && attributes.stencil && mapped != GL_COLOR_ATTACHMENT0 {
-                        GL_DEPTH_STENCIL_ATTACHMENT
-                    } else {
-                        mapped
-                    };
-                let query = if point == GL_DEPTH_STENCIL_ATTACHMENT {
-                    mapped
-                } else {
-                    point
-                };
-                number(current.framebuffer_attachment_parameter(target, query, pname)?)
-            }
+            _ => number(current.framebuffer_attachment_parameter(target, mapped, pname)?),
         }
     }
 

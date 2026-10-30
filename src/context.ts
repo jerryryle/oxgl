@@ -14,7 +14,13 @@ import {
   WebGLFramebuffer,
   WebGLObject,
   WebGLRenderbuffer,
+  WebGLQuery,
+  WebGLSync,
+  WebGLTransformFeedback,
+  WebGLVertexArrayObject,
   type FramebufferState,
+  type PendingState,
+  type VertexArrayState,
   WebGLProgram,
   WebGLShader,
   WebGLSampler,
@@ -110,14 +116,11 @@ function parameterValue(result: NativeParameter | null): unknown {
       return new Int32Array(numbers);
     case 'uint32':
       return new Uint32Array(numbers);
+    case 'numbers':
+      return numbers;
   }
 }
 
-/** The vertex array state oxgl mirrors: what GL holds references to. */
-interface VertexArrayState {
-  element: WebGLBuffer | null;
-  readonly attribs: (WebGLBuffer | null)[];
-}
 
 /**
  * A context's state. Bound objects are kept here, as Blink keeps them, so a
@@ -153,6 +156,35 @@ interface ContextState {
   /** The framebuffer bound for reading (WebGL 2; the same as drawing on WebGL 1). */
   readFramebuffer: WebGLFramebuffer | null;
   renderbuffer: WebGLRenderbuffer | null;
+  /** The default vertex array's state. */
+  readonly defaultVao: VertexArrayState;
+  vertexArray: WebGLVertexArrayObject | null;
+  transformFeedback: WebGLTransformFeedback | null;
+  /** The bound transform feedback's indexed buffer bindings. */
+  tfBuffers: (WebGLBuffer | null)[];
+  readonly defaultTfBuffers: (WebGLBuffer | null)[];
+  readonly uniformBuffers: (WebGLBuffer | null)[];
+  /** The active query per target. */
+  readonly queries: Map<number, WebGLQuery>;
+}
+
+/**
+ * The event loop's turn count, for query and sync results that must not
+ * become available before control returns to the event loop (WebGL 2.0
+ * §5.35). A pending result schedules one unreferenced timer.
+ */
+let turn = 0;
+let turnScheduled = false;
+function nextTurn(): number {
+  if (!turnScheduled) {
+    turnScheduled = true;
+    const timer = setTimeout(() => {
+      turn += 1;
+      turnScheduled = false;
+    }, 0) as unknown as { unref?: () => void };
+    timer.unref?.();
+  }
+  return turn;
 }
 
 /** Detaches `object` from the bound framebuffers, as GL does when it is deleted (OpenGL ES 3.0 §4.4.2.4). */
@@ -428,6 +460,11 @@ const NULL_KEY = [0, 0] as const;
 /** Drops `buffer` from every binding GL clears when it is deleted (OpenGL ES 3.0 §2.9–§2.10). */
 function unbindBuffer(s: ContextState, buffer: WebGLBuffer): void {
   for (const [target, bound] of s.buffers) if (bound === buffer) s.buffers.set(target, null);
+  for (const list of [s.tfBuffers, s.uniformBuffers]) {
+    list.forEach((bound, i) => {
+      if (bound === buffer) list[i] = null;
+    });
+  }
   if (s.vao.element === buffer) s.vao.element = null;
   s.vao.attribs.forEach((bound, i) => {
     if (bound === buffer) s.vao.attribs[i] = null;
@@ -480,6 +517,10 @@ function boundObject(s: ContextState, pname: number): WebGLObject | null | undef
       return s.samplers[s.activeUnit] ?? null;
     case GL.READ_FRAMEBUFFER_BINDING:
       return s.readFramebuffer;
+    case GL.VERTEX_ARRAY_BINDING:
+      return s.vertexArray;
+    case GL.TRANSFORM_FEEDBACK_BINDING:
+      return s.transformFeedback;
   }
   const target = BINDING_TARGETS.get(pname);
   return target === undefined ? undefined : (s.buffers.get(target) ?? null);
@@ -625,7 +666,16 @@ abstract class ContextBase {
       drawFramebuffer: null,
       readFramebuffer: null,
       renderbuffer: null,
+      defaultVao: { element: null, attribs: [] },
+      vertexArray: null,
+      transformFeedback: null,
+      tfBuffers: [],
+      defaultTfBuffers: [],
+      uniformBuffers: [],
+      queries: new Map(),
     };
+    this.#s.vao = this.#s.defaultVao;
+    this.#s.tfBuffers = this.#s.defaultTfBuffers;
     const units = native.getParameter(index, version, GL.MAX_COMBINED_TEXTURE_IMAGE_UNITS);
     this.#s.maxUnits = units?.numbers[0] ?? 0;
     this.#s.canvas = canvas ?? new HeadlessCanvas(CONSTRUCTING, this, requestedWidth, requestedHeight);
@@ -1778,8 +1828,17 @@ abstract class ContextBase {
       // The type query validates the target and attachment.
       const type = native.getFramebufferAttachmentParameter(s.index, s.version, args[0], args[1], GL.FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE);
       if (type === null || type.numbers[0] === GL.NONE) return null;
-      const point = args[1] === GL.DEPTH_STENCIL_ATTACHMENT ? GL.DEPTH_ATTACHMENT : args[1];
-      return (objectState(framebuffer) as FramebufferState).attachments.get(point) ?? null;
+      const { attachments } = objectState(framebuffer) as FramebufferState;
+      if (args[1] === GL.DEPTH_STENCIL_ATTACHMENT) {
+        // Different objects at depth and stencil: WebGL 2.0 §3.7.4.
+        const depth = attachments.get(GL.DEPTH_ATTACHMENT) ?? null;
+        if (depth !== (attachments.get(GL.STENCIL_ATTACHMENT) ?? null)) {
+          native.synthesizeError(s.index, s.version, GL.INVALID_OPERATION);
+          return null;
+        }
+        return depth;
+      }
+      return attachments.get(args[1]) ?? null;
     }
     return parameterValue(native.getFramebufferAttachmentParameter(s.index, s.version, ...args));
   }
@@ -2175,6 +2234,408 @@ abstract class WebGL2Members extends ContextBase {
     return parameterValue(native.getInternalformatParameter(s.index, s.version, ...args));
   }
 
+  // --- Vertex arrays and instancing (WebGL 2.0 §3.7.9, §3.7.17) --------
+
+  /** WebGL 2.0 §3.7.17. */
+  createVertexArray(): WebGLVertexArrayObject {
+    return createObject(contextState(this), WebGLVertexArrayObject, 7, 0, { element: null, attribs: [] }) as WebGLVertexArrayObject;
+  }
+
+  /** WebGL 2.0 §3.7.17; the default vertex array is bound if it was. */
+  deleteVertexArray(vertexArray: WebGLVertexArrayObject | null): void {
+    requireArguments('deleteVertexArray', 1, arguments.length);
+    const s = contextState(this);
+    const state = checkObject(s, vertexArray, WebGLVertexArrayObject, 'deleteVertexArray', 1, true, 0);
+    if (!state || vertexArray === null) return;
+    state.deleted = true;
+    collectedObjects.unregister(vertexArray);
+    if (s.vertexArray === vertexArray) {
+      s.vertexArray = null;
+      s.vao = s.defaultVao;
+    }
+    native.deleteObject(s.index, s.version, ...keyOf(state));
+  }
+
+  /** WebGL 2.0 §3.7.17: true once bound. */
+  isVertexArray(vertexArray: WebGLVertexArrayObject | null): boolean {
+    requireArguments('isVertexArray', 1, arguments.length);
+    const s = contextState(this);
+    const state = checkObject(s, vertexArray, WebGLVertexArrayObject, 'isVertexArray', 1, true, 0);
+    return !!state && native.hasObject(s.index, s.version, ...keyOf(state));
+  }
+
+  /** WebGL 2.0 §3.7.17. */
+  bindVertexArray(vertexArray: WebGLVertexArrayObject | null): void {
+    requireArguments('bindVertexArray', 1, arguments.length);
+    const s = contextState(this);
+    const state = checkObject(s, vertexArray, WebGLVertexArrayObject, 'bindVertexArray', 1, true, GL.INVALID_OPERATION);
+    if (state === undefined) return;
+    if (!native.bindVertexArray(s.index, s.version, ...keyOf(state))) return;
+    s.vertexArray = vertexArray;
+    s.vao = state === null ? s.defaultVao : (state as unknown as VertexArrayState);
+  }
+
+  /** WebGL 2.0 §3.7.9. */
+  drawArraysInstanced(mode: number, first: number, count: number, instanceCount: number): void {
+    requireArguments('drawArraysInstanced', 4, arguments.length);
+    const s = contextState(this);
+    const args = [toUnsignedLong(mode), toLong(first), toLong(count), toLong(instanceCount)] as const;
+    if (!s.destroyed) native.drawArraysInstanced(s.index, s.version, ...args);
+  }
+
+  /** WebGL 2.0 §3.7.9. */
+  drawElementsInstanced(mode: number, count: number, type: number, offset: number, instanceCount: number): void {
+    requireArguments('drawElementsInstanced', 5, arguments.length);
+    const s = contextState(this);
+    const args = [toUnsignedLong(mode), toLong(count), toUnsignedLong(type), toLongLong(offset), toLong(instanceCount)] as const;
+    if (!s.destroyed) native.drawElementsInstanced(s.index, s.version, ...args);
+  }
+
+  /** WebGL 2.0 §3.7.8. */
+  vertexAttribDivisor(index: number, divisor: number): void {
+    requireArguments('vertexAttribDivisor', 2, arguments.length);
+    const s = contextState(this);
+    const args = [toUnsignedLong(index), toUnsignedLong(divisor)] as const;
+    if (!s.destroyed) native.vertexAttribDivisor(s.index, s.version, ...args);
+  }
+
+  // --- Indexed bindings and uniform blocks (WebGL 2.0 §3.7.3, §3.7.16) ---
+
+  /** WebGL 2.0 §3.7.3. */
+  bindBufferBase(target: number, index: number, buffer: WebGLBuffer | null): void {
+    requireArguments('bindBufferBase', 3, arguments.length);
+    bindIndexed(this, target, index, buffer, null);
+  }
+
+  /** WebGL 2.0 §3.7.3. */
+  bindBufferRange(target: number, index: number, buffer: WebGLBuffer | null, offset: number, size: number): void {
+    requireArguments('bindBufferRange', 5, arguments.length);
+    bindIndexed(this, target, index, buffer, [offset, size]);
+  }
+
+  /** WebGL 2.0 §3.7.2. */
+  getIndexedParameter(target: number, index: number): unknown {
+    requireArguments('getIndexedParameter', 2, arguments.length);
+    const s = contextState(this);
+    const t = toUnsignedLong(target);
+    const i = toUnsignedLong(index);
+    if (s.destroyed) return null;
+    if (t === GL.TRANSFORM_FEEDBACK_BUFFER_BINDING || t === GL.UNIFORM_BUFFER_BINDING) {
+      // Validates the index (and generates its error) through GL.
+      const start = t === GL.UNIFORM_BUFFER_BINDING ? GL.UNIFORM_BUFFER_START : GL.TRANSFORM_FEEDBACK_BUFFER_START;
+      if (native.getIndexedParameter(s.index, s.version, start, i) === null) return null;
+      return (t === GL.UNIFORM_BUFFER_BINDING ? s.uniformBuffers : s.tfBuffers)[i] ?? null;
+    }
+    return parameterValue(native.getIndexedParameter(s.index, s.version, t, i));
+  }
+
+  /** WebGL 2.0 §3.7.16. */
+  getUniformIndices(program: WebGLProgram, uniformNames: Iterable<string>): number[] | null {
+    requireArguments('getUniformIndices', 2, arguments.length);
+    const s = contextState(this);
+    const names = toStrings(uniformNames, 'getUniformIndices');
+    const p = checkObject(s, program, WebGLProgram, 'getUniformIndices', 1, false, GL.INVALID_VALUE);
+    if (!p) return null;
+    return native.getUniformIndices(s.index, s.version, ...keyOf(p), names);
+  }
+
+  /** WebGL 2.0 §3.7.16. */
+  getActiveUniforms(program: WebGLProgram, uniformIndices: Iterable<number>, pname: number): unknown {
+    requireArguments('getActiveUniforms', 3, arguments.length);
+    const s = contextState(this);
+    const indices = [...toList(Uint32Array, toUnsignedLong, uniformIndices, 'getActiveUniforms')];
+    const name = toUnsignedLong(pname);
+    const p = checkObject(s, program, WebGLProgram, 'getActiveUniforms', 1, false, GL.INVALID_VALUE);
+    if (!p) return null;
+    return parameterValue(native.getActiveUniforms(s.index, s.version, ...keyOf(p), indices, name));
+  }
+
+  /** WebGL 2.0 §3.7.16. */
+  getUniformBlockIndex(program: WebGLProgram, uniformBlockName: string): number {
+    requireArguments('getUniformBlockIndex', 2, arguments.length);
+    const s = contextState(this);
+    const name = toDOMString(uniformBlockName);
+    const p = checkObject(s, program, WebGLProgram, 'getUniformBlockIndex', 1, false, GL.INVALID_VALUE);
+    if (!p) return GL.INVALID_INDEX;
+    return native.getUniformBlockIndex(s.index, s.version, ...keyOf(p), name);
+  }
+
+  /** WebGL 2.0 §3.7.16. */
+  getActiveUniformBlockParameter(program: WebGLProgram, uniformBlockIndex: number, pname: number): unknown {
+    requireArguments('getActiveUniformBlockParameter', 3, arguments.length);
+    const s = contextState(this);
+    const block = toUnsignedLong(uniformBlockIndex);
+    const name = toUnsignedLong(pname);
+    const p = checkObject(s, program, WebGLProgram, 'getActiveUniformBlockParameter', 1, false, GL.INVALID_VALUE);
+    if (!p) return null;
+    return parameterValue(native.getActiveUniformBlockParameter(s.index, s.version, ...keyOf(p), block, name));
+  }
+
+  /** WebGL 2.0 §3.7.16. */
+  getActiveUniformBlockName(program: WebGLProgram, uniformBlockIndex: number): string | null {
+    requireArguments('getActiveUniformBlockName', 2, arguments.length);
+    const s = contextState(this);
+    const block = toUnsignedLong(uniformBlockIndex);
+    const p = checkObject(s, program, WebGLProgram, 'getActiveUniformBlockName', 1, false, GL.INVALID_VALUE);
+    if (!p) return null;
+    return native.getActiveUniformBlockName(s.index, s.version, ...keyOf(p), block);
+  }
+
+  /** WebGL 2.0 §3.7.16. */
+  uniformBlockBinding(program: WebGLProgram, uniformBlockIndex: number, uniformBlockBinding: number): void {
+    requireArguments('uniformBlockBinding', 3, arguments.length);
+    const s = contextState(this);
+    const block = toUnsignedLong(uniformBlockIndex);
+    const binding = toUnsignedLong(uniformBlockBinding);
+    const p = checkObject(s, program, WebGLProgram, 'uniformBlockBinding', 1, false, GL.INVALID_VALUE);
+    if (p) native.uniformBlockBinding(s.index, s.version, ...keyOf(p), block, binding);
+  }
+
+  // --- Transform feedback (WebGL 2.0 §3.7.15) ----------------------------
+
+  /** WebGL 2.0 §3.7.15. */
+  createTransformFeedback(): WebGLTransformFeedback {
+    return createObject(contextState(this), WebGLTransformFeedback, 8, 0, { buffers: [] }) as WebGLTransformFeedback;
+  }
+
+  /** WebGL 2.0 §3.7.15. */
+  deleteTransformFeedback(transformFeedback: WebGLTransformFeedback | null): void {
+    requireArguments('deleteTransformFeedback', 1, arguments.length);
+    const s = contextState(this);
+    const state = checkObject(s, transformFeedback, WebGLTransformFeedback, 'deleteTransformFeedback', 1, true, 0);
+    if (!state || transformFeedback === null) return;
+    state.deleted = true;
+    collectedObjects.unregister(transformFeedback);
+    native.deleteObject(s.index, s.version, ...keyOf(state));
+    if (s.transformFeedback === transformFeedback && !native.isContextLost(s.index, s.version)) {
+      s.transformFeedback = null;
+      s.tfBuffers = s.defaultTfBuffers;
+    }
+  }
+
+  /** WebGL 2.0 §3.7.15: true once bound. */
+  isTransformFeedback(transformFeedback: WebGLTransformFeedback | null): boolean {
+    requireArguments('isTransformFeedback', 1, arguments.length);
+    const s = contextState(this);
+    const state = checkObject(s, transformFeedback, WebGLTransformFeedback, 'isTransformFeedback', 1, true, 0);
+    return !!state && native.hasObject(s.index, s.version, ...keyOf(state));
+  }
+
+  /** WebGL 2.0 §3.7.15. */
+  bindTransformFeedback(target: number, transformFeedback: WebGLTransformFeedback | null): void {
+    requireArguments('bindTransformFeedback', 2, arguments.length);
+    const s = contextState(this);
+    const t = toUnsignedLong(target);
+    const state = checkObject(s, transformFeedback, WebGLTransformFeedback, 'bindTransformFeedback', 2, true, GL.INVALID_OPERATION);
+    if (state === undefined) return;
+    if (!native.bindTransformFeedback(s.index, s.version, t, ...keyOf(state))) return;
+    s.transformFeedback = transformFeedback;
+    s.tfBuffers = state === null ? s.defaultTfBuffers : (state as unknown as { buffers: (WebGLBuffer | null)[] }).buffers;
+  }
+
+  /** WebGL 2.0 §3.7.15. */
+  beginTransformFeedback(primitiveMode: number): void {
+    requireArguments('beginTransformFeedback', 1, arguments.length);
+    const s = contextState(this);
+    const mode = toUnsignedLong(primitiveMode);
+    if (!s.destroyed) native.transformFeedback(s.index, s.version, 0, mode);
+  }
+
+  /** WebGL 2.0 §3.7.15. */
+  endTransformFeedback(): void {
+    const s = contextState(this);
+    if (!s.destroyed) native.transformFeedback(s.index, s.version, 1, 0);
+  }
+
+  /** WebGL 2.0 §3.7.15. */
+  pauseTransformFeedback(): void {
+    const s = contextState(this);
+    if (!s.destroyed) native.transformFeedback(s.index, s.version, 2, 0);
+  }
+
+  /** WebGL 2.0 §3.7.15. */
+  resumeTransformFeedback(): void {
+    const s = contextState(this);
+    if (!s.destroyed) native.transformFeedback(s.index, s.version, 3, 0);
+  }
+
+  /** WebGL 2.0 §3.7.15. */
+  transformFeedbackVaryings(program: WebGLProgram, varyings: Iterable<string>, bufferMode: number): void {
+    requireArguments('transformFeedbackVaryings', 3, arguments.length);
+    const s = contextState(this);
+    const names = toStrings(varyings, 'transformFeedbackVaryings');
+    const mode = toUnsignedLong(bufferMode);
+    const p = checkObject(s, program, WebGLProgram, 'transformFeedbackVaryings', 1, false, GL.INVALID_VALUE);
+    if (p) native.transformFeedbackVaryings(s.index, s.version, ...keyOf(p), names, mode);
+  }
+
+  /** WebGL 2.0 §3.7.15. */
+  getTransformFeedbackVarying(program: WebGLProgram, index: number): WebGLActiveInfo | null {
+    requireArguments('getTransformFeedbackVarying', 2, arguments.length);
+    const s = contextState(this);
+    const i = toUnsignedLong(index);
+    const p = checkObject(s, program, WebGLProgram, 'getTransformFeedbackVarying', 1, false, GL.INVALID_VALUE);
+    if (!p) return null;
+    const info = native.getTransformFeedbackVarying(s.index, s.version, ...keyOf(p), i);
+    return info === null ? null : new WebGLActiveInfo(CONSTRUCTING, info.size, info.ty, info.name);
+  }
+
+  // --- Queries (WebGL 2.0 §3.7.12) ---------------------------------------
+
+  /** WebGL 2.0 §3.7.12. */
+  createQuery(): WebGLQuery {
+    return createObject(contextState(this), WebGLQuery, 9, 0, { turn: 0, target: 0 }) as WebGLQuery;
+  }
+
+  /** WebGL 2.0 §3.7.12. */
+  deleteQuery(query: WebGLQuery | null): void {
+    requireArguments('deleteQuery', 1, arguments.length);
+    const s = contextState(this);
+    const state = checkObject(s, query, WebGLQuery, 'deleteQuery', 1, true, 0);
+    if (!state || query === null) return;
+    state.deleted = true;
+    collectedObjects.unregister(query);
+    for (const [target, active] of s.queries) if (active === query) s.queries.delete(target);
+    native.deleteObject(s.index, s.version, ...keyOf(state));
+  }
+
+  /** WebGL 2.0 §3.7.12: true once begun. */
+  isQuery(query: WebGLQuery | null): boolean {
+    requireArguments('isQuery', 1, arguments.length);
+    const s = contextState(this);
+    const state = checkObject(s, query, WebGLQuery, 'isQuery', 1, true, 0);
+    return !!state && native.hasObject(s.index, s.version, ...keyOf(state));
+  }
+
+  /** WebGL 2.0 §3.7.12. */
+  beginQuery(target: number, query: WebGLQuery): void {
+    requireArguments('beginQuery', 2, arguments.length);
+    const s = contextState(this);
+    const t = toUnsignedLong(target);
+    const state = checkObject(s, query, WebGLQuery, 'beginQuery', 2, false, GL.INVALID_OPERATION) as PendingState | null | undefined;
+    if (!state) return;
+    if (native.beginQuery(s.index, s.version, t, ...keyOf(state))) {
+      s.queries.set(t, query);
+      state.target = t;
+    }
+  }
+
+  /** WebGL 2.0 §3.7.12; the result waits for the event loop (§5.35). */
+  endQuery(target: number): void {
+    requireArguments('endQuery', 1, arguments.length);
+    const s = contextState(this);
+    const t = toUnsignedLong(target);
+    if (s.destroyed || !native.endQuery(s.index, s.version, t)) return;
+    const query = s.queries.get(t);
+    s.queries.delete(t);
+    if (query !== undefined) (objectState(query) as PendingState).turn = nextTurn();
+  }
+
+  /** WebGL 2.0 §3.7.12: `CURRENT_QUERY` only. */
+  getQuery(target: number, pname: number): WebGLQuery | null {
+    requireArguments('getQuery', 2, arguments.length);
+    const s = contextState(this);
+    const t = toUnsignedLong(target);
+    const p = toUnsignedLong(pname);
+    if (s.destroyed) return null;
+    const targets: number[] = [GL.ANY_SAMPLES_PASSED, GL.ANY_SAMPLES_PASSED_CONSERVATIVE, GL.TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN];
+    if (!targets.includes(t) || p !== GL.CURRENT_QUERY) {
+      native.synthesizeError(s.index, s.version, GL.INVALID_ENUM);
+      return null;
+    }
+    return s.queries.get(t) ?? null;
+  }
+
+  /** WebGL 2.0 §3.7.12. */
+  getQueryParameter(query: WebGLQuery, pname: number): unknown {
+    requireArguments('getQueryParameter', 2, arguments.length);
+    const s = contextState(this);
+    const p = toUnsignedLong(pname);
+    const state = checkObject(s, query, WebGLQuery, 'getQueryParameter', 1, false, GL.INVALID_OPERATION) as PendingState | null | undefined;
+    if (!state) return null;
+    if ([...s.queries.values()].includes(query)) {
+      native.synthesizeError(s.index, s.version, GL.INVALID_OPERATION);
+      return null;
+    }
+    const ready = turn > state.turn;
+    if (p === GL.QUERY_RESULT_AVAILABLE && !ready) return false;
+    if (p === GL.QUERY_RESULT && !ready) return state.target === GL.TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN ? 0 : false;
+    const value = parameterValue(native.getQueryParameter(s.index, s.version, ...keyOf(state), p));
+    if (p === GL.QUERY_RESULT && state.target !== GL.TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN) return value !== 0 && value !== null;
+    return value;
+  }
+
+  // --- Sync objects (WebGL 2.0 §3.7.14) ----------------------------------
+
+  /** WebGL 2.0 §3.7.14; signals no earlier than the next turn (§5.35). */
+  fenceSync(condition: number, flags: number): WebGLSync | null {
+    requireArguments('fenceSync', 2, arguments.length);
+    const s = contextState(this);
+    const c = toUnsignedLong(condition);
+    const f = toUnsignedLong(flags);
+    if (s.destroyed) return null;
+    const key = native.fenceSync(s.index, s.version, c, f);
+    if (key === null) return null;
+    const state = { owner: s, key: [key[0], key[1]] as const, deleted: false, turn: nextTurn(), target: 0 };
+    const sync = new WebGLSync(CONSTRUCTING, state);
+    collectedObjects.register(sync, Object.freeze([s.index, s.version, key[0], key[1]] as const), sync);
+    return sync;
+  }
+
+  /** WebGL 2.0 §3.7.14. */
+  isSync(sync: WebGLSync | null): boolean {
+    requireArguments('isSync', 1, arguments.length);
+    const s = contextState(this);
+    const state = checkObject(s, sync, WebGLSync, 'isSync', 1, true, 0);
+    return !!state && native.hasObject(s.index, s.version, ...keyOf(state));
+  }
+
+  /** WebGL 2.0 §3.7.14. */
+  deleteSync(sync: WebGLSync | null): void {
+    requireArguments('deleteSync', 1, arguments.length);
+    const s = contextState(this);
+    const state = checkObject(s, sync, WebGLSync, 'deleteSync', 1, true, 0);
+    if (!state || sync === null) return;
+    state.deleted = true;
+    collectedObjects.unregister(sync);
+    native.deleteObject(s.index, s.version, ...keyOf(state));
+  }
+
+  /** WebGL 2.0 §3.7.14: never blocks; `TIMEOUT_EXPIRED` before the next turn. */
+  clientWaitSync(sync: WebGLSync, flags: number, timeout: number): number {
+    requireArguments('clientWaitSync', 3, arguments.length);
+    const s = contextState(this);
+    const f = toUnsignedLong(flags);
+    const t = toUnsignedLongLong(timeout);
+    const state = checkObject(s, sync, WebGLSync, 'clientWaitSync', 1, false, GL.INVALID_VALUE) as PendingState | null | undefined;
+    if (!state) return GL.WAIT_FAILED;
+    const result = native.clientWaitSync(s.index, s.version, ...keyOf(state), f, t);
+    if (result !== GL.WAIT_FAILED && turn <= state.turn) return GL.TIMEOUT_EXPIRED;
+    return result;
+  }
+
+  /** WebGL 2.0 §3.7.14. */
+  waitSync(sync: WebGLSync, flags: number, timeout: number): void {
+    requireArguments('waitSync', 3, arguments.length);
+    const s = contextState(this);
+    const f = toUnsignedLong(flags);
+    const t = toLongLong(timeout);
+    const state = checkObject(s, sync, WebGLSync, 'waitSync', 1, false, GL.INVALID_VALUE);
+    if (state) native.waitSync(s.index, s.version, ...keyOf(state), f, t);
+  }
+
+  /** WebGL 2.0 §3.7.14; `UNSIGNALED` before the next turn. */
+  getSyncParameter(sync: WebGLSync, pname: number): unknown {
+    requireArguments('getSyncParameter', 2, arguments.length);
+    const s = contextState(this);
+    const p = toUnsignedLong(pname);
+    const state = checkObject(s, sync, WebGLSync, 'getSyncParameter', 1, false, GL.INVALID_VALUE) as PendingState | null | undefined;
+    if (!state) return null;
+    const value = native.getSyncParameter(s.index, s.version, ...keyOf(state), p);
+    if (p === GL.SYNC_STATUS && value !== null && turn <= state.turn) return GL.UNSIGNALED;
+    return value;
+  }
+
   /** WebGL 2.0 §3.7.6. */
   texImage3D(target: number, level: number, internalformat: number, width: number, height: number, depth: number, border: number, format: number, type: number, ...rest: unknown[]): void {
     requireArguments('texImage3D', 10, arguments.length);
@@ -2331,6 +2792,29 @@ export const WebGL2RenderingContext: WebGL2Constants & {
   readonly prototype: WebGL2RenderingContext;
   new (...args: ContextArguments): WebGL2RenderingContext;
 } = withConstants(class WebGL2RenderingContext extends WebGL2Members {}, WEBGL2_CONSTANTS);
+
+/** A `sequence<DOMString>`. */
+function toStrings(value: unknown, method: string): string[] {
+  if (typeof value !== 'object' || value === null || !(Symbol.iterator in value)) {
+    throw new TypeError(`Failed to execute '${method}': The provided value cannot be converted to a sequence.`);
+  }
+  return Array.from(value as Iterable<unknown>, toDOMString);
+}
+
+/** `bindBufferBase` (`range` null) or `bindBufferRange`. */
+function bindIndexed(gl: ContextBase, target: unknown, index: unknown, buffer: unknown, range: [unknown, unknown] | null): void {
+  const s = contextState(gl);
+  const t = toUnsignedLong(target);
+  const i = toUnsignedLong(index);
+  const state = checkObject(s, buffer, WebGLBuffer, range === null ? 'bindBufferBase' : 'bindBufferRange', 3, true, GL.INVALID_OPERATION);
+  const r = range === null ? null : [toLongLong(range[0]), toLongLong(range[1])];
+  if (state === undefined) return;
+  if (!native.bindBufferIndexed(s.index, s.version, t, i, ...keyOf(state), r)) return;
+  const b = buffer as WebGLBuffer | null;
+  s.buffers.set(t, b);
+  if (t === GL.UNIFORM_BUFFER) s.uniformBuffers[i] = b;
+  else s.tfBuffers[i] = b;
+}
 
 /** `clearBuffer{fv,iv,uiv}`; `kind` 0 float, 1 int, 2 uint. */
 function clearBuffer(gl: ContextBase, buffer: unknown, drawbuffer: unknown, kind: number, values: ArrayBufferView, srcOffset: unknown): void {

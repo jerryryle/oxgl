@@ -64,6 +64,26 @@ pub enum Object {
         /// Allocated as WebGL's `DEPTH_STENCIL`, reported back as such.
         depth_stencil: bool,
     },
+    /// A vertex array object (WebGL 2).
+    VertexArray {
+        /// GL name.
+        name: u32,
+    },
+    /// A transform feedback object (WebGL 2).
+    TransformFeedback {
+        /// GL name.
+        name: u32,
+    },
+    /// A query (WebGL 2).
+    Query {
+        /// GL name.
+        name: u32,
+    },
+    /// A sync object (WebGL 2).
+    Sync {
+        /// GL handle.
+        handle: oxgl_sys::SyncHandle,
+    },
 }
 
 /// A live WebGL context.

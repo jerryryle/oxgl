@@ -160,6 +160,27 @@ test('attachment queries and deleted attachments', () => {
   gl.destroy();
 });
 
+test('depth-stencil query with different objects, and readBuffer(NONE)', () => {
+  const gl = createContext({ width: 1, height: 1, webgl2: true });
+  gl.readBuffer(gl.NONE);
+  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+  assert.equal(gl.getError(), gl.INVALID_OPERATION);
+  gl.readBuffer(gl.BACK);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, gl.createFramebuffer());
+  const depth = gl.createRenderbuffer();
+  gl.bindRenderbuffer(gl.RENDERBUFFER, depth);
+  gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_COMPONENT16, 1, 1);
+  gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_ATTACHMENT, gl.RENDERBUFFER, depth);
+  const stencil = gl.createRenderbuffer();
+  gl.bindRenderbuffer(gl.RENDERBUFFER, stencil);
+  gl.renderbufferStorage(gl.RENDERBUFFER, gl.STENCIL_INDEX8, 1, 1);
+  gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.STENCIL_ATTACHMENT, gl.RENDERBUFFER, stencil);
+  const name = gl.getFramebufferAttachmentParameter(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.FRAMEBUFFER_ATTACHMENT_OBJECT_NAME);
+  assert.equal(name, null);
+  assert.equal(gl.getError(), gl.INVALID_OPERATION);
+  gl.destroy();
+});
+
 test('default framebuffer attachment queries (WebGL 2)', () => {
   const gl = createContext({ width: 1, height: 1, webgl2: true, attributes: { stencil: false } });
   const query = (attachment, pname) => gl.getFramebufferAttachmentParameter(gl.FRAMEBUFFER, attachment, pname);

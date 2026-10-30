@@ -267,6 +267,8 @@ pub enum Parameter {
     Int32(Vec<i32>),
     /// A `Uint32Array`.
     Uint32(Vec<u32>),
+    /// A plain array of numbers (`sequence<any>` results).
+    Numbers(Vec<f64>),
 }
 
 /// The robust query that reads `kind`, if it is one ANGLE answers.

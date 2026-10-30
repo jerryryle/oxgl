@@ -56,9 +56,31 @@ name_calls! {
     gen_buffer = glGenBuffers, delete_buffer = glDeleteBuffers;
     gen_texture = glGenTextures, delete_texture = glDeleteTextures;
     gen_sampler = glGenSamplers, delete_sampler = glDeleteSamplers;
+    gen_vertex_array = glGenVertexArrays, delete_vertex_array = glDeleteVertexArrays;
+    gen_transform_feedback = glGenTransformFeedbacks,
+        delete_transform_feedback = glDeleteTransformFeedbacks;
+    gen_query = glGenQueries, delete_query = glDeleteQueries;
 }
 
 value_calls! {
+    bind_vertex_array = glBindVertexArray(array: GLuint);
+    is_vertex_array = glIsVertexArray(array: GLuint) -> u8;
+    draw_arrays_instanced = glDrawArraysInstanced(
+        mode: GLenum, first: GLint, count: GLsizei, instances: GLsizei);
+    vertex_attrib_divisor = glVertexAttribDivisor(index: GLuint, divisor: GLuint);
+    bind_buffer_base = glBindBufferBase(target: GLenum, index: GLuint, buffer: GLuint);
+    bind_buffer_range = glBindBufferRange(
+        target: GLenum, index: GLuint, buffer: GLuint, offset: GLintptr, size: GLsizeiptr);
+    uniform_block_binding = glUniformBlockBinding(program: GLuint, index: GLuint, binding: GLuint);
+    bind_transform_feedback = glBindTransformFeedback(target: GLenum, id: GLuint);
+    is_transform_feedback = glIsTransformFeedback(id: GLuint) -> u8;
+    begin_transform_feedback = glBeginTransformFeedback(mode: GLenum);
+    end_transform_feedback = glEndTransformFeedback();
+    pause_transform_feedback = glPauseTransformFeedback();
+    resume_transform_feedback = glResumeTransformFeedback();
+    begin_query = glBeginQuery(target: GLenum, id: GLuint);
+    end_query = glEndQuery(target: GLenum);
+    is_query = glIsQuery(id: GLuint) -> u8;
     bind_texture = glBindTexture(target: GLenum, texture: GLuint);
     is_texture = glIsTexture(texture: GLuint) -> u8;
     tex_parameter_i = glTexParameteri(target: GLenum, pname: GLenum, param: GLint);

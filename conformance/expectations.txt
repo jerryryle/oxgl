@@ -3,133 +3,45 @@
 # rewrites this file.
 
 webgl1 conformance/attribs/gl-get-attrib-location-errors.html FAIL # getError expected: INVALID_OPERATION. Was NO_ERROR : Not linked program
-webgl1 conformance/buffers/index-validation.html FAIL # gl.checkFramebufferStatus(gl.FRAMEBUFFER) should be 36053. Threw exception TypeError: gl.checkFramebufferStatus is not a function
 webgl1 conformance/canvas/buffer-offscreen-test.html FAIL # remainder of buffer should be cleared
 webgl1 conformance/canvas/buffer-preserve-test.html FAIL # remainder of buffer should be cleared
 webgl1 conformance/canvas/canvas-test.html TIMEOUT # no new result within the time limit
 webgl1 conformance/canvas/draw-static-webgl-to-multiple-canvas-test.html FAIL # drawImage: Should be (64,128,192,255).
 webgl1 conformance/canvas/draw-webgl-to-canvas-test.html FAIL # drawImage: Should be [64, 128, 192, 255]
-webgl1 conformance/canvas/framebuffer-bindings-affected-by-to-data-url.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/canvas/framebuffer-bindings-unaffected-on-resize.html FAIL # TypeError: gl.createFramebuffer is not a function
 webgl1 conformance/canvas/render-after-resize-test.html FAIL # should be 0,255,0,255
 webgl1 conformance/canvas/to-data-url-after-composite.html FAIL # toDataURL loaded into image, drawn into 2D context, should be green
 webgl1 conformance/canvas/to-data-url-test.html FAIL # should be 0,255,0,255
 webgl1 conformance/canvas/webgl-to-2d-canvas.html FAIL # canvas 2d is correct color
 webgl1 conformance/context/context-attribute-preserve-drawing-buffer.html FAIL # Did not render ok with preserveDrawingBuffer false.
-webgl1 conformance/context/context-attributes-alpha-depth-stencil-antialias.html FAIL # gl = getWebGL(1, 1, null, [ 0, 0, 0, 0 ], 1, 0) should be non-null. Threw exception TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/context/context-lost.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/context/context-no-alpha-fbo-with-alpha.html FAIL # TypeError: gl.createFramebuffer is not a function
 webgl1 conformance/context/context-release-with-workers.html TIMEOUT # no new result within the time limit
 webgl1 conformance/context/context-type-test.html FAIL # WebGLRenderingContext should only have Object in it's prototype chain
-webgl1 conformance/context/deleted-object-behavior.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/context/incorrect-context-object-behaviour.html FAIL # TypeError: contextA.createFramebuffer is not a function
-webgl1 conformance/context/methods.html FAIL # Property either does not exist or is not a function: bindFramebuffer
+webgl1 conformance/context/incorrect-context-object-behaviour.html FAIL # getError expected: NO_ERROR. Was INVALID_OPERATION : after evaluating: contextA.isBuffer(bufferB)
 webgl1 conformance/context/premultiplyalpha-test.html FAIL # should draw with 64,128,255,128
-webgl1 conformance/extensions/ext-color-buffer-half-float.html FAIL # TypeError: gl.createRenderbuffer is not a function
-webgl1 conformance/extensions/ext-sRGB.html FAIL # TypeError: gl.createRenderbuffer is not a function
-webgl1 conformance/extensions/oes-texture-float.html FAIL # TypeError: gl.createFramebuffer is not a function
 webgl1 conformance/extensions/webgl-depth-texture.html FAIL # getError expected one of: INVALID_ENUM or INVALID_VALUE. Was NO_ERROR : after evaluating: gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT, 1, 1, 0, gl.DEPTH_COMPONENT, gl.UNSIGNED_SHORT, null)
-webgl1 conformance/extensions/webgl-draw-buffers-framebuffer-unsupported.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/extensions/webgl-draw-buffers.html FAIL # TypeError: gl.createFramebuffer is not a function
 webgl1 conformance/extensions/webgl-multi-draw.html FAIL # remainder of buffer should be cleared
 webgl1 conformance/glsl/misc/shader-with-double-underscore.html FAIL # [unexpected vertex shader compile status] (expected: true) fragment shader that uses double-underscore in identifier should succeed
-webgl1 conformance/misc/bad-arguments-test.html FAIL # context.bindFramebuffer(context.FRAMEBUFFER, argument) should be undefined. Threw exception TypeError: context.bindFramebuffer is not a function
-webgl1 conformance/misc/error-reporting.html FAIL # context.bindFramebuffer(context.FRAMEBUFFER, null) should be undefined. Threw exception TypeError: context.bindFramebuffer is not a function
-webgl1 conformance/misc/expando-loss.html FAIL # TypeError: Cannot read properties of undefined (reading 'apply')
-webgl1 conformance/misc/instanceof-test.html FAIL # gl.createFramebuffer() instanceof WebGLFramebuffer should be true. Threw exception TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/misc/invalid-passed-params.html FAIL # TypeError: context.createRenderbuffer is not a function
-webgl1 conformance/misc/is-object.html FAIL # framebuffer = gl.createFramebuffer() threw exception TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/misc/null-object-behaviour.html FAIL # context.bindFramebuffer(context.FRAMEBUFFER, null) threw exception TypeError: context.bindFramebuffer is not a function
-webgl1 conformance/misc/object-deletion-behaviour.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/misc/shader-precision-format.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/misc/uninitialized-test.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/misc/webgl-specific-stencil-settings.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/more/conformance/methods.html FAIL # testOES20Methods
-webgl1 conformance/more/conformance/quickCheckAPI-B2.html FAIL # testValidArgs
-webgl1 conformance/more/conformance/quickCheckAPI-C.html FAIL # testValidArgs
-webgl1 conformance/more/conformance/quickCheckAPI-D_G.html FAIL # testValidArgs
-webgl1 conformance/more/conformance/quickCheckAPI-L_S.html FAIL # testValidArgs
+webgl1 conformance/misc/expando-loss.html FAIL # getFramebufferAttachmentParameter(DEPTH_STENCIL_ATTACHMENT) returns instance set with framebufferRenderbuffer
+webgl1 conformance/misc/null-object-behaviour.html FAIL # getError expected: INVALID_OPERATION. Was NO_ERROR : after evaluating: context.texImage2D(context.TEXTURE_2D, 0, context.RGBA, 1, 1, 0, context.RGBA, context.UNSIGNED_BYTE, new Uint8Array([0,0,0,0]))
+webgl1 conformance/misc/object-deletion-behaviour.html FAIL # gl.isShader(vertexShader) should be true. Was false.
 webgl1 conformance/more/conformance/quickCheckAPI-S_V.html FAIL # testValidArgs
-webgl1 conformance/more/conformance/webGLArrays.html TIMEOUT # no new result within the time limit
-webgl1 conformance/more/functions/bindBuffer.html FAIL # testBindBufferARRAY_BUFFER
-webgl1 conformance/more/functions/bindBufferBadArgs.html FAIL # testBindBufferARRAY_BUFFER
-webgl1 conformance/more/functions/bindFramebufferLeaveNonZero.html FAIL # testSeg
-webgl1 conformance/more/functions/bufferData.html TIMEOUT # no new result within the time limit
-webgl1 conformance/more/functions/bufferDataBadArgs.html TIMEOUT # no new result within the time limit
-webgl1 conformance/more/functions/bufferSubDataBadArgs.html TIMEOUT # no new result within the time limit
-webgl1 conformance/more/functions/copyTexImage2D.html FAIL # testTexImage2D
-webgl1 conformance/more/functions/copyTexImage2DBadArgs.html FAIL # testTexImage2D
-webgl1 conformance/more/functions/copyTexSubImage2D.html FAIL # testTexImage2D
-webgl1 conformance/more/functions/copyTexSubImage2DBadArgs.html FAIL # testTexImage2D
-webgl1 conformance/more/functions/drawArrays.html TIMEOUT # no new result within the time limit
-webgl1 conformance/more/functions/drawElements.html TIMEOUT # no new result within the time limit
-webgl1 conformance/more/functions/isTests.html FAIL # testIs
-webgl1 conformance/more/functions/isTestsBadArgs.html FAIL # gl.isFramebuffer(null) should be false. Threw exception TypeError: gl.isFramebuffer is not a function
-webgl1 conformance/more/functions/readPixels.html FAIL # testReadPixels
 webgl1 conformance/more/functions/readPixelsBadArgs.html TIMEOUT # no new result within the time limit
-webgl1 conformance/more/functions/texImage2D.html FAIL # testTexImage2D
 webgl1 conformance/more/functions/texImage2DBadArgs.html FAIL # testTexImage2D
 webgl1 conformance/more/functions/texImage2DHTML.html TIMEOUT # no new result within the time limit
-webgl1 conformance/more/functions/texImage2DHTMLBadArgs.html TIMEOUT # no new result within the time limit
-webgl1 conformance/more/functions/texSubImage2D.html FAIL # testTexSubImage2D
-webgl1 conformance/more/functions/texSubImage2DBadArgs.html FAIL # testTexImage2D
 webgl1 conformance/more/functions/texSubImage2DHTML.html TIMEOUT # no new result within the time limit
-webgl1 conformance/more/functions/texSubImage2DHTMLBadArgs.html TIMEOUT # no new result within the time limit
-webgl1 conformance/more/functions/uniformMatrix.html FAIL # testUniformf
-webgl1 conformance/more/functions/uniformMatrixBadArgs.html FAIL # testUniformf
-webgl1 conformance/more/functions/uniformf.html FAIL # testUniformf
-webgl1 conformance/more/functions/uniformfArrayLen1.html FAIL # testUniformArray
-webgl1 conformance/more/functions/uniformfBadArgs.html FAIL # testUniformf
-webgl1 conformance/more/functions/uniformi.html FAIL # testUniformi
-webgl1 conformance/more/functions/uniformiBadArgs.html FAIL # testUniformf
-webgl1 conformance/more/functions/vertexAttrib.html TIMEOUT # no new result within the time limit
-webgl1 conformance/more/functions/vertexAttribBadArgs.html TIMEOUT # no new result within the time limit
-webgl1 conformance/more/functions/vertexAttribPointer.html TIMEOUT # no new result within the time limit
-webgl1 conformance/more/functions/vertexAttribPointerBadArgs.html FAIL # testVertexAttribPointerVBO
 webgl1 conformance/programs/program-test.html FAIL # getError expected: NO_ERROR. Was INVALID_VALUE : The current program shouldn't be deleted
-webgl1 conformance/renderbuffers/depth-renderbuffer-initialization.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/renderbuffers/feedback-loop.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/renderbuffers/framebuffer-object-attachment.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/renderbuffers/framebuffer-state-restoration.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/renderbuffers/framebuffer-test.html FAIL # TypeError: gl.getFramebufferAttachmentParameter is not a function
-webgl1 conformance/renderbuffers/renderbuffer-initialization.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/renderbuffers/stencil-renderbuffer-initialization.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/rendering/bind-framebuffer-flush-bug.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/rendering/blending.html TIMEOUT # no new result within the time limit: TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/rendering/canvas-alpha-bug.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/rendering/clear-after-copyTexImage2D.html FAIL # TypeError: gl.bindFramebuffer is not a function
+webgl1 conformance/renderbuffers/framebuffer-object-attachment.html FAIL # getError expected: INVALID_ENUM. Was NO_ERROR : Only OBJECT_TYPE can be queried when no image is attached
 webgl1 conformance/rendering/clear-default-framebuffer-with-scissor-test.html FAIL # The canvas color at (0, 0) is not expected
-webgl1 conformance/rendering/color-mask-preserved-during-implicit-clears.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/rendering/framebuffer-switch.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/rendering/framebuffer-texture-clear.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/rendering/framebuffer-texture-switch.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/rendering/gl-scissor-fbo-test.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/rendering/rendering-sampling-feedback-loop.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/state/fb-attach-implicit-target-assignment.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/state/gl-object-get-calls.html TIMEOUT # no new result within the time limit
-webgl1 conformance/state/state-uneffected-after-compositing.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/textures/misc/copy-tex-image-2d-formats.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/textures/misc/copy-tex-image-crash.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/textures/misc/copytexsubimage2d-subrects.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/textures/misc/cube-incomplete-fbo.html FAIL # TypeError: gl.createFramebuffer is not a function
+webgl1 conformance/state/gl-object-get-calls.html FAIL # getRenderbufferParameter returned 0 instead of null for invalid parameter enum: RENDERBUFFER_SAMPLES
 webgl1 conformance/textures/misc/exif-orientation.html TIMEOUT # no new result within the time limit
-webgl1 conformance/textures/misc/format-filterable-renderable.html TIMEOUT # no new result within the time limit
 webgl1 conformance/textures/misc/gl-pixelstorei.html FAIL # should be 255,0,0,255
 webgl1 conformance/textures/misc/gl-teximage.html FAIL # should be 255,0,255,255
-webgl1 conformance/textures/misc/mipmap-fbo.html FAIL # TypeError: gl.createFramebuffer is not a function
 webgl1 conformance/textures/misc/origin-clean-conformance-offscreencanvas.html FAIL # Image setup failed (TypeError: img.decode is not a function).
 webgl1 conformance/textures/misc/origin-clean-conformance.html FAIL # Image setup failed (TypeError: img.decode is not a function).
 webgl1 conformance/textures/misc/png-image-types.html TIMEOUT # no new result within the time limit
 webgl1 conformance/textures/misc/tex-image-svg-image-no-natural-width-and-height.html TIMEOUT # no new result within the time limit
 webgl1 conformance/textures/misc/tex-image-with-format-and-type.html FAIL # TypeError: Failed to execute 'texImage2D': parameter 6 is not of type 'TexImageSource'.
 webgl1 conformance/textures/misc/tex-image-with-invalid-data.html FAIL # getError expected: INVALID_OPERATION. Was NO_ERROR :
-webgl1 conformance/textures/misc/tex-input-validation.html FAIL # TypeError: gl.bindFramebuffer is not a function
 webgl1 conformance/textures/misc/tex-video-using-tex-unit-non-zero.html TIMEOUT # no new result within the time limit
-webgl1 conformance/textures/misc/texture-attachment-formats.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/textures/misc/texture-copying-and-deletion.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/textures/misc/texture-copying-feedback-loops.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/textures/misc/texture-cube-as-fbo-attachment.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl1 conformance/textures/misc/texture-fakeblack.html FAIL # TypeError: gl.createFramebuffer is not a function
 webgl1 conformance/textures/misc/texture-npot-video.html TIMEOUT # no new result within the time limit
 webgl1 conformance/textures/misc/texture-upload-size.html FAIL # Texture was smaller than the expected size 2x4
 webgl1 conformance/textures/misc/video-rotation.html FAIL # No supported video types.
@@ -156,111 +68,36 @@ webgl1 conformance/uniforms/no-over-optimization-on-uniform-array-17.html TIMEOU
 webgl1 conformance/uniforms/uniform-default-values.html FAIL # should be green
 webgl2 conformance/attribs/gl-get-attrib-location-errors.html FAIL # getError expected: INVALID_OPERATION. Was NO_ERROR : Not linked program
 webgl2 conformance/attribs/gl-vertex-attrib-unconsumed-out-of-bounds.html FAIL # TypeError: gl.drawArraysInstanced is not a function
-webgl2 conformance/buffers/index-validation.html FAIL # gl.checkFramebufferStatus(gl.FRAMEBUFFER) should be 36053. Threw exception TypeError: gl.checkFramebufferStatus is not a function
 webgl2 conformance/canvas/buffer-offscreen-test.html FAIL # remainder of buffer should be cleared
 webgl2 conformance/canvas/buffer-preserve-test.html FAIL # remainder of buffer should be cleared
 webgl2 conformance/canvas/canvas-test.html TIMEOUT # no new result within the time limit
 webgl2 conformance/canvas/draw-static-webgl-to-multiple-canvas-test.html FAIL # drawImage: Should be (64,128,192,255).
 webgl2 conformance/canvas/draw-webgl-to-canvas-test.html FAIL # drawImage: Should be [64, 128, 192, 255]
-webgl2 conformance/canvas/framebuffer-bindings-affected-by-to-data-url.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance/canvas/framebuffer-bindings-unaffected-on-resize.html FAIL # TypeError: gl.createFramebuffer is not a function
 webgl2 conformance/canvas/render-after-resize-test.html FAIL # should be 0,255,0,255
 webgl2 conformance/canvas/to-data-url-after-composite.html FAIL # toDataURL loaded into image, drawn into 2D context, should be green
 webgl2 conformance/canvas/to-data-url-test.html FAIL # should be 0,255,0,255
 webgl2 conformance/canvas/webgl-to-2d-canvas.html FAIL # canvas 2d is correct color
 webgl2 conformance/context/context-attribute-preserve-drawing-buffer.html FAIL # Did not render ok with preserveDrawingBuffer false.
-webgl2 conformance/context/context-attributes-alpha-depth-stencil-antialias.html FAIL # gl = getWebGL(1, 1, null, [ 0, 0, 0, 0 ], 1, 0) should be non-null. Threw exception TypeError: gl.createFramebuffer is not a function
-webgl2 conformance/context/context-lost.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance/context/context-no-alpha-fbo-with-alpha.html FAIL # TypeError: gl.createFramebuffer is not a function
 webgl2 conformance/context/context-release-with-workers.html TIMEOUT # no new result within the time limit
-webgl2 conformance/context/deleted-object-behavior.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance/context/incorrect-context-object-behaviour.html FAIL # TypeError: contextA.createFramebuffer is not a function
+webgl2 conformance/context/incorrect-context-object-behaviour.html FAIL # getError expected: NO_ERROR. Was INVALID_OPERATION : after evaluating: contextA.isBuffer(bufferB)
 webgl2 conformance/context/premultiplyalpha-test.html FAIL # should draw with 64,128,255,128
 webgl2 conformance/extensions/ext-color-buffer-half-float.html FAIL # TypeError: Cannot assign to read only property 'R16F' of object '#<WebGL2RenderingContext>'
 webgl2 conformance/extensions/webgl-multi-draw.html FAIL # remainder of buffer should be cleared
 webgl2 conformance/glsl/misc/shader-with-double-underscore.html FAIL # [unexpected vertex shader compile status] (expected: true) fragment shader that uses double-underscore in identifier should succeed
-webgl2 conformance/misc/bad-arguments-test.html FAIL # context.bindFramebuffer(context.FRAMEBUFFER, argument) should be undefined. Threw exception TypeError: context.bindFramebuffer is not a function
-webgl2 conformance/misc/error-reporting.html FAIL # context.bindFramebuffer(context.FRAMEBUFFER, null) should be undefined. Threw exception TypeError: context.bindFramebuffer is not a function
-webgl2 conformance/misc/expando-loss.html FAIL # TypeError: Cannot read properties of undefined (reading 'apply')
-webgl2 conformance/misc/invalid-passed-params.html FAIL # TypeError: context.createRenderbuffer is not a function
-webgl2 conformance/misc/is-object.html FAIL # framebuffer = gl.createFramebuffer() threw exception TypeError: gl.createFramebuffer is not a function
-webgl2 conformance/misc/null-object-behaviour.html FAIL # context.bindFramebuffer(context.FRAMEBUFFER, null) threw exception TypeError: context.bindFramebuffer is not a function
-webgl2 conformance/misc/object-deletion-behaviour.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance/misc/shader-precision-format.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance/misc/uninitialized-test.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance/misc/webgl-specific-stencil-settings.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance/more/conformance/methods.html FAIL # testOES20Methods
-webgl2 conformance/more/conformance/quickCheckAPI-B2.html FAIL # testValidArgs
-webgl2 conformance/more/conformance/quickCheckAPI-C.html FAIL # testValidArgs
-webgl2 conformance/more/conformance/quickCheckAPI-D_G.html FAIL # testValidArgs
-webgl2 conformance/more/conformance/quickCheckAPI-L_S.html FAIL # testValidArgs
+webgl2 conformance/misc/null-object-behaviour.html FAIL # getError expected: INVALID_OPERATION. Was NO_ERROR : after evaluating: context.texImage2D(context.TEXTURE_2D, 0, context.RGBA, 1, 1, 0, context.RGBA, context.UNSIGNED_BYTE, new Uint8Array([0,0,0,0]))
+webgl2 conformance/misc/object-deletion-behaviour.html FAIL # gl.isShader(vertexShader) should be true. Was false.
 webgl2 conformance/more/conformance/quickCheckAPI-S_V.html FAIL # testValidArgs
-webgl2 conformance/more/conformance/webGLArrays.html TIMEOUT # no new result within the time limit
-webgl2 conformance/more/functions/bindBuffer.html FAIL # testBindBufferARRAY_BUFFER
-webgl2 conformance/more/functions/bindBufferBadArgs.html FAIL # testBindBufferARRAY_BUFFER
-webgl2 conformance/more/functions/bindFramebufferLeaveNonZero.html FAIL # testSeg
-webgl2 conformance/more/functions/bufferData.html TIMEOUT # no new result within the time limit
-webgl2 conformance/more/functions/bufferDataBadArgs.html TIMEOUT # no new result within the time limit
-webgl2 conformance/more/functions/bufferSubDataBadArgs.html TIMEOUT # no new result within the time limit
-webgl2 conformance/more/functions/copyTexImage2D.html FAIL # testTexImage2D
-webgl2 conformance/more/functions/copyTexImage2DBadArgs.html FAIL # testTexImage2D
-webgl2 conformance/more/functions/copyTexSubImage2D.html FAIL # testTexImage2D
-webgl2 conformance/more/functions/copyTexSubImage2DBadArgs.html FAIL # testTexImage2D
-webgl2 conformance/more/functions/drawArrays.html TIMEOUT # no new result within the time limit
-webgl2 conformance/more/functions/drawElements.html TIMEOUT # no new result within the time limit
-webgl2 conformance/more/functions/isTests.html FAIL # testIs
-webgl2 conformance/more/functions/isTestsBadArgs.html FAIL # gl.isFramebuffer(null) should be false. Threw exception TypeError: gl.isFramebuffer is not a function
-webgl2 conformance/more/functions/readPixels.html FAIL # testReadPixels
 webgl2 conformance/more/functions/readPixelsBadArgs.html TIMEOUT # no new result within the time limit
-webgl2 conformance/more/functions/texImage2D.html FAIL # testTexImage2D
 webgl2 conformance/more/functions/texImage2DBadArgs.html FAIL # testTexImage2D
 webgl2 conformance/more/functions/texImage2DHTML.html TIMEOUT # no new result within the time limit
-webgl2 conformance/more/functions/texImage2DHTMLBadArgs.html TIMEOUT # no new result within the time limit
-webgl2 conformance/more/functions/texSubImage2D.html FAIL # testTexSubImage2D
-webgl2 conformance/more/functions/texSubImage2DBadArgs.html FAIL # testTexImage2D
 webgl2 conformance/more/functions/texSubImage2DHTML.html TIMEOUT # no new result within the time limit
-webgl2 conformance/more/functions/texSubImage2DHTMLBadArgs.html TIMEOUT # no new result within the time limit
-webgl2 conformance/more/functions/uniformMatrix.html FAIL # testUniformf
-webgl2 conformance/more/functions/uniformMatrixBadArgs.html FAIL # testUniformf
-webgl2 conformance/more/functions/uniformf.html FAIL # testUniformf
-webgl2 conformance/more/functions/uniformfArrayLen1.html FAIL # testUniformArray
-webgl2 conformance/more/functions/uniformfBadArgs.html FAIL # testUniformf
-webgl2 conformance/more/functions/uniformi.html FAIL # testUniformi
-webgl2 conformance/more/functions/uniformiBadArgs.html FAIL # testUniformf
-webgl2 conformance/more/functions/vertexAttrib.html TIMEOUT # no new result within the time limit
-webgl2 conformance/more/functions/vertexAttribBadArgs.html TIMEOUT # no new result within the time limit
-webgl2 conformance/more/functions/vertexAttribPointer.html TIMEOUT # no new result within the time limit
-webgl2 conformance/more/functions/vertexAttribPointerBadArgs.html FAIL # testVertexAttribPointerVBO
 webgl2 conformance/programs/program-test.html FAIL # getError expected: NO_ERROR. Was INVALID_VALUE : The current program shouldn't be deleted
-webgl2 conformance/reading/read-pixels-test.html FAIL # getError expected: INVALID_VALUE. Was NO_ERROR : offset is greater than array size
-webgl2 conformance/renderbuffers/depth-renderbuffer-initialization.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance/renderbuffers/feedback-loop.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance/renderbuffers/framebuffer-state-restoration.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance/renderbuffers/renderbuffer-initialization.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance/renderbuffers/stencil-renderbuffer-initialization.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance/rendering/bind-framebuffer-flush-bug.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance/rendering/blending.html TIMEOUT # no new result within the time limit: TypeError: gl.createFramebuffer is not a function
-webgl2 conformance/rendering/canvas-alpha-bug.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance/rendering/clear-after-copyTexImage2D.html FAIL # TypeError: gl.bindFramebuffer is not a function
 webgl2 conformance/rendering/clear-default-framebuffer-with-scissor-test.html FAIL # The canvas color at (0, 0) is not expected
-webgl2 conformance/rendering/color-mask-preserved-during-implicit-clears.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance/rendering/framebuffer-switch.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance/rendering/framebuffer-texture-clear.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance/rendering/framebuffer-texture-switch.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance/rendering/gl-scissor-fbo-test.html FAIL # TypeError: gl.createFramebuffer is not a function
 webgl2 conformance/rendering/negative-one-index.html FAIL # should be 0,0,0,0
-webgl2 conformance/rendering/rendering-sampling-feedback-loop.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance/state/fb-attach-implicit-target-assignment.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance/state/state-uneffected-after-compositing.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance/textures/misc/copy-tex-image-2d-formats.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance/textures/misc/copy-tex-image-crash.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance/textures/misc/copytexsubimage2d-subrects.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance/textures/misc/cube-incomplete-fbo.html FAIL # TypeError: gl.createFramebuffer is not a function
 webgl2 conformance/textures/misc/exif-orientation.html TIMEOUT # no new result within the time limit
-webgl2 conformance/textures/misc/format-filterable-renderable.html TIMEOUT # no new result within the time limit
+webgl2 conformance/textures/misc/format-filterable-renderable.html FAIL # filterable was false, but expected true
 webgl2 conformance/textures/misc/gl-pixelstorei.html FAIL # should be 255,0,0,255
 webgl2 conformance/textures/misc/gl-teximage.html FAIL # should be 255,0,255,255
-webgl2 conformance/textures/misc/mipmap-fbo.html FAIL # TypeError: gl.createFramebuffer is not a function
 webgl2 conformance/textures/misc/origin-clean-conformance-offscreencanvas.html FAIL # Image setup failed (TypeError: img.decode is not a function).
 webgl2 conformance/textures/misc/origin-clean-conformance.html FAIL # Image setup failed (TypeError: img.decode is not a function).
 webgl2 conformance/textures/misc/png-image-types.html TIMEOUT # no new result within the time limit
@@ -268,10 +105,6 @@ webgl2 conformance/textures/misc/tex-image-svg-image-no-natural-width-and-height
 webgl2 conformance/textures/misc/tex-image-with-format-and-type.html FAIL # TypeError: Failed to execute 'texImage2D': parameter 6 is not of type 'TexImageSource'.
 webgl2 conformance/textures/misc/tex-image-with-invalid-data.html FAIL # getError expected: INVALID_OPERATION. Was NO_ERROR :
 webgl2 conformance/textures/misc/tex-video-using-tex-unit-non-zero.html TIMEOUT # no new result within the time limit
-webgl2 conformance/textures/misc/texture-attachment-formats.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance/textures/misc/texture-copying-and-deletion.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance/textures/misc/texture-copying-feedback-loops.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance/textures/misc/texture-cube-as-fbo-attachment.html FAIL # TypeError: gl.createFramebuffer is not a function
 webgl2 conformance/textures/misc/texture-upload-size.html FAIL # Texture was smaller than the expected size 2x4
 webgl2 conformance/textures/misc/video-rotation.html FAIL # No supported video types.
 webgl2 conformance/typedarrays/array-large-array-tests.html FAIL # Construction of huge Float32Array should throw exception
@@ -306,87 +139,38 @@ webgl2 conformance2/buffers/one-large-uniform-buffer.html FAIL # TypeError: gl.b
 webgl2 conformance2/buffers/uniform-buffers-second-compile.html FAIL # TypeError: gl.getUniformBlockIndex is not a function
 webgl2 conformance2/buffers/uniform-buffers-state-restoration.html FAIL # TypeError: gl.getUniformBlockIndex is not a function
 webgl2 conformance2/buffers/uniform-buffers.html FAIL # TypeError: gl.getUniformBlockIndex is not a function
-webgl2 conformance2/context/incorrect-context-object-behaviour.html FAIL # TypeError: contextA.createFramebuffer is not a function
-webgl2 conformance2/context/methods-2.html FAIL # Property either does not exist or is not a function: bindFramebuffer
-webgl2 conformance2/extensions/ext-color-buffer-float.html FAIL # TypeError: gl.createFramebuffer is not a function
+webgl2 conformance2/context/incorrect-context-object-behaviour.html FAIL # TypeError: contextB.createQuery is not a function
+webgl2 conformance2/context/methods-2.html FAIL # Property either does not exist or is not a function: vertexAttribDivisor
 webgl2 conformance2/extensions/ext-color-buffer-half-float.html FAIL # TypeError: Cannot assign to read only property 'R16F' of object '#<WebGL2RenderingContext>'
-webgl2 conformance2/extensions/ext-render-snorm.html FAIL # TypeError: gl.createRenderbuffer is not a function
 webgl2 conformance2/extensions/oes-draw-buffers-indexed.html TIMEOUT # no new result within the time limit
-webgl2 conformance2/extensions/ovr_multiview2.html FAIL # TypeError: gl.getFramebufferAttachmentParameter is not a function
 webgl2 conformance2/extensions/required-extensions.html FAIL # ((has_s3tc && has_s3tc_srgb && has_rgtc) || has_etc) should be true. Was false.
 webgl2 conformance2/extensions/webgl-multi-draw-instanced-base-vertex-base-instance.html TIMEOUT # no new result within the time limit
-webgl2 conformance2/extensions/webgl-render-shared-exponent.html FAIL # TypeError: gl.createRenderbuffer is not a function
-webgl2 conformance2/extensions/webgl-shader-pixel-local-storage.html TIMEOUT # no new result within the time limit
 webgl2 conformance2/glsl3/matrix-row-major-dynamic-indexing.html FAIL # TypeError: gl.getUniformBlockIndex is not a function
 webgl2 conformance2/glsl3/matrix-row-major.html FAIL # TypeError: gl.getUniformBlockIndex is not a function
-webgl2 conformance2/misc/blend-integer.html FAIL # TypeError: gl.createFramebuffer is not a function
 webgl2 conformance2/misc/expando-loss-2.html FAIL # TypeError: Cannot read properties of undefined (reading 'call')
-webgl2 conformance2/misc/instanceof-test.html FAIL # gl.createFramebuffer() instanceof WebGLFramebuffer should be true. Threw exception TypeError: gl.createFramebuffer is not a function
+webgl2 conformance2/misc/instanceof-test.html FAIL # gl.createQuery() instanceof WebGLQuery should be true. Threw exception TypeError: gl.createQuery is not a function
 webgl2 conformance2/misc/null-object-behaviour-2.html FAIL # gl.deleteQuery(null) threw exception TypeError: gl.deleteQuery is not a function
 webgl2 conformance2/misc/object-deletion-behaviour-2.html FAIL # TypeError: gl.createVertexArray is not a function
-webgl2 conformance2/misc/uninitialized-test-2.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/misc/views-with-offsets.html FAIL # TypeError: gl.createFramebuffer is not a function
+webgl2 conformance2/misc/views-with-offsets.html FAIL # getError expected: INVALID_OPERATION. Was INVALID_VALUE :
 webgl2 conformance2/programs/get-uniform-indices.html FAIL # TypeError: gl.getUniformIndices is not a function
 webgl2 conformance2/query/occlusion-query-scissor.html TIMEOUT # no new result within the time limit
 webgl2 conformance2/query/occlusion-query.html FAIL # TypeError: gl.createQuery is not a function
 webgl2 conformance2/query/query.html FAIL # TypeError: gl.getQuery is not a function
-webgl2 conformance2/reading/read-pixels-from-fbo-test.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/reading/read-pixels-from-rgb8-into-pbo-bug.html FAIL # TypeError: gl.createRenderbuffer is not a function
-webgl2 conformance2/reading/read-pixels-into-pixel-pack-buffer.html FAIL # TypeError: Failed to execute 'readPixels': parameter 7 is not of type 'ArrayBufferView'.
-webgl2 conformance2/reading/read-pixels-pack-parameters.html FAIL # TypeError: Failed to execute 'readPixels': parameter 7 is not of type 'ArrayBufferView'.
-webgl2 conformance2/renderbuffers/framebuffer-object-attachment.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/renderbuffers/framebuffer-test.html FAIL # TypeError: gl.getFramebufferAttachmentParameter is not a function
-webgl2 conformance2/renderbuffers/framebuffer-texture-layer.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/renderbuffers/invalidate-framebuffer.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/renderbuffers/multisample-draws-between-blits.html FAIL # TypeError: gl.createRenderbuffer is not a function
-webgl2 conformance2/renderbuffers/multisample-with-full-sample-counts.html FAIL # TypeError: gl.getInternalformatParameter is not a function
-webgl2 conformance2/renderbuffers/multisampled-depth-renderbuffer-initialization.html FAIL # TypeError: gl.createRenderbuffer is not a function
-webgl2 conformance2/renderbuffers/multisampled-renderbuffer-initialization.html FAIL # TypeError: gl.getInternalformatParameter is not a function
-webgl2 conformance2/renderbuffers/multisampled-stencil-renderbuffer-initialization.html FAIL # TypeError: gl.getInternalformatParameter is not a function
-webgl2 conformance2/renderbuffers/readbuffer.html FAIL # TypeError: gl.readBuffer is not a function
+webgl2 conformance2/renderbuffers/framebuffer-object-attachment.html FAIL # getError expected: NO_ERROR. Was INVALID_OPERATION :
+webgl2 conformance2/renderbuffers/framebuffer-test.html FAIL # getError expected: INVALID_OPERATION. Was INVALID_ENUM : getFramebufferAttachmentParameter(FRAMEBUFFER_ATTACHMENT_DEPTH_SIZE) on read framebuffer without depth attachment.
+webgl2 conformance2/renderbuffers/framebuffer-texture-layer.html FAIL # gl.getFramebufferAttachmentParameter(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.FRAMEBUFFER_ATTACHMENT_OBJECT_NAME) == '[object Object]' should be true. Was false.
+webgl2 conformance2/renderbuffers/multisampled-depth-renderbuffer-initialization.html FAIL # getError expected: INVALID_OPERATION. Was NO_ERROR : after evaluating: gl.renderbufferStorageMultisample(gl.RENDERBUFFER, 1, gl.DEPTH_STENCIL, 1, 1)
 webgl2 conformance2/rendering/attrib-type-match.html FAIL # TypeError: gl.drawArraysInstanced is not a function
-webgl2 conformance2/rendering/blitframebuffer-filter-outofbounds.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/rendering/blitframebuffer-filter-srgb.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/rendering/blitframebuffer-multisampled-readbuffer.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/rendering/blitframebuffer-outside-readbuffer.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/rendering/blitframebuffer-resolve-to-back-buffer.html FAIL # TypeError: gl.getInternalformatParameter is not a function
-webgl2 conformance2/rendering/blitframebuffer-scissor-enabled.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/rendering/blitframebuffer-size-overflow.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/rendering/blitframebuffer-srgb-and-linear-drawbuffers.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/rendering/blitframebuffer-stencil-only.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/rendering/blitframebuffer-test.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/rendering/blitframebuffer-unaffected-by-colormask.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/rendering/clear-func-buffer-type-match.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/rendering/clear-srgb-color-buffer.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/rendering/clearbuffer-sub-source.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/rendering/clearbufferfv-with-alpha-false.html FAIL # TypeError: gl[func] is not a function
-webgl2 conformance2/rendering/depth-stencil-feedback-loop.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/rendering/draw-buffers-dirty-state-bug.html FAIL # TypeError: gl.createFramebuffer is not a function
 webgl2 conformance2/rendering/draw-buffers-driver-hang.html FAIL # TypeError: gl.createVertexArray is not a function
-webgl2 conformance2/rendering/draw-buffers-sparse-output-locations.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/rendering/draw-buffers.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/rendering/element-index-uint.html FAIL # gl.checkFramebufferStatus(gl.FRAMEBUFFER) should be 36053. Threw exception TypeError: gl.checkFramebufferStatus is not a function
-webgl2 conformance2/rendering/framebuffer-completeness-draw-framebuffer.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/rendering/framebuffer-completeness-unaffected.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/rendering/framebuffer-mismatched-attachment-targets.html FAIL # TypeError: gl.createRenderbuffer is not a function
-webgl2 conformance2/rendering/framebuffer-render-to-layer-angle-issue.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/rendering/framebuffer-render-to-layer.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/rendering/framebuffer-texture-changing-base-level.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/rendering/framebuffer-texture-level1.html FAIL # TypeError: gl.createFramebuffer is not a function
+webgl2 conformance2/rendering/draw-buffers.html FAIL # getError expected: NO_ERROR. Was INVALID_OPERATION : should be able to attach to the max attachment point: gl.COLOR_ATTACHMENT0 + 7
 webgl2 conformance2/rendering/framebuffer-to-texture.html FAIL # TypeError: gl.createVertexArray is not a function
-webgl2 conformance2/rendering/framebuffer-unsupported.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/rendering/fs-color-type-mismatch-color-buffer-type.html FAIL # TypeError: gl.createFramebuffer is not a function
 webgl2 conformance2/rendering/instanced-arrays.html FAIL # TypeError: gl.vertexAttribDivisor is not a function
 webgl2 conformance2/rendering/instanced-rendering-bug.html FAIL # TypeError: gl.createVertexArray is not a function
 webgl2 conformance2/rendering/instanced-rendering-large-divisor.html FAIL # TypeError: gl.vertexAttribDivisor is not a function
-webgl2 conformance2/rendering/line-rendering-quality.html FAIL # TypeError: gl.createFramebuffer is not a function
 webgl2 conformance2/rendering/multisampling-depth-resolve.html FAIL # TypeError: gl.createVertexArray is not a function
-webgl2 conformance2/rendering/multisampling-fragment-evaluation.html FAIL # TypeError: gl.getInternalformatParameter is not a function
 webgl2 conformance2/rendering/rasterizer-discard-and-implicit-clear.html FAIL # left half of canvas should be clear
-webgl2 conformance2/rendering/read-draw-when-missing-image.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/rendering/rgb-format-support.html FAIL # TypeError: gl.getInternalformatParameter is not a function
 webgl2 conformance2/rendering/uniform-block-buffer-size.html FAIL # TypeError: gl.getUniformBlockIndex is not a function
-webgl2 conformance2/rendering/vertex-id.html FAIL # TypeError: gl.createFramebuffer is not a function
+webgl2 conformance2/rendering/vertex-id.html FAIL # TypeError: gl.transformFeedbackVaryings is not a function
 webgl2 conformance2/state/gl-enum-tests.html FAIL # TypeError: gl.getActiveUniforms is not a function
 webgl2 conformance2/state/gl-object-get-calls.html TIMEOUT # no new result within the time limit
 webgl2 conformance2/sync/sync-webgl-specific.html FAIL # TypeError: gl.fenceSync is not a function
@@ -398,26 +182,14 @@ webgl2 conformance2/textures/image_data/tex-3d-r8ui-red_integer-unsigned_byte.ht
 webgl2 conformance2/textures/image_data/tex-3d-rg8ui-rg_integer-unsigned_byte.html FAIL # should be 0,0,0
 webgl2 conformance2/textures/image_data/tex-3d-rgb8ui-rgb_integer-unsigned_byte.html FAIL # should be 0,0,0
 webgl2 conformance2/textures/image_data/tex-3d-rgba8ui-rgba_integer-unsigned_byte.html FAIL # should be 0,0,0
-webgl2 conformance2/textures/misc/angle-stuck-depth-textures.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/textures/misc/copy-texture-cube-map-AMD-bug.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/textures/misc/copy-texture-image-luma-format.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/textures/misc/copy-texture-image-same-texture.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/textures/misc/copy-texture-image-webgl-specific.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/textures/misc/copy-texture-image.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/textures/misc/immutable-tex-render-feedback.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/textures/misc/integer-cubemap-texture-sampling.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/textures/misc/mipmap-fbo.html FAIL # TypeError: gl.createFramebuffer is not a function
+webgl2 conformance2/textures/misc/immutable-tex-render-feedback.html FAIL # checkFramebufferStatus expected: FRAMEBUFFER_INCOMPLETE_ATTACHMENT. Was FRAMEBUFFER_COMPLETE: {immutable: false, level_prime_base/max: [1, 0], minFilter: LINEAR, dest: 1}
 webgl2 conformance2/textures/misc/origin-clean-conformance-offscreencanvas.html FAIL # Image setup failed (TypeError: img.decode is not a function).
 webgl2 conformance2/textures/misc/pbo-texture-uploads.html FAIL # TypeError: Failed to execute 'texSubImage2D': parameter 7 is not of type 'TexImageSource'.
-webgl2 conformance2/textures/misc/tex-image-10bpc.html TIMEOUT # no new result within the time limit: TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/textures/misc/tex-image-and-sub-image-with-array-buffer-view-sub-source.html FAIL # TypeError: gl.bindFramebuffer is not a function
+webgl2 conformance2/textures/misc/tex-image-10bpc.html FAIL # uniquePixels.size should be >= 7. Was 2 (of type number).
 webgl2 conformance2/textures/misc/tex-image-with-bad-args-from-dom-elements.html FAIL # getError expected one of: INVALID_VALUE or INVALID_ENUM or INVALID_OPERATION. Was NO_ERROR : TexImage2D taking RGB10_A2UI/RGBA_INTEGER/UNSIGNED_INT_2_10_10_10_REV should fail
 webgl2 conformance2/textures/misc/tex-image-with-different-data-source.html FAIL # getError expected one of: INVALID_VALUE or INVALID_ENUM. Was NO_ERROR : TexImage2D taking RGB10_A2UI internalformat and a canvas source should fail
-webgl2 conformance2/textures/misc/tex-input-validation.html FAIL # TypeError: gl.bindFramebuffer is not a function
-webgl2 conformance2/textures/misc/tex-new-formats.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/textures/misc/tex-unpack-params-imagedata.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/textures/misc/tex-unpack-params-with-flip-y-and-premultiply-alpha.html FAIL # TypeError: gl.createFramebuffer is not a function
-webgl2 conformance2/textures/misc/tex-unpack-params.html FAIL # TypeError: gl.createFramebuffer is not a function
+webgl2 conformance2/textures/misc/tex-input-validation.html FAIL # getError expected: INVALID_ENUM. Was NO_ERROR : paramName: 0x8e42
+webgl2 conformance2/textures/misc/tex-unpack-params-with-flip-y-and-premultiply-alpha.html FAIL # getError expected: INVALID_OPERATION. Was NO_ERROR : invalid unpack params combination
 webgl2 conformance2/transform_feedback/default_transform_feedback.html FAIL # TypeError: gl.transformFeedbackVaryings is not a function
 webgl2 conformance2/transform_feedback/non-existent-varying.html FAIL # TypeError: gl.transformFeedbackVaryings is not a function
 webgl2 conformance2/transform_feedback/same-buffer-two-binding-points.html FAIL # TypeError: gl.transformFeedbackVaryings is not a function
@@ -436,144 +208,121 @@ webgl2 conformance2/uniforms/simple-buffer-change.html FAIL # TypeError: gl.getU
 webgl2 conformance2/uniforms/uniform-blocks-with-arrays.html FAIL # TypeError: gl.getUniformBlockIndex is not a function
 webgl2 conformance2/vertex_arrays/vertex-array-object-and-disabled-attributes.html FAIL # TypeError: gl.createVertexArray is not a function
 webgl2 conformance2/vertex_arrays/vertex-array-object.html FAIL # TypeError: gl.createVertexArray is not a function
-webgl2 conformance2/wasm/readpixels-16gb-wasm-memory.html FAIL # Expected [42,84,128,255], was [0,0,0,0]
-webgl2 conformance2/wasm/readpixels-2gb-in-4gb-wasm-memory.html FAIL # Expected [42,84,128,255], was [0,0,0,0]
-webgl2 conformance2/wasm/readpixels-4gb-wasm-memory.html FAIL # Expected [42,84,128,255], was [0,0,0,0]
 webgl2 deqp/functional/gles3/attriblocation.html FAIL # attribute_location.bind_time.reattach:
 webgl2 deqp/functional/gles3/booleanstatequery.html FAIL # boolean.color_writemask:
 webgl2 deqp/functional/gles3/buffercopy.html FAIL # copy.basic.array_copy_read: gl.createVertexArray is not a function
-webgl2 deqp/functional/gles3/clipping.html FAIL # clipping.narrow_lines_full_viewport: ctx.viewport is not a function
+webgl2 deqp/functional/gles3/clipping.html FAIL # clipping.triangles_full_viewport_(-1.2,-1.2,-1.2)-(1.2,1.2,1.2): ctx.createVertexArray is not a function
 webgl2 deqp/functional/gles3/draw/draw_arrays.html FAIL # draw.draw_arrays.first.first_1: this.m_ctx.createVertexArray is not a function
 webgl2 deqp/functional/gles3/draw/draw_arrays_instanced.html FAIL # draw.draw_arrays_instanced.first.first_1: this.m_ctx.createVertexArray is not a function
 webgl2 deqp/functional/gles3/draw/draw_elements.html FAIL # draw.draw_elements.indices.buffer.index_byte: this.m_ctx.createVertexArray is not a function
 webgl2 deqp/functional/gles3/draw/draw_elements_instanced.html FAIL # draw.draw_elements_instanced.indices.buffer.index_byte: this.m_ctx.createVertexArray is not a function
 webgl2 deqp/functional/gles3/draw/draw_range_elements.html FAIL # draw.draw_range_elements.points.single_attribute: this.m_ctx.createVertexArray is not a function
-webgl2 deqp/functional/gles3/draw/instancing.html FAIL # draw.instancing.draw_arrays_instanced_grid_2x2: ctx.getAttribLocation is not a function
+webgl2 deqp/functional/gles3/draw/instancing.html FAIL # draw.instancing.draw_arrays_instanced_grid_2x2: ctx.vertexAttribDivisor is not a function
 webgl2 deqp/functional/gles3/draw/random.html FAIL # draw.random.0: this.m_ctx.createVertexArray is not a function
-webgl2 deqp/functional/gles3/fbocolorbuffer/blend.html FAIL # color.blend.rgba8_src_over: context.useProgram is not a function
-webgl2 deqp/functional/gles3/fbocolorbuffer/clear.html FAIL # color.clear.rgba32i: ctx.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/fbocolorbuffer/tex2d_00.html FAIL # color.tex2d.rgba32i: context.useProgram is not a function
-webgl2 deqp/functional/gles3/fbocolorbuffer/tex2d_01.html FAIL # color.tex2d.rgba32ui: context.useProgram is not a function
-webgl2 deqp/functional/gles3/fbocolorbuffer/tex2d_02.html FAIL # color.tex2d.rgba16i: context.useProgram is not a function
-webgl2 deqp/functional/gles3/fbocolorbuffer/tex2d_03.html FAIL # color.tex2d.rgba16ui: context.useProgram is not a function
-webgl2 deqp/functional/gles3/fbocolorbuffer/tex2d_04.html FAIL # color.tex2d.rgba8: context.useProgram is not a function
-webgl2 deqp/functional/gles3/fbocolorbuffer/tex2d_05.html FAIL # color.tex2d.rgba8i: context.useProgram is not a function
-webgl2 deqp/functional/gles3/fbocolorbuffer/tex2darray_00.html FAIL # color.tex2darray.rgba32i: context.useProgram is not a function
-webgl2 deqp/functional/gles3/fbocolorbuffer/tex2darray_01.html FAIL # color.tex2darray.rgba32ui: context.useProgram is not a function
-webgl2 deqp/functional/gles3/fbocolorbuffer/tex2darray_02.html FAIL # color.tex2darray.rgba16i: context.useProgram is not a function
-webgl2 deqp/functional/gles3/fbocolorbuffer/tex2darray_03.html FAIL # color.tex2darray.rgba16ui: context.useProgram is not a function
-webgl2 deqp/functional/gles3/fbocolorbuffer/tex2darray_04.html FAIL # color.tex2darray.rgba8: context.useProgram is not a function
-webgl2 deqp/functional/gles3/fbocolorbuffer/tex2darray_05.html FAIL # color.tex2darray.rgba8i: context.useProgram is not a function
-webgl2 deqp/functional/gles3/fbocolorbuffer/tex3d_00.html FAIL # color.tex3d.rgba32i: context.useProgram is not a function
-webgl2 deqp/functional/gles3/fbocolorbuffer/tex3d_01.html FAIL # color.tex3d.rgba32ui: context.useProgram is not a function
-webgl2 deqp/functional/gles3/fbocolorbuffer/tex3d_02.html FAIL # color.tex3d.rgba16i: context.useProgram is not a function
-webgl2 deqp/functional/gles3/fbocolorbuffer/tex3d_03.html FAIL # color.tex3d.rgba16ui: context.useProgram is not a function
-webgl2 deqp/functional/gles3/fbocolorbuffer/tex3d_04.html FAIL # color.tex3d.rgba8: context.useProgram is not a function
-webgl2 deqp/functional/gles3/fbocolorbuffer/tex3d_05.html FAIL # color.tex3d.rgba8i: context.useProgram is not a function
-webgl2 deqp/functional/gles3/fbocolorbuffer/texcube_00.html FAIL # color.texcube.rgba32i: context.useProgram is not a function
-webgl2 deqp/functional/gles3/fbocolorbuffer/texcube_01.html FAIL # color.texcube.rgba32ui: context.useProgram is not a function
-webgl2 deqp/functional/gles3/fbocolorbuffer/texcube_02.html FAIL # color.texcube.rgba16i: context.useProgram is not a function
-webgl2 deqp/functional/gles3/fbocolorbuffer/texcube_03.html FAIL # color.texcube.rgba16ui: context.useProgram is not a function
-webgl2 deqp/functional/gles3/fbocolorbuffer/texcube_04.html FAIL # color.texcube.rgba8: context.useProgram is not a function
-webgl2 deqp/functional/gles3/fbocolorbuffer/texcube_05.html FAIL # color.texcube.rgba8i: context.useProgram is not a function
-webgl2 deqp/functional/gles3/fbocompleteness.html FAIL # completeness.renderable.renderbuffer.depth.rgb10_a2ui: Cannot read properties of undefined (reading 'call')
-webgl2 deqp/functional/gles3/fbodepthbuffer.html FAIL # depth.basic.depth_component32f: context.viewport is not a function
-webgl2 deqp/functional/gles3/fboinvalidate/default.html FAIL # invalidate.default.render_none: context.getUniformLocation is not a function
-webgl2 deqp/functional/gles3/fboinvalidate/format_00.html FAIL # invalidate.format.rgba32i: ctx.createTexture is not a function
-webgl2 deqp/functional/gles3/fboinvalidate/format_01.html FAIL # invalidate.format.rgba32ui: ctx.createTexture is not a function
-webgl2 deqp/functional/gles3/fboinvalidate/format_02.html FAIL # invalidate.format.rgba16i: ctx.createTexture is not a function
-webgl2 deqp/functional/gles3/fboinvalidate/sub.html FAIL # invalidate.sub.render_none: ctx.createRenderbuffer is not a function
-webgl2 deqp/functional/gles3/fboinvalidate/target.html FAIL # invalidate.target.framebuffer_framebuffer_color: ctx.createRenderbuffer is not a function
-webgl2 deqp/functional/gles3/fboinvalidate/whole.html FAIL # invalidate.whole.render_none: ctx.createRenderbuffer is not a function
-webgl2 deqp/functional/gles3/fbomultisample.2_samples.html FAIL # msaa.2_samples.rgba8: ctx.createRenderbuffer is not a function
-webgl2 deqp/functional/gles3/fbomultisample.4_samples.html FAIL # msaa.4_samples.rgba8: ctx.createRenderbuffer is not a function
-webgl2 deqp/functional/gles3/fbomultisample.8_samples.html FAIL # msaa.8_samples.rgba8: gl.getInternalformatParameter is not a function
-webgl2 deqp/functional/gles3/fborender/recreate_color_00.html FAIL # render.recreate_color.tex2d_rgba32f_depth_stencil_rbo_depth24_stencil8: context.clearColor is not a function
-webgl2 deqp/functional/gles3/fborender/recreate_color_01.html FAIL # render.recreate_color.tex2d_rgba32i_depth_stencil_rbo_depth24_stencil8: context.clearColor is not a function
-webgl2 deqp/functional/gles3/fborender/recreate_color_02.html FAIL # render.recreate_color.tex2d_rgba32ui_depth_stencil_rbo_depth24_stencil8: context.clearColor is not a function
-webgl2 deqp/functional/gles3/fborender/recreate_color_03.html FAIL # render.recreate_color.tex2d_rgba16f_depth_stencil_rbo_depth24_stencil8: context.clearColor is not a function
-webgl2 deqp/functional/gles3/fborender/recreate_color_04.html FAIL # render.recreate_color.tex2d_rgba16i_depth_stencil_rbo_depth24_stencil8: context.clearColor is not a function
-webgl2 deqp/functional/gles3/fborender/recreate_color_05.html FAIL # render.recreate_color.tex2d_rgba16ui_depth_stencil_rbo_depth24_stencil8: context.clearColor is not a function
-webgl2 deqp/functional/gles3/fborender/recreate_color_06.html FAIL # render.recreate_color.tex2d_rgba8i_depth_stencil_rbo_depth24_stencil8: context.clearColor is not a function
-webgl2 deqp/functional/gles3/fborender/recreate_depth_stencil.html FAIL # render.recreate_depth_stencil.tex2d_rgba8_depth_tex2d_depth_component32f: context.clearColor is not a function
-webgl2 deqp/functional/gles3/fborender/resize_00.html FAIL # render.resize.tex2d_rgba32f: context.clearColor is not a function
-webgl2 deqp/functional/gles3/fborender/resize_01.html FAIL # render.resize.tex2d_rgba32i: context.clearColor is not a function
-webgl2 deqp/functional/gles3/fborender/resize_02.html FAIL # render.resize.tex2d_rgba32ui: context.clearColor is not a function
-webgl2 deqp/functional/gles3/fborender/resize_03.html FAIL # render.resize.tex2d_rgba16f: context.clearColor is not a function
-webgl2 deqp/functional/gles3/fborender/shared_colorbuffer_00.html FAIL # render.shared_colorbuffer.tex2d_rgba16f: context.clearColor is not a function
-webgl2 deqp/functional/gles3/fborender/shared_colorbuffer_01.html FAIL # render.shared_colorbuffer.tex2d_rgba16f_depth_rbo_depth24_stencil8: context.clearColor is not a function
-webgl2 deqp/functional/gles3/fborender/shared_colorbuffer_02.html FAIL # render.shared_colorbuffer.tex2d_rgba16f_depth_stencil_rbo_depth24_stencil8: context.clearColor is not a function
-webgl2 deqp/functional/gles3/fborender/shared_colorbuffer_clear.html FAIL # render.shared_colorbuffer_clear.tex2d_rgba32f: context.clearColor is not a function
-webgl2 deqp/functional/gles3/fborender/shared_depth_stencil.html FAIL # render.shared_depth_stencil.tex2d_rgba8_depth_tex2d_depth_component32f: context.clearColor is not a function
-webgl2 deqp/functional/gles3/fborender/stencil_clear.html FAIL # render.stencil_clear.tex2d_rgba8_stencil_rbo_depth32f_stencil8: context.clearColor is not a function
-webgl2 deqp/functional/gles3/fbostatequery.html FAIL # fbo.draw_framebuffer_default_framebuffer: gl.getFramebufferAttachmentParameter is not a function
-webgl2 deqp/functional/gles3/fbostencilbuffer.html FAIL # stencil.basic.depth32f_stencil8: ctx.createRenderbuffer is not a function
-webgl2 deqp/functional/gles3/fragmentoutput/array.fixed.html FAIL # fragment_outputs.array.uint.rgba32ui_lowp_uint: gl.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/fragmentoutput/array.float.html FAIL # fragment_outputs.array.int.rgba32i_lowp_int: gl.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/fragmentoutput/array.int.html FAIL # fragment_outputs.random.3: gl.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/fragmentoutput/array.uint.html FAIL # fragment_outputs.random.10: gl.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/fragmentoutput/basic.fixed.html FAIL # fragment_outputs.basic.int.rgba32i_lowp_int: gl.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/fragmentoutput/basic.float.html FAIL # fragment_outputs.basic.fixed.rgba8_lowp_float: gl.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/fragmentoutput/basic.int.html FAIL # fragment_outputs.basic.uint.rgba32ui_lowp_uint: gl.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/fragmentoutput/basic.uint.html FAIL # fragment_outputs.array.fixed.rgba8_lowp_float: gl.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/fragmentoutput/random_00.html FAIL # fragment_outputs.random.2: gl.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/framebufferblit/conversion_00.html FAIL # blit.conversion.rgba32i_to_rgba32i: ctx.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/framebufferblit/conversion_01.html FAIL # blit.conversion.rgba32ui_to_rgba32ui: ctx.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/framebufferblit/conversion_02.html FAIL # blit.conversion.rgba16i_to_rgba32i: ctx.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/framebufferblit/conversion_03.html FAIL # blit.conversion.rgba16ui_to_rgba32ui: ctx.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/framebufferblit/conversion_04.html FAIL # blit.conversion.rgba8_to_rgba8: ctx.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/framebufferblit/conversion_05.html FAIL # blit.conversion.rgba8i_to_rgba32i: ctx.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/framebufferblit/conversion_06.html FAIL # blit.conversion.rgba8ui_to_rgba32ui: ctx.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/framebufferblit/conversion_07.html FAIL # blit.conversion.srgb8_alpha8_to_rgba8: ctx.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/framebufferblit/conversion_08.html FAIL # blit.conversion.rgb10_a2_to_rgba8: ctx.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/framebufferblit/conversion_09.html FAIL # blit.conversion.rgb10_a2ui_to_rgba32ui: ctx.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/framebufferblit/conversion_10.html FAIL # blit.conversion.rgba4_to_rgba8: ctx.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/framebufferblit/conversion_11.html FAIL # blit.conversion.rgb5_a1_to_rgba8: ctx.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/framebufferblit/conversion_12.html FAIL # blit.conversion.rgb8_to_rgba8: ctx.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/framebufferblit/conversion_13.html FAIL # blit.conversion.rgb565_to_rgba8: ctx.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/framebufferblit/conversion_14.html FAIL # blit.conversion.rg32i_to_rgba32i: ctx.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/framebufferblit/conversion_15.html FAIL # blit.conversion.rg32ui_to_rgba32ui: ctx.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/framebufferblit/conversion_16.html FAIL # blit.conversion.rg16i_to_rgba32i: ctx.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/framebufferblit/conversion_17.html FAIL # blit.conversion.rg16ui_to_rgba32ui: ctx.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/framebufferblit/conversion_18.html FAIL # blit.conversion.rg8_to_rgba8: ctx.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/framebufferblit/conversion_19.html FAIL # blit.conversion.rg8i_to_rgba32i: ctx.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/framebufferblit/conversion_20.html FAIL # blit.conversion.rg8ui_to_rgba32ui: ctx.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/framebufferblit/conversion_21.html FAIL # blit.conversion.r32i_to_rgba32i: ctx.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/framebufferblit/conversion_22.html FAIL # blit.conversion.r32ui_to_rgba32ui: ctx.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/framebufferblit/conversion_23.html FAIL # blit.conversion.r16i_to_rgba32i: ctx.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/framebufferblit/conversion_24.html FAIL # blit.conversion.r16ui_to_rgba32ui: ctx.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/framebufferblit/conversion_25.html FAIL # blit.conversion.r8_to_rgba8: ctx.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/framebufferblit/conversion_26.html FAIL # blit.conversion.r8i_to_rgba32i: ctx.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/framebufferblit/conversion_27.html FAIL # blit.conversion.r8ui_to_rgba32ui: ctx.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/framebufferblit/default_framebuffer_00.html FAIL # blit.default_framebuffer.srgb8_alpha8: ctx.useProgram is not a function
-webgl2 deqp/functional/gles3/framebufferblit/default_framebuffer_01.html FAIL # blit.default_framebuffer.rgb10_a2: ctx.useProgram is not a function
-webgl2 deqp/functional/gles3/framebufferblit/default_framebuffer_03.html FAIL # blit.default_framebuffer.rgba4: ctx.useProgram is not a function
-webgl2 deqp/functional/gles3/framebufferblit/default_framebuffer_04.html FAIL # blit.default_framebuffer.rgba8: ctx.useProgram is not a function
-webgl2 deqp/functional/gles3/framebufferblit/default_framebuffer_05.html FAIL # blit.default_framebuffer.rgb8: ctx.useProgram is not a function
-webgl2 deqp/functional/gles3/framebufferblit/default_framebuffer_06.html FAIL # blit.default_framebuffer.rgb565: ctx.useProgram is not a function
-webgl2 deqp/functional/gles3/framebufferblit/depth_stencil.html FAIL # blit.depth_stencil.depth_component32f_basic: ctx.useProgram is not a function
-webgl2 deqp/functional/gles3/framebufferblit/rect_00.html FAIL # blit.rect.basic_nearest: ctx.useProgram is not a function
-webgl2 deqp/functional/gles3/framebufferblit/rect_01.html FAIL # blit.rect.scale_nearest: ctx.useProgram is not a function
-webgl2 deqp/functional/gles3/framebufferblit/rect_02.html FAIL # blit.rect.out_of_bounds_nearest: ctx.useProgram is not a function
-webgl2 deqp/functional/gles3/framebufferblit/rect_03.html FAIL # blit.rect.nearest_consistency_mag_reverse_dst_y: ctx.useProgram is not a function
-webgl2 deqp/functional/gles3/framebufferblit/rect_04.html FAIL # blit.rect.nearest_consistency_min_reverse_src_y: ctx.useProgram is not a function
+webgl2 deqp/functional/gles3/fbocolorbuffer/blend.html FAIL # color.blend.rgba8_src_over: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fbocolorbuffer/tex2d_00.html FAIL # color.tex2d.rgba32i: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fbocolorbuffer/tex2d_01.html FAIL # color.tex2d.rgba32ui: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fbocolorbuffer/tex2d_02.html FAIL # color.tex2d.rgba16i: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fbocolorbuffer/tex2d_03.html FAIL # color.tex2d.rgba16ui: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fbocolorbuffer/tex2d_04.html FAIL # color.tex2d.rgba8: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fbocolorbuffer/tex2d_05.html FAIL # color.tex2d.rgba8i: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fbocolorbuffer/tex2darray_00.html FAIL # color.tex2darray.rgba32i: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fbocolorbuffer/tex2darray_01.html FAIL # color.tex2darray.rgba32ui: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fbocolorbuffer/tex2darray_02.html FAIL # color.tex2darray.rgba16i: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fbocolorbuffer/tex2darray_03.html FAIL # color.tex2darray.rgba16ui: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fbocolorbuffer/tex2darray_04.html FAIL # color.tex2darray.rgba8: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fbocolorbuffer/tex2darray_05.html FAIL # color.tex2darray.rgba8i: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fbocolorbuffer/tex3d_00.html FAIL # color.tex3d.rgba32i: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fbocolorbuffer/tex3d_01.html FAIL # color.tex3d.rgba32ui: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fbocolorbuffer/tex3d_02.html FAIL # color.tex3d.rgba16i: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fbocolorbuffer/tex3d_03.html FAIL # color.tex3d.rgba16ui: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fbocolorbuffer/tex3d_04.html FAIL # color.tex3d.rgba8: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fbocolorbuffer/tex3d_05.html FAIL # color.tex3d.rgba8i: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fbocolorbuffer/texcube_00.html FAIL # color.texcube.rgba32i: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fbocolorbuffer/texcube_01.html FAIL # color.texcube.rgba32ui: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fbocolorbuffer/texcube_02.html FAIL # color.texcube.rgba16i: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fbocolorbuffer/texcube_03.html FAIL # color.texcube.rgba16ui: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fbocolorbuffer/texcube_04.html FAIL # color.texcube.rgba8: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fbocolorbuffer/texcube_05.html FAIL # color.texcube.rgba8i: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fbodepthbuffer.html FAIL # depth.basic.depth_component32f: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fboinvalidate/default.html FAIL # invalidate.default.render_none: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fboinvalidate/format_00.html FAIL # invalidate.format.rgba32i: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fboinvalidate/format_01.html FAIL # invalidate.format.rgba32ui: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fboinvalidate/format_02.html FAIL # invalidate.format.rgba16i: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fboinvalidate/sub.html FAIL # invalidate.sub.render_none: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fboinvalidate/target.html FAIL # invalidate.target.framebuffer_framebuffer_color: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fboinvalidate/whole.html FAIL # invalidate.whole.render_none: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fbomultisample.2_samples.html FAIL # msaa.2_samples.rgba8: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fbomultisample.4_samples.html FAIL # msaa.4_samples.rgba8: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fborender/recreate_color_00.html FAIL # render.recreate_color.tex2d_rgba8ui_depth_stencil_rbo_depth24_stencil8: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fborender/recreate_color_01.html FAIL # render.recreate_color.tex2d_rgba32i_depth_stencil_rbo_depth24_stencil8: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fborender/recreate_color_02.html FAIL # render.recreate_color.tex2d_rgba32ui_depth_stencil_rbo_depth24_stencil8: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fborender/recreate_color_03.html FAIL # render.recreate_color.tex2d_rg8i_depth_stencil_rbo_depth24_stencil8: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fborender/recreate_color_04.html FAIL # render.recreate_color.tex2d_rgba16i_depth_stencil_rbo_depth24_stencil8: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fborender/recreate_color_05.html FAIL # render.recreate_color.tex2d_rgba16ui_depth_stencil_rbo_depth24_stencil8: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fborender/recreate_color_06.html FAIL # render.recreate_color.tex2d_rgba8i_depth_stencil_rbo_depth24_stencil8: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fborender/recreate_depth_stencil.html FAIL # render.recreate_depth_stencil.tex2d_rgba8_depth_tex2d_depth_component32f: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fborender/resize_00.html FAIL # render.resize.tex2d_rgba16i: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fborender/resize_01.html FAIL # render.resize.tex2d_rgba32i: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fborender/resize_02.html FAIL # render.resize.tex2d_rgba32ui: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fborender/resize_03.html FAIL # render.resize.tex2d_rgba8ui: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fborender/shared_colorbuffer_00.html FAIL # render.shared_colorbuffer.tex2d_rg8: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fborender/shared_colorbuffer_01.html FAIL # render.shared_colorbuffer.tex2d_rg8_depth_rbo_depth24_stencil8: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fborender/shared_colorbuffer_02.html FAIL # render.shared_colorbuffer.tex2d_rg8_depth_stencil_rbo_depth24_stencil8: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fborender/shared_colorbuffer_clear.html FAIL # render.shared_colorbuffer_clear.tex2d_rg8: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fborender/shared_depth_stencil.html FAIL # render.shared_depth_stencil.tex2d_rgba8_depth_tex2d_depth_component32f: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fborender/stencil_clear.html FAIL # render.stencil_clear.tex2d_rgba8_stencil_rbo_depth32f_stencil8: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/fbostencilbuffer.html FAIL # stencil.basic.depth32f_stencil8: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/conversion_00.html FAIL # blit.conversion.rgba32i_to_rgba32i: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/conversion_01.html FAIL # blit.conversion.rgba32ui_to_rgba32ui: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/conversion_02.html FAIL # blit.conversion.rgba16i_to_rgba32i: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/conversion_03.html FAIL # blit.conversion.rgba16ui_to_rgba32ui: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/conversion_04.html FAIL # blit.conversion.rgba8_to_rgba8: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/conversion_05.html FAIL # blit.conversion.rgba8i_to_rgba32i: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/conversion_06.html FAIL # blit.conversion.rgba8ui_to_rgba32ui: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/conversion_07.html FAIL # blit.conversion.srgb8_alpha8_to_rgba8: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/conversion_08.html FAIL # blit.conversion.rgb10_a2_to_rgba8: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/conversion_09.html FAIL # blit.conversion.rgb10_a2ui_to_rgba32ui: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/conversion_10.html FAIL # blit.conversion.rgba4_to_rgba8: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/conversion_11.html FAIL # blit.conversion.rgb5_a1_to_rgba8: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/conversion_12.html FAIL # blit.conversion.rgb8_to_rgba8: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/conversion_13.html FAIL # blit.conversion.rgb565_to_rgba8: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/conversion_14.html FAIL # blit.conversion.rg32i_to_rgba32i: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/conversion_15.html FAIL # blit.conversion.rg32ui_to_rgba32ui: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/conversion_16.html FAIL # blit.conversion.rg16i_to_rgba32i: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/conversion_17.html FAIL # blit.conversion.rg16ui_to_rgba32ui: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/conversion_18.html FAIL # blit.conversion.rg8_to_rgba8: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/conversion_19.html FAIL # blit.conversion.rg8i_to_rgba32i: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/conversion_20.html FAIL # blit.conversion.rg8ui_to_rgba32ui: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/conversion_21.html FAIL # blit.conversion.r32i_to_rgba32i: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/conversion_22.html FAIL # blit.conversion.r32ui_to_rgba32ui: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/conversion_23.html FAIL # blit.conversion.r16i_to_rgba32i: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/conversion_24.html FAIL # blit.conversion.r16ui_to_rgba32ui: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/conversion_25.html FAIL # blit.conversion.r8_to_rgba8: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/conversion_26.html FAIL # blit.conversion.r8i_to_rgba32i: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/conversion_27.html FAIL # blit.conversion.r8ui_to_rgba32ui: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/default_framebuffer_00.html FAIL # blit.default_framebuffer.srgb8_alpha8: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/default_framebuffer_01.html FAIL # blit.default_framebuffer.rgb10_a2: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/default_framebuffer_03.html FAIL # blit.default_framebuffer.rgba4: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/default_framebuffer_04.html FAIL # blit.default_framebuffer.rgba8: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/default_framebuffer_05.html FAIL # blit.default_framebuffer.rgb8: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/default_framebuffer_06.html FAIL # blit.default_framebuffer.rgb565: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/depth_stencil.html FAIL # blit.depth_stencil.depth_component32f_basic: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/rect_00.html FAIL # blit.rect.basic_nearest: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/rect_01.html FAIL # blit.rect.scale_nearest: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/rect_02.html FAIL # blit.rect.out_of_bounds_nearest: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/rect_03.html FAIL # blit.rect.nearest_consistency_mag_reverse_dst_y: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/framebufferblit/rect_04.html FAIL # blit.rect.nearest_consistency_min_reverse_src_y: ctx.createVertexArray is not a function
 webgl2 deqp/functional/gles3/indexedstatequery.html FAIL # indexed.transform_feedback_buffer_binding: gl.transformFeedbackVaryings is not a function
 webgl2 deqp/functional/gles3/instancedrendering.html FAIL # instanced_rendering.draw_arrays_instanced.instance_id.1_instances: gl.drawArraysInstanced is not a function
 webgl2 deqp/functional/gles3/integerstatequery.html FAIL # integers.element_array_buffer_binding: gl.createVertexArray is not a function
-webgl2 deqp/functional/gles3/internalformatquery.html FAIL # internal_format.rgba_samples: gl.getInternalformatParameter is not a function
-webgl2 deqp/functional/gles3/multisample/default_fbo.html FAIL # multisample.default_framebuffer.num_samples_polygon: gl.bindRenderbuffer is not a function
-webgl2 deqp/functional/gles3/multisample/fbo_4_samples.html FAIL # multisample.fbo_4_samples.num_samples_polygon: gl.createRenderbuffer is not a function
-webgl2 deqp/functional/gles3/multisample/fbo_8_samples.html FAIL # multisample.fbo_8_samples.num_samples_polygon: gl.createRenderbuffer is not a function
-webgl2 deqp/functional/gles3/multisample/fbo_max_samples.html FAIL # multisample.fbo_max_samples.num_samples_polygon: gl.getInternalformatParameter is not a function
-webgl2 deqp/functional/gles3/negativebufferapi.html FAIL # negativeBufferApi.read_pixels: gl.createFramebuffer is not a function
+webgl2 deqp/functional/gles3/negativebufferapi.html FAIL # negativeBufferApi.bind_buffer_range: gl.bindBufferRange is not a function
 webgl2 deqp/functional/gles3/negativefragmentapi.html FAIL # negativeFragmentApi.begin_query: gl.createQuery is not a function
 webgl2 deqp/functional/gles3/negativeshaderapi.html FAIL # negative_shader_api.link_program: gl.createTransformFeedback is not a function
 webgl2 deqp/functional/gles3/negativestateapi.html FAIL # state.get_indexed_parameter: gl.getIndexedParameter is not a function
-webgl2 deqp/functional/gles3/negativetextureapi.html FAIL # negativeTextureApi.copyteximage2d_incomplete_framebuffer: gl.createFramebuffer is not a function
 webgl2 deqp/functional/gles3/negativevertexarrayapi.html FAIL # vertex_array.vertex_attrib_pointer: gl.createVertexArray is not a function
 webgl2 deqp/functional/gles3/occlusionquery_conservative.html FAIL # occlusion_query.conservative_scissor: gl.createQuery is not a function
 webgl2 deqp/functional/gles3/occlusionquery_strict.html FAIL # occlusion_query.scissor: gl.createQuery is not a function
-webgl2 deqp/functional/gles3/pixelbufferobject.html FAIL # pixel_buffer_object.native.clears: gl.bindFramebuffer is not a function
 webgl2 deqp/functional/gles3/primitiverestart/00.html FAIL # primitive_restart.basic.points.unsigned_byte.draw_elements:
 webgl2 deqp/functional/gles3/primitiverestart/01.html FAIL # primitive_restart.duplicate_restarts.points.unsigned_byte.draw_elements:
 webgl2 deqp/functional/gles3/primitiverestart/02.html FAIL # primitive_restart.end_restart.points.unsigned_byte.draw_elements:
@@ -582,112 +331,103 @@ webgl2 deqp/functional/gles3/primitiverestart/04.html FAIL # primitive_restart.b
 webgl2 deqp/functional/gles3/primitiverestart/05.html FAIL # primitive_restart.begin_restart_duplicate_restarts.points.unsigned_byte.draw_elements:
 webgl2 deqp/functional/gles3/primitiverestart/06.html FAIL # primitive_restart.begin_restart_end_restart.points.unsigned_byte.draw_elements:
 webgl2 deqp/functional/gles3/primitiverestart/07.html FAIL # primitive_restart.begin_restart_end_restart_duplicate_restarts.points.unsigned_byte.draw_elements_instanced: gl.drawElementsInstanced is not a function
-webgl2 deqp/functional/gles3/rasterizerdiscard.html FAIL # rasterizer_discard.basic.write_depth_points: gl.deleteRenderbuffer is not a function
-webgl2 deqp/functional/gles3/rbostatequery.html FAIL # rbo.renderbuffer_size: gl.createRenderbuffer is not a function
-webgl2 deqp/functional/gles3/readpixel.html FAIL # read_pixels.alignment.rgba_ubyte_1: gl.clearBufferfv is not a function
 webgl2 deqp/functional/gles3/shaderapi.html FAIL # shader_api.create_delete.delete_vertex_fragment:
 webgl2 deqp/functional/gles3/shaderbuiltinvar.html FAIL # builtin_variable.max_vertex_attribs_vertex: this.gl.transformFeedbackVaryings is not a function
 webgl2 deqp/functional/gles3/shadercommonfunction.html FAIL # common.abs.float_lowp_vertex: this.gl.transformFeedbackVaryings is not a function
-webgl2 deqp/functional/gles3/shaderderivate_dfdx.html FAIL # derivate.dfdx.constant.float: gl.deleteFramebuffer is not a function
-webgl2 deqp/functional/gles3/shaderderivate_dfdy.html FAIL # derivate.dfdy.constant.float: gl.deleteFramebuffer is not a function
-webgl2 deqp/functional/gles3/shaderderivate_fwidth.html FAIL # derivate.fwidth.constant.float: gl.deleteFramebuffer is not a function
 webgl2 deqp/functional/gles3/shaderoperator/unary_operator_00.html FAIL # shaderop.unary_operator.minus.lowp_uint_vertex: Fail
 webgl2 deqp/functional/gles3/shaderpackingfunction.html FAIL # pack_unpack.packsnorm2x16_lowp_vertex: this.gl.transformFeedbackVaryings is not a function
-webgl2 deqp/functional/gles3/shaderprecision_float.html FAIL # precision.float.highp_add_vertex: gl.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/shaderprecision_int.html FAIL # precision.int.highp_add_vertex: gl.createFramebuffer is not a function
-webgl2 deqp/functional/gles3/shaderprecision_uint.html FAIL # precision.uint.highp_add_vertex: gl.createFramebuffer is not a function
 webgl2 deqp/functional/gles3/shaderstatequery.html FAIL # shader.delete_status:
 webgl2 deqp/functional/gles3/sync.html FAIL # fence_sync.wait_sync_smalldraw: gl.fenceSync is not a function
-webgl2 deqp/functional/gles3/texturespecification/basic_copyteximage2d.html FAIL # specification.basic_copyteximage2d.2d_alpha: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/basic_copytexsubimage2d.html FAIL # specification.basic_copytexsubimage2d.2d_alpha: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/basic_teximage2d_2d_00.html FAIL # specification.basic_teximage2d.rgba32f_2d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/basic_teximage2d_2d_01.html FAIL # specification.basic_teximage2d.rgba32i_2d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/basic_teximage2d_cube_00.html FAIL # specification.basic_teximage2d.rgba32f_cube: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/basic_teximage2d_cube_01.html FAIL # specification.basic_teximage2d.rgba32i_cube: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/basic_teximage2d_cube_02.html FAIL # specification.basic_teximage2d.rgba32ui_cube: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/basic_teximage2d_cube_03.html FAIL # specification.basic_teximage2d.rgba16f_cube: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/basic_teximage2d_cube_04.html FAIL # specification.basic_teximage2d.rgba16i_cube: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/basic_teximage3d_2d_array_00.html FAIL # specification.basic_teximage3d.rgba32f_2d_array: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/basic_teximage3d_2d_array_01.html FAIL # specification.basic_teximage3d.rgba32i_2d_array: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/basic_teximage3d_2d_array_02.html FAIL # specification.basic_teximage3d.rgba32ui_2d_array: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/basic_teximage3d_3d_00.html FAIL # specification.basic_teximage3d.rgba32f_3d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/basic_teximage3d_3d_01.html FAIL # specification.basic_teximage3d.rgba32i_3d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/basic_teximage3d_3d_02.html FAIL # specification.basic_teximage3d.rgba32ui_3d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/basic_teximage3d_3d_03.html FAIL # specification.basic_teximage3d.rgba16f_3d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/basic_teximage3d_3d_04.html FAIL # specification.basic_teximage3d.rgba16i_3d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/basic_texsubimage2d_2d_00.html FAIL # specification.basic_texsubimage2d.rgba32f_2d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/basic_texsubimage2d_2d_01.html FAIL # specification.basic_texsubimage2d.rgba32i_2d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/basic_texsubimage2d_2d_02.html FAIL # specification.basic_texsubimage2d.rgba32ui_2d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/basic_texsubimage2d_cube_00.html FAIL # specification.basic_texsubimage2d.rgba32f_cube: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/basic_texsubimage2d_cube_01.html FAIL # specification.basic_texsubimage2d.rgba32i_cube: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/basic_texsubimage2d_cube_02.html FAIL # specification.basic_texsubimage2d.rgba32ui_cube: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/basic_texsubimage2d_cube_03.html FAIL # specification.basic_texsubimage2d.rgba16f_cube: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/basic_texsubimage2d_cube_04.html FAIL # specification.basic_texsubimage2d.rgba16i_cube: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/basic_texsubimage3d_00.html FAIL # specification.basic_texsubimage3d.rgba32f_3d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/basic_texsubimage3d_01.html FAIL # specification.basic_texsubimage3d.rgba32i_3d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/basic_texsubimage3d_02.html FAIL # specification.basic_texsubimage3d.rgba32ui_3d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/basic_texsubimage3d_03.html FAIL # specification.basic_texsubimage3d.rgba16f_3d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/basic_texsubimage3d_04.html FAIL # specification.basic_texsubimage3d.rgba16i_3d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/random_teximage2d_2d.html FAIL # specification.random_teximage2d.2d.rgba32ui: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/random_teximage2d_cube.html FAIL # specification.random_teximage2d.cube.rgba32i: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/teximage2d_align.html FAIL # specification.teximage2d_align.2d_r8_4_8: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/teximage2d_depth.html FAIL # specification.teximage2d_depth.depth_component32f: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/teximage2d_depth_pbo.html FAIL # specification.teximage2d_depth_pbo.depth_component32f: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/teximage2d_pbo_2d_00.html FAIL # specification.teximage2d_pbo.rgba32f_2d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/teximage2d_pbo_2d_01.html FAIL # specification.teximage2d_pbo.rgba32i_2d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/teximage2d_pbo_cube_00.html FAIL # specification.teximage2d_pbo.rgba32f_cube: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/teximage2d_pbo_cube_01.html FAIL # specification.teximage2d_pbo.rgba32i_cube: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/teximage2d_pbo_cube_02.html FAIL # specification.teximage2d_pbo.rgba32ui_cube: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/teximage2d_pbo_cube_03.html FAIL # specification.teximage2d_pbo.rgba16f_cube: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/teximage2d_pbo_cube_04.html FAIL # specification.teximage2d_pbo.rgba16i_cube: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/teximage2d_pbo_params.html FAIL # specification.teximage2d_pbo.rgb8_offset_2d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/teximage2d_unpack_params.html FAIL # specification.teximage2d_unpack_params.rgb8_alignment: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/teximage3d_depth.html FAIL # specification.teximage3d_depth.depth_component32f_2d_array: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/teximage3d_depth_pbo.html FAIL # specification.teximage3d_depth_pbo.depth_component32f_2d_array: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/teximage3d_pbo_2d_array_00.html FAIL # specification.teximage3d_pbo.rgba32f_2d_array: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/teximage3d_pbo_2d_array_01.html FAIL # specification.teximage3d_pbo.rgba32i_2d_array: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/teximage3d_pbo_3d_00.html FAIL # specification.teximage3d_pbo.rgba32f_3d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/teximage3d_pbo_3d_01.html FAIL # specification.teximage3d_pbo.rgba32i_3d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/teximage3d_pbo_params.html FAIL # specification.teximage3d_pbo.rgb8_offset_2d_array: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/teximage3d_unpack_params.html FAIL # specification.teximage3d_unpack_params.rgb8_image_height: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texstorage2d_format_2d_00.html FAIL # specification.texstorage2d.format.rgba32f_2d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texstorage2d_format_2d_01.html FAIL # specification.texstorage2d.format.rgba32i_2d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texstorage2d_format_2d_02.html FAIL # specification.texstorage2d.format.rgba32ui_2d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texstorage2d_format_cube_00.html FAIL # specification.texstorage2d.format.rgba32f_cube: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texstorage2d_format_cube_01.html FAIL # specification.texstorage2d.format.rgba32i_cube: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texstorage2d_format_cube_02.html FAIL # specification.texstorage2d.format.rgba32ui_cube: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texstorage2d_format_cube_03.html FAIL # specification.texstorage2d.format.rgba16f_cube: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texstorage2d_format_cube_04.html FAIL # specification.texstorage2d.format.rgba16i_cube: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texstorage2d_format_depth_stencil.html FAIL # specification.texstorage2d.format.depth_component32f_2d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texstorage2d_format_size.html FAIL # specification.texstorage2d.size.2d_1x1_1_levels: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texstorage3d_format_2d_array_00.html FAIL # specification.texstorage3d.format.rgba32f_2d_array: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texstorage3d_format_2d_array_01.html FAIL # specification.texstorage3d.format.rgba32i_2d_array: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texstorage3d_format_2d_array_02.html FAIL # specification.texstorage3d.format.rgba32ui_2d_array: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texstorage3d_format_3d_00.html FAIL # specification.texstorage3d.format.rgba32f_3d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texstorage3d_format_3d_01.html FAIL # specification.texstorage3d.format.rgba32i_3d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texstorage3d_format_3d_02.html FAIL # specification.texstorage3d.format.rgba32ui_3d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texstorage3d_format_3d_03.html FAIL # specification.texstorage3d.format.rgba16f_3d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texstorage3d_format_depth_stencil.html FAIL # specification.texstorage3d.format.depth_component32f_2d_array: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texstorage3d_format_size.html FAIL # specification.texstorage3d.size.2d_array_1x1x1_1_levels: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texsubimage2d_align.html FAIL # specification.texsubimage2d_align.2d_r8_1_1: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texsubimage2d_depth.html FAIL # specification.texsubimage2d_depth.depth_component32f: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texsubimage2d_empty_tex.html FAIL # specification.texsubimage2d_empty_tex.alpha_unsigned_byte_2d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texsubimage2d_pbo_2d_00.html FAIL # specification.texsubimage2d_pbo.rgba32f_2d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texsubimage2d_pbo_2d_01.html FAIL # specification.texsubimage2d_pbo.rgba32i_2d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texsubimage2d_pbo_cube_00.html FAIL # specification.texsubimage2d_pbo.rgba32f_cube: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texsubimage2d_pbo_cube_01.html FAIL # specification.texsubimage2d_pbo.rgba32i_cube: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texsubimage2d_pbo_cube_02.html FAIL # specification.texsubimage2d_pbo.rgba32ui_cube: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texsubimage2d_pbo_cube_03.html FAIL # specification.texsubimage2d_pbo.rgba16f_cube: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texsubimage2d_pbo_cube_04.html FAIL # specification.texsubimage2d_pbo.rgba16i_cube: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texsubimage2d_pbo_params.html FAIL # specification.texsubimage2d_pbo.rgb8_offset_2d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texsubimage2d_unpack_params.html FAIL # specification.texsubimage2d_unpack_params.rgb8_alignment: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texsubimage3d_depth.html FAIL # specification.texsubimage3d_depth.depth_component32f_2d_array: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texsubimage3d_pbo_2d_array_00.html FAIL # specification.texsubimage3d_pbo.rgba32f_2d_array: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texsubimage3d_pbo_2d_array_01.html FAIL # specification.texsubimage3d_pbo.rgba32i_2d_array: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texsubimage3d_pbo_3d_00.html FAIL # specification.texsubimage3d_pbo.rgba32f_3d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texsubimage3d_pbo_3d_01.html FAIL # specification.texsubimage3d_pbo.rgba32i_3d: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texsubimage3d_pbo_params.html FAIL # specification.texsubimage3d_pbo.rgb8_offset_2d_array: this.m_context.clearColor is not a function
-webgl2 deqp/functional/gles3/texturespecification/texsubimage3d_unpack_params.html FAIL # specification.texsubimage3d_unpack_params.rgb8_image_height: this.m_context.clearColor is not a function
+webgl2 deqp/functional/gles3/texturespecification/basic_copyteximage2d.html FAIL # specification.basic_copyteximage2d.2d_alpha: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/basic_copytexsubimage2d.html FAIL # specification.basic_copytexsubimage2d.2d_alpha: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/basic_teximage2d_2d_00.html FAIL # specification.basic_teximage2d.rgba32f_2d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/basic_teximage2d_2d_01.html FAIL # specification.basic_teximage2d.rgba32i_2d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/basic_teximage2d_cube_00.html FAIL # specification.basic_teximage2d.rgba32f_cube: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/basic_teximage2d_cube_01.html FAIL # specification.basic_teximage2d.rgba32i_cube: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/basic_teximage2d_cube_02.html FAIL # specification.basic_teximage2d.rgba32ui_cube: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/basic_teximage2d_cube_03.html FAIL # specification.basic_teximage2d.rgba16f_cube: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/basic_teximage2d_cube_04.html FAIL # specification.basic_teximage2d.rgba16i_cube: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/basic_teximage3d_2d_array_00.html FAIL # specification.basic_teximage3d.rgba32f_2d_array: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/basic_teximage3d_2d_array_01.html FAIL # specification.basic_teximage3d.rgba32i_2d_array: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/basic_teximage3d_2d_array_02.html FAIL # specification.basic_teximage3d.rgba32ui_2d_array: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/basic_teximage3d_3d_00.html FAIL # specification.basic_teximage3d.rgba32f_3d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/basic_teximage3d_3d_01.html FAIL # specification.basic_teximage3d.rgba32i_3d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/basic_teximage3d_3d_02.html FAIL # specification.basic_teximage3d.rgba32ui_3d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/basic_teximage3d_3d_03.html FAIL # specification.basic_teximage3d.rgba16f_3d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/basic_teximage3d_3d_04.html FAIL # specification.basic_teximage3d.rgba16i_3d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/basic_texsubimage2d_2d_00.html FAIL # specification.basic_texsubimage2d.rgba32f_2d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/basic_texsubimage2d_2d_01.html FAIL # specification.basic_texsubimage2d.rgba32i_2d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/basic_texsubimage2d_2d_02.html FAIL # specification.basic_texsubimage2d.rgba32ui_2d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/basic_texsubimage2d_cube_00.html FAIL # specification.basic_texsubimage2d.rgba32f_cube: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/basic_texsubimage2d_cube_01.html FAIL # specification.basic_texsubimage2d.rgba32i_cube: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/basic_texsubimage2d_cube_02.html FAIL # specification.basic_texsubimage2d.rgba32ui_cube: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/basic_texsubimage2d_cube_03.html FAIL # specification.basic_texsubimage2d.rgba16f_cube: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/basic_texsubimage2d_cube_04.html FAIL # specification.basic_texsubimage2d.rgba16i_cube: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/basic_texsubimage3d_00.html FAIL # specification.basic_texsubimage3d.rgba32f_3d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/basic_texsubimage3d_01.html FAIL # specification.basic_texsubimage3d.rgba32i_3d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/basic_texsubimage3d_02.html FAIL # specification.basic_texsubimage3d.rgba32ui_3d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/basic_texsubimage3d_03.html FAIL # specification.basic_texsubimage3d.rgba16f_3d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/basic_texsubimage3d_04.html FAIL # specification.basic_texsubimage3d.rgba16i_3d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/random_teximage2d_2d.html FAIL # specification.random_teximage2d.2d.rgba32ui: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/random_teximage2d_cube.html FAIL # specification.random_teximage2d.cube.rgba32i: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/teximage2d_align.html FAIL # specification.teximage2d_align.2d_r8_4_8: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/teximage2d_depth.html FAIL # specification.teximage2d_depth.depth_component32f: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/teximage2d_depth_pbo.html FAIL # specification.teximage2d_depth_pbo.depth_component32f: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/teximage2d_pbo_2d_00.html FAIL # specification.teximage2d_pbo.rgba32f_2d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/teximage2d_pbo_2d_01.html FAIL # specification.teximage2d_pbo.rgba32i_2d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/teximage2d_pbo_cube_00.html FAIL # specification.teximage2d_pbo.rgba32f_cube: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/teximage2d_pbo_cube_01.html FAIL # specification.teximage2d_pbo.rgba32i_cube: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/teximage2d_pbo_cube_02.html FAIL # specification.teximage2d_pbo.rgba32ui_cube: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/teximage2d_pbo_cube_03.html FAIL # specification.teximage2d_pbo.rgba16f_cube: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/teximage2d_pbo_cube_04.html FAIL # specification.teximage2d_pbo.rgba16i_cube: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/teximage2d_pbo_params.html FAIL # specification.teximage2d_pbo.rgb8_offset_2d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/teximage2d_unpack_params.html FAIL # specification.teximage2d_unpack_params.rgb8_alignment: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/teximage3d_depth.html FAIL # specification.teximage3d_depth.depth_component32f_2d_array: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/teximage3d_depth_pbo.html FAIL # specification.teximage3d_depth_pbo.depth_component32f_2d_array: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/teximage3d_pbo_2d_array_00.html FAIL # specification.teximage3d_pbo.rgba32f_2d_array: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/teximage3d_pbo_2d_array_01.html FAIL # specification.teximage3d_pbo.rgba32i_2d_array: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/teximage3d_pbo_3d_00.html FAIL # specification.teximage3d_pbo.rgba32f_3d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/teximage3d_pbo_3d_01.html FAIL # specification.teximage3d_pbo.rgba32i_3d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/teximage3d_pbo_params.html FAIL # specification.teximage3d_pbo.rgb8_offset_2d_array: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/teximage3d_unpack_params.html FAIL # specification.teximage3d_unpack_params.rgb8_image_height: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texstorage2d_format_2d_00.html FAIL # specification.texstorage2d.format.rgba32f_2d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texstorage2d_format_2d_01.html FAIL # specification.texstorage2d.format.rgba32i_2d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texstorage2d_format_2d_02.html FAIL # specification.texstorage2d.format.rgba32ui_2d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texstorage2d_format_cube_00.html FAIL # specification.texstorage2d.format.rgba32f_cube: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texstorage2d_format_cube_01.html FAIL # specification.texstorage2d.format.rgba32i_cube: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texstorage2d_format_cube_02.html FAIL # specification.texstorage2d.format.rgba32ui_cube: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texstorage2d_format_cube_03.html FAIL # specification.texstorage2d.format.rgba16f_cube: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texstorage2d_format_cube_04.html FAIL # specification.texstorage2d.format.rgba16i_cube: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texstorage2d_format_depth_stencil.html FAIL # specification.texstorage2d.format.depth_component32f_2d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texstorage2d_format_size.html FAIL # specification.texstorage2d.size.2d_1x1_1_levels: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texstorage3d_format_2d_array_00.html FAIL # specification.texstorage3d.format.rgba32f_2d_array: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texstorage3d_format_2d_array_01.html FAIL # specification.texstorage3d.format.rgba32i_2d_array: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texstorage3d_format_2d_array_02.html FAIL # specification.texstorage3d.format.rgba32ui_2d_array: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texstorage3d_format_3d_00.html FAIL # specification.texstorage3d.format.rgba32f_3d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texstorage3d_format_3d_01.html FAIL # specification.texstorage3d.format.rgba32i_3d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texstorage3d_format_3d_02.html FAIL # specification.texstorage3d.format.rgba32ui_3d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texstorage3d_format_3d_03.html FAIL # specification.texstorage3d.format.rgba16f_3d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texstorage3d_format_depth_stencil.html FAIL # specification.texstorage3d.format.depth_component32f_2d_array: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texstorage3d_format_size.html FAIL # specification.texstorage3d.size.2d_array_2x2x2_2_levels: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texsubimage2d_align.html FAIL # specification.texsubimage2d_align.2d_r8_1_1: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texsubimage2d_depth.html FAIL # specification.texsubimage2d_depth.depth_component32f: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texsubimage2d_empty_tex.html FAIL # specification.texsubimage2d_empty_tex.alpha_unsigned_byte_2d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texsubimage2d_pbo_2d_00.html FAIL # specification.texsubimage2d_pbo.rgba32f_2d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texsubimage2d_pbo_2d_01.html FAIL # specification.texsubimage2d_pbo.rgba32i_2d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texsubimage2d_pbo_cube_00.html FAIL # specification.texsubimage2d_pbo.rgba32f_cube: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texsubimage2d_pbo_cube_01.html FAIL # specification.texsubimage2d_pbo.rgba32i_cube: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texsubimage2d_pbo_cube_02.html FAIL # specification.texsubimage2d_pbo.rgba32ui_cube: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texsubimage2d_pbo_cube_03.html FAIL # specification.texsubimage2d_pbo.rgba16f_cube: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texsubimage2d_pbo_cube_04.html FAIL # specification.texsubimage2d_pbo.rgba16i_cube: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texsubimage2d_pbo_params.html FAIL # specification.texsubimage2d_pbo.rgb8_offset_2d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texsubimage2d_unpack_params.html FAIL # specification.texsubimage2d_unpack_params.rgb8_alignment: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texsubimage3d_depth.html FAIL # specification.texsubimage3d_depth.depth_component32f_2d_array: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texsubimage3d_pbo_2d_array_00.html FAIL # specification.texsubimage3d_pbo.rgba32f_2d_array: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texsubimage3d_pbo_2d_array_01.html FAIL # specification.texsubimage3d_pbo.rgba32i_2d_array: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texsubimage3d_pbo_3d_00.html FAIL # specification.texsubimage3d_pbo.rgba32f_3d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texsubimage3d_pbo_3d_01.html FAIL # specification.texsubimage3d_pbo.rgba32i_3d: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texsubimage3d_pbo_params.html FAIL # specification.texsubimage3d_pbo.rgb8_offset_2d_array: ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/texturespecification/texsubimage3d_unpack_params.html FAIL # specification.texsubimage3d_unpack_params.rgb8_image_height: ctx.createVertexArray is not a function
 webgl2 deqp/functional/gles3/transformfeedback/array_element_interleaved_lines.html FAIL # transform_feedback.array_element.interleaved.lines.lowp_float: this.gl.transformFeedbackVaryings is not a function
 webgl2 deqp/functional/gles3/transformfeedback/array_element_interleaved_points.html FAIL # transform_feedback.array_element.interleaved.points.lowp_float: this.gl.transformFeedbackVaryings is not a function
 webgl2 deqp/functional/gles3/transformfeedback/array_element_interleaved_triangles.html FAIL # transform_feedback.array_element.interleaved.triangles.lowp_float: this.gl.transformFeedbackVaryings is not a function
@@ -730,30 +470,30 @@ webgl2 deqp/functional/gles3/uniformbuffers/single_nested_struct_array.html FAIL
 webgl2 deqp/functional/gles3/uniformbuffers/single_struct.html FAIL # ubo.single_struct.per_block_buffer.std140_vertex: gl.getActiveUniformBlockParameter is not a function
 webgl2 deqp/functional/gles3/uniformbuffers/single_struct_array.html FAIL # ubo.single_struct_array.per_block_buffer.std140_vertex: gl.getActiveUniformBlockParameter is not a function
 webgl2 deqp/functional/gles3/vertexarrayobject.html FAIL # vertex_array_objects.diff_buffer: gl.vertexAttribDivisor is not a function
-webgl2 deqp/functional/gles3/vertexarrays/multiple_attributes.count.html FAIL # vertex_arrays.multiple_attributes.attribute_count.2: this.m_ctx.createBuffer is not a function
-webgl2 deqp/functional/gles3/vertexarrays/multiple_attributes.output.html FAIL # vertex_arrays.multiple_attributes.input_types.3_byte2_vec2_byte2_vec2_byte2_vec2: this.m_ctx.createBuffer is not a function
-webgl2 deqp/functional/gles3/vertexarrays/multiple_attributes.storage.html FAIL # vertex_arrays.multiple_attributes.storage.3_buffer_buffer_buffer: this.m_ctx.createBuffer is not a function
-webgl2 deqp/functional/gles3/vertexarrays/multiple_attributes.stride.html FAIL # vertex_arrays.multiple_attributes.stride.3_float2_0_float2_0_float2_0: this.m_ctx.createBuffer is not a function
-webgl2 deqp/functional/gles3/vertexarrays/single_attribute.first.html FAIL # vertex_arrays.single_attribute.first.float.first6_offset16_stride8_quads5: this.m_ctx.createBuffer is not a function
-webgl2 deqp/functional/gles3/vertexarrays/single_attribute.normalize.html FAIL # vertex_arrays.single_attribute.normalize.float.components2_quads1: this.m_ctx.createBuffer is not a function
-webgl2 deqp/functional/gles3/vertexarrays/single_attribute.offset.html FAIL # vertex_arrays.single_attribute.offset.float.offset4_stride8_quads1: this.m_ctx.createBuffer is not a function
-webgl2 deqp/functional/gles3/vertexarrays/single_attribute.output_type.byte.html FAIL # vertex_arrays.single_attribute.output_types.byte.components2_vec2_quads1: this.m_ctx.createBuffer is not a function
-webgl2 deqp/functional/gles3/vertexarrays/single_attribute.output_type.float.html FAIL # vertex_arrays.single_attribute.output_types.float.components2_vec2_quads1: this.m_ctx.createBuffer is not a function
-webgl2 deqp/functional/gles3/vertexarrays/single_attribute.output_type.half.html FAIL # vertex_arrays.single_attribute.output_types.half.components2_vec2_quads1: this.m_ctx.createBuffer is not a function
-webgl2 deqp/functional/gles3/vertexarrays/single_attribute.output_type.int.html FAIL # vertex_arrays.single_attribute.output_types.int.components2_vec2_quads1: this.m_ctx.createBuffer is not a function
-webgl2 deqp/functional/gles3/vertexarrays/single_attribute.output_type.int_2_10_10_10.html FAIL # vertex_arrays.single_attribute.output_types.int2_10_10_10.components4_vec2_quads1: this.m_ctx.createBuffer is not a function
-webgl2 deqp/functional/gles3/vertexarrays/single_attribute.output_type.short.html FAIL # vertex_arrays.single_attribute.output_types.short.components2_vec2_quads1: this.m_ctx.createBuffer is not a function
-webgl2 deqp/functional/gles3/vertexarrays/single_attribute.output_type.unsigned_byte.html FAIL # vertex_arrays.single_attribute.output_types.unsigned_byte.components2_vec2_quads1: this.m_ctx.createBuffer is not a function
-webgl2 deqp/functional/gles3/vertexarrays/single_attribute.output_type.unsigned_int.html FAIL # vertex_arrays.single_attribute.output_types.unsigned_int.components2_vec2_quads1: this.m_ctx.createBuffer is not a function
-webgl2 deqp/functional/gles3/vertexarrays/single_attribute.output_type.unsigned_int_2_10_10_10.html FAIL # vertex_arrays.single_attribute.output_types.unsigned_int2_10_10_10.components4_vec2_quads1: this.m_ctx.createBuffer is not a function
-webgl2 deqp/functional/gles3/vertexarrays/single_attribute.output_type.unsigned_short.html FAIL # vertex_arrays.single_attribute.output_types.unsigned_short.components2_vec2_quads1: this.m_ctx.createBuffer is not a function
-webgl2 deqp/functional/gles3/vertexarrays/single_attribute.stride.html FAIL # vertex_arrays.single_attribute.strides.float.buffer_stride8_components2_quads1: this.m_ctx.createBuffer is not a function
-webgl2 deqp/functional/gles3/vertexarrays/single_attribute.usage.dynamic_copy.html FAIL # vertex_arrays.single_attribute.usages.dynamic_copy.stride0_float_quads1: this.m_ctx.createBuffer is not a function
-webgl2 deqp/functional/gles3/vertexarrays/single_attribute.usage.dynamic_draw.html FAIL # vertex_arrays.single_attribute.usages.dynamic_draw.stride0_float_quads1: this.m_ctx.createBuffer is not a function
-webgl2 deqp/functional/gles3/vertexarrays/single_attribute.usage.dynamic_read.html FAIL # vertex_arrays.single_attribute.usages.dynamic_read.stride0_float_quads1: this.m_ctx.createBuffer is not a function
-webgl2 deqp/functional/gles3/vertexarrays/single_attribute.usage.static_copy.html FAIL # vertex_arrays.single_attribute.usages.static_copy.stride0_float_quads1: this.m_ctx.createBuffer is not a function
-webgl2 deqp/functional/gles3/vertexarrays/single_attribute.usage.static_draw.html FAIL # vertex_arrays.single_attribute.usages.static_draw.stride0_float_quads1: this.m_ctx.createBuffer is not a function
-webgl2 deqp/functional/gles3/vertexarrays/single_attribute.usage.static_read.html FAIL # vertex_arrays.single_attribute.usages.static_read.stride0_float_quads1: this.m_ctx.createBuffer is not a function
-webgl2 deqp/functional/gles3/vertexarrays/single_attribute.usage.stream_copy.html FAIL # vertex_arrays.single_attribute.usages.stream_copy.stride0_float_quads1: this.m_ctx.createBuffer is not a function
-webgl2 deqp/functional/gles3/vertexarrays/single_attribute.usage.stream_draw.html FAIL # vertex_arrays.single_attribute.usages.stream_draw.stride0_float_quads1: this.m_ctx.createBuffer is not a function
-webgl2 deqp/functional/gles3/vertexarrays/single_attribute.usage.stream_read.html FAIL # vertex_arrays.single_attribute.usages.stream_read.stride0_float_quads1: this.m_ctx.createBuffer is not a function
+webgl2 deqp/functional/gles3/vertexarrays/multiple_attributes.count.html FAIL # vertex_arrays.multiple_attributes.attribute_count.2: this.m_ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/vertexarrays/multiple_attributes.output.html FAIL # vertex_arrays.multiple_attributes.input_types.3_byte2_vec2_byte2_vec2_byte2_vec2: this.m_ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/vertexarrays/multiple_attributes.storage.html FAIL # vertex_arrays.multiple_attributes.storage.3_buffer_buffer_buffer: this.m_ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/vertexarrays/multiple_attributes.stride.html FAIL # vertex_arrays.multiple_attributes.stride.3_float2_0_float2_0_float2_0: this.m_ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/vertexarrays/single_attribute.first.html FAIL # vertex_arrays.single_attribute.first.float.first6_offset16_stride8_quads5: this.m_ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/vertexarrays/single_attribute.normalize.html FAIL # vertex_arrays.single_attribute.normalize.float.components2_quads1: this.m_ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/vertexarrays/single_attribute.offset.html FAIL # vertex_arrays.single_attribute.offset.float.offset4_stride8_quads1: this.m_ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/vertexarrays/single_attribute.output_type.byte.html FAIL # vertex_arrays.single_attribute.output_types.byte.components2_vec2_quads1: this.m_ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/vertexarrays/single_attribute.output_type.float.html FAIL # vertex_arrays.single_attribute.output_types.float.components2_vec2_quads1: this.m_ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/vertexarrays/single_attribute.output_type.half.html FAIL # vertex_arrays.single_attribute.output_types.half.components2_vec2_quads1: this.m_ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/vertexarrays/single_attribute.output_type.int.html FAIL # vertex_arrays.single_attribute.output_types.int.components2_vec2_quads1: this.m_ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/vertexarrays/single_attribute.output_type.int_2_10_10_10.html FAIL # vertex_arrays.single_attribute.output_types.int2_10_10_10.components4_vec2_quads1: this.m_ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/vertexarrays/single_attribute.output_type.short.html FAIL # vertex_arrays.single_attribute.output_types.short.components2_vec2_quads1: this.m_ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/vertexarrays/single_attribute.output_type.unsigned_byte.html FAIL # vertex_arrays.single_attribute.output_types.unsigned_byte.components2_vec2_quads1: this.m_ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/vertexarrays/single_attribute.output_type.unsigned_int.html FAIL # vertex_arrays.single_attribute.output_types.unsigned_int.components2_vec2_quads1: this.m_ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/vertexarrays/single_attribute.output_type.unsigned_int_2_10_10_10.html FAIL # vertex_arrays.single_attribute.output_types.unsigned_int2_10_10_10.components4_vec2_quads1: this.m_ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/vertexarrays/single_attribute.output_type.unsigned_short.html FAIL # vertex_arrays.single_attribute.output_types.unsigned_short.components2_vec2_quads1: this.m_ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/vertexarrays/single_attribute.stride.html FAIL # vertex_arrays.single_attribute.strides.float.buffer_stride8_components2_quads1: this.m_ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/vertexarrays/single_attribute.usage.dynamic_copy.html FAIL # vertex_arrays.single_attribute.usages.dynamic_copy.stride0_float_quads1: this.m_ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/vertexarrays/single_attribute.usage.dynamic_draw.html FAIL # vertex_arrays.single_attribute.usages.dynamic_draw.stride0_float_quads1: this.m_ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/vertexarrays/single_attribute.usage.dynamic_read.html FAIL # vertex_arrays.single_attribute.usages.dynamic_read.stride0_float_quads1: this.m_ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/vertexarrays/single_attribute.usage.static_copy.html FAIL # vertex_arrays.single_attribute.usages.static_copy.stride0_float_quads1: this.m_ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/vertexarrays/single_attribute.usage.static_draw.html FAIL # vertex_arrays.single_attribute.usages.static_draw.stride0_float_quads1: this.m_ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/vertexarrays/single_attribute.usage.static_read.html FAIL # vertex_arrays.single_attribute.usages.static_read.stride0_float_quads1: this.m_ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/vertexarrays/single_attribute.usage.stream_copy.html FAIL # vertex_arrays.single_attribute.usages.stream_copy.stride0_float_quads1: this.m_ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/vertexarrays/single_attribute.usage.stream_draw.html FAIL # vertex_arrays.single_attribute.usages.stream_draw.stride0_float_quads1: this.m_ctx.createVertexArray is not a function
+webgl2 deqp/functional/gles3/vertexarrays/single_attribute.usage.stream_read.html FAIL # vertex_arrays.single_attribute.usages.stream_read.stride0_float_quads1: this.m_ctx.createVertexArray is not a function

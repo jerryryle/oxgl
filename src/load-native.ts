@@ -12,7 +12,7 @@ export interface NativeCreated {
 
 /** Result of the native `getParameter`, turned into a JS value in TS. */
 export interface NativeParameter {
-  kind: 'number' | 'boolean' | 'booleans' | 'string' | 'float32' | 'int32' | 'uint32';
+  kind: 'number' | 'boolean' | 'booleans' | 'string' | 'float32' | 'int32' | 'uint32' | 'numbers';
   numbers: number[];
   text?: string;
 }
@@ -133,6 +133,29 @@ export interface NativeBinding {
   clearBufferFi: (index: number, version: number, buffer: number, drawbuffer: number, depth: number, stencil: number) => void;
   getInternalformatParameter: (index: number, version: number, target: number, format: number, pname: number) => NativeParameter | null;
   readPixelsToBuffer: (index: number, version: number, x: number, y: number, width: number, height: number, format: number, type: number, offset: number) => void;
+  bindVertexArray: (index: number, version: number, oi: number, ov: number) => boolean;
+  drawArraysInstanced: (index: number, version: number, mode: number, first: number, count: number, instances: number) => void;
+  drawElementsInstanced: (index: number, version: number, mode: number, count: number, type: number, offset: number, instances: number) => void;
+  vertexAttribDivisor: (index: number, version: number, attrib: number, divisor: number) => void;
+  bindBufferIndexed: (index: number, version: number, target: number, at: number, oi: number, ov: number, range: number[] | null) => boolean;
+  getIndexedParameter: (index: number, version: number, target: number, at: number) => NativeParameter | null;
+  getUniformBlockIndex: (index: number, version: number, oi: number, ov: number, name: string) => number;
+  getUniformIndices: (index: number, version: number, oi: number, ov: number, names: string[]) => number[] | null;
+  getActiveUniforms: (index: number, version: number, oi: number, ov: number, indices: number[], pname: number) => NativeParameter | null;
+  getActiveUniformBlockParameter: (index: number, version: number, oi: number, ov: number, block: number, pname: number) => NativeParameter | null;
+  getActiveUniformBlockName: (index: number, version: number, oi: number, ov: number, block: number) => string | null;
+  uniformBlockBinding: (index: number, version: number, oi: number, ov: number, block: number, binding: number) => void;
+  bindTransformFeedback: (index: number, version: number, target: number, oi: number, ov: number) => boolean;
+  transformFeedback: (index: number, version: number, op: number, mode: number) => void;
+  transformFeedbackVaryings: (index: number, version: number, oi: number, ov: number, names: string[], mode: number) => void;
+  getTransformFeedbackVarying: (index: number, version: number, oi: number, ov: number, at: number) => { size: number; ty: number; name: string } | null;
+  beginQuery: (index: number, version: number, target: number, oi: number, ov: number) => boolean;
+  endQuery: (index: number, version: number, target: number) => boolean;
+  getQueryParameter: (index: number, version: number, oi: number, ov: number, pname: number) => NativeParameter | null;
+  fenceSync: (index: number, version: number, condition: number, flags: number) => [number, number] | null;
+  clientWaitSync: (index: number, version: number, oi: number, ov: number, flags: number, timeout: number) => number;
+  waitSync: (index: number, version: number, oi: number, ov: number, flags: number, timeout: number) => void;
+  getSyncParameter: (index: number, version: number, oi: number, ov: number, pname: number) => number | null;
   drawRangeElements: (index: number, version: number, mode: number, start: number, end: number, count: number, type: number, offset: number) => void;
   resize(index: number, version: number, width: number, height: number): { width: number; height: number };
   destroy(index: number, version: number): void;
@@ -195,7 +218,7 @@ export interface NativeBinding {
 }
 
 /** Version of the JS ↔ native interface this package was built for. */
-export const NATIVE_ABI_VERSION = 7;
+export const NATIVE_ABI_VERSION = 8;
 
 function nativeMissing(detail: string, cause?: unknown): Error {
   const error = new Error(

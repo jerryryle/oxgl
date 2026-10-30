@@ -552,7 +552,9 @@ impl DrawingBuffer {
     /// resolves it into the single-sample buffer and binds that for reading;
     /// returns whether it did. [`DrawingBuffer::end_read`] undoes the binding.
     pub(crate) fn begin_read(&self, current: &Current<'_>) -> bool {
-        if !self.reads_resolve(current) {
+        // With the read buffer at NONE there is nothing to resolve, and the
+        // GL reports the read's error against the drawing buffer itself.
+        if !self.reads_resolve(current) || self.read_buffer.get() == GL_NONE {
             return false;
         }
         let draw = integers(current, GL_DRAW_FRAMEBUFFER_BINDING).map_or(0, |[name, _]| name);

@@ -85,6 +85,32 @@ export class WebGLRenderbuffer extends WebGLObject {
 export interface FramebufferState extends ObjectState {
   readonly attachments: Map<number, WebGLTexture | WebGLRenderbuffer>;
 }
+/** WebGL 2.0 §3.6. */
+export class WebGLVertexArrayObject extends WebGLObject {
+  declare private readonly brand: 'WebGLVertexArrayObject';
+}
+/** A vertex array's mirrored state: what GL holds references to. */
+export interface VertexArrayState {
+  element: WebGLBuffer | null;
+  readonly attribs: (WebGLBuffer | null)[];
+}
+/** WebGL 2.0 §3.5. */
+export class WebGLTransformFeedback extends WebGLObject {
+  declare private readonly brand: 'WebGLTransformFeedback';
+}
+/** WebGL 2.0 §3.2. */
+export class WebGLQuery extends WebGLObject {
+  declare private readonly brand: 'WebGLQuery';
+}
+/** A query's or sync's extra state: the event-loop turn its result waits for. */
+export interface PendingState extends ObjectState {
+  turn: number;
+  target: number;
+}
+/** WebGL 2.0 §3.4. */
+export class WebGLSync extends WebGLObject {
+  declare private readonly brand: 'WebGLSync';
+}
 /** WebGL 2.0 §3.3. */
 export class WebGLSampler extends WebGLObject {
   declare private readonly brand: 'WebGLSampler';

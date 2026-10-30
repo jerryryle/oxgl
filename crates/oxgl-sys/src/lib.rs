@@ -31,6 +31,7 @@ mod state;
 pub mod test_support;
 mod textures;
 mod view;
+mod webgl2;
 
 pub use egl::{
     ClientVersion, Current, Display, DisplayKind, EglError, GlContext, ReadPixels, live_contexts,
@@ -43,3 +44,4 @@ pub use pointers::{
 pub use state::{PrecisionFormat, StateCall, ValueType, Values};
 pub use textures::{TexImage, Upload, UploadData};
 pub use view::{ByteSource, PixelDestination, ViewKind};
+pub use webgl2::SyncHandle;

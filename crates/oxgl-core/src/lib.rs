@@ -13,6 +13,7 @@ pub mod rendering;
 pub mod runtime;
 pub mod state;
 pub mod textures;
+pub mod webgl2;
 
 pub use backend::{Backend, ContextRequest, RequestedBackend};
 pub use context::Context;

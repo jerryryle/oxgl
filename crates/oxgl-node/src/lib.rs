@@ -15,6 +15,7 @@
 pub mod framebuffers;
 pub mod rendering;
 pub mod textures;
+pub mod webgl2;
 
 use std::path::PathBuf;
 
@@ -34,7 +35,7 @@ use oxgl_sys::{ReadPixels, StateCall};
 #[napi]
 #[must_use]
 pub fn native_abi_version() -> u32 {
-    7
+    8
 }
 
 /// The environment's runtime, created by [`init`]. Node-API instance data is
@@ -442,6 +443,7 @@ pub(crate) fn parameter_value(parameter: Parameter) -> Option<ParameterValue> {
         Parameter::Float32(v) => ("float32", v.into_iter().map(f64::from).collect(), None),
         Parameter::Int32(v) => ("int32", v.into_iter().map(f64::from).collect(), None),
         Parameter::Uint32(v) => ("uint32", v.into_iter().map(f64::from).collect(), None),
+        Parameter::Numbers(v) => ("numbers", v, None),
     };
     Some(ParameterValue {
         kind: kind.to_owned(),

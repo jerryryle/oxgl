@@ -45,6 +45,12 @@ pub enum ObjectType {
     Framebuffer,
     /// `createRenderbuffer`.
     Renderbuffer,
+    /// `createVertexArray` (WebGL 2).
+    VertexArray,
+    /// `createTransformFeedback` (WebGL 2).
+    TransformFeedback,
+    /// `createQuery` (WebGL 2).
+    Query,
 }
 
 /// A `getShaderParameter`/`getProgramParameter`/`getVertexAttrib` scalar.
@@ -306,14 +312,34 @@ impl Context {
                 name: current.gen_renderbuffer(),
                 depth_stencil: false,
             },
+            ObjectType::VertexArray | ObjectType::TransformFeedback | ObjectType::Query
+                if !self.webgl2 =>
+            {
+                return None;
+            }
+            ObjectType::VertexArray => Object::VertexArray {
+                name: current.gen_vertex_array(),
+            },
+            ObjectType::TransformFeedback => Object::TransformFeedback {
+                name: current.gen_transform_feedback(),
+            },
+            ObjectType::Query => Object::Query {
+                name: current.gen_query(),
+            },
         };
-        let (Object::Buffer { name, .. }
-        | Object::Shader { name }
-        | Object::Program { name }
-        | Object::Texture { name }
-        | Object::Sampler { name }
-        | Object::Framebuffer { name }
-        | Object::Renderbuffer { name, .. }) = object;
+        let name = match object {
+            Object::Buffer { name, .. }
+            | Object::Shader { name }
+            | Object::Program { name }
+            | Object::Texture { name }
+            | Object::Sampler { name }
+            | Object::Framebuffer { name }
+            | Object::Renderbuffer { name, .. }
+            | Object::VertexArray { name }
+            | Object::TransformFeedback { name }
+            | Object::Query { name } => name,
+            Object::Sync { .. } => 1,
+        };
         (name != 0).then(|| self.objects.insert(object))
     }
 
@@ -342,6 +368,10 @@ impl Context {
                 }
                 current.delete_renderbuffer(name);
             }
+            Object::VertexArray { name } => current.delete_vertex_array(name),
+            Object::TransformFeedback { name } => current.delete_transform_feedback(name),
+            Object::Query { name } => current.delete_query(name),
+            Object::Sync { handle } => current.delete_sync(handle),
         }
     }
 
@@ -375,6 +405,21 @@ impl Context {
                 .context()
                 .make_current()
                 .is_ok_and(|current| current.is_renderbuffer(*name) != 0),
+            Some(Object::VertexArray { name }) => self
+                .buffer
+                .context()
+                .make_current()
+                .is_ok_and(|current| current.is_vertex_array(*name) != 0),
+            Some(Object::TransformFeedback { name }) => self
+                .buffer
+                .context()
+                .make_current()
+                .is_ok_and(|current| current.is_transform_feedback(*name) != 0),
+            Some(Object::Query { name }) => self
+                .buffer
+                .context()
+                .make_current()
+                .is_ok_and(|current| current.is_query(*name) != 0),
             Some(_) => true,
         }
     }
