@@ -13,13 +13,13 @@ use oxgl_sys::{UniformMatrix, UniformVector};
 use crate::{ParameterValue, key, parameter_value, runtime, with_context};
 
 /// The object key for `[index, version]`; `None` for `null` (`[0, 0]`).
-fn object(index: u32, version: u32) -> Option<oxgl_core::context::ObjectKey> {
+pub(crate) fn object(index: u32, version: u32) -> Option<oxgl_core::context::ObjectKey> {
     object_key_from_parts([index, version])
 }
 
 /// Runs `f` on the context and returns its result, or `default` when the
 /// context is destroyed.
-fn query<T>(
+pub(crate) fn query<T>(
     env: Env,
     index: u32,
     version: u32,
@@ -36,7 +36,7 @@ fn query<T>(
     clippy::cast_possible_truncation,
     reason = "WebIDL long long values are exact integers"
 )]
-fn long(value: f64) -> i64 {
+pub(crate) fn long(value: f64) -> i64 {
     value as i64
 }
 
@@ -89,8 +89,9 @@ pub fn synthesize_error(env: Env, index: u32, version: u32, code: u32) -> napi::
     with_context(env, index, version, |c| c.synthesize_error(code))
 }
 
-/// `createBuffer` (`kind` 0), `createShader` (1, with `shader_type`) or
-/// `createProgram` (2); `null` when lost or refused.
+/// `createBuffer` (`kind` 0), `createShader` (1, with `shader_type`),
+/// `createProgram` (2), `createTexture` (3) or `createSampler` (4); `null`
+/// when lost or refused.
 #[napi]
 pub fn create_object(
     env: Env,
@@ -102,6 +103,8 @@ pub fn create_object(
     let ty = match kind {
         0 => ObjectType::Buffer,
         1 => ObjectType::Shader(shader_type),
+        3 => ObjectType::Texture,
+        4 => ObjectType::Sampler,
         _ => ObjectType::Program,
     };
     query(env, index, version, None, |c| {

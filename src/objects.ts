@@ -69,6 +69,14 @@ export class WebGLProgram extends WebGLObject {
 export class WebGLShader extends WebGLObject {
   declare private readonly brand: 'WebGLShader';
 }
+/** WebGL 1.0 §5.9. */
+export class WebGLTexture extends WebGLObject {
+  declare private readonly brand: 'WebGLTexture';
+}
+/** WebGL 2.0 §3.3. */
+export class WebGLSampler extends WebGLObject {
+  declare private readonly brand: 'WebGLSampler';
+}
 
 /** Returns a location's state; assigned by `WebGLUniformLocation`'s static block. */
 export let locationState: (location: WebGLUniformLocation) => LocationState;

@@ -16,8 +16,10 @@ export {
   WebGLBuffer,
   WebGLObject,
   WebGLProgram,
+  WebGLSampler,
   WebGLShader,
   WebGLShaderPrecisionFormat,
+  WebGLTexture,
   WebGLUniformLocation,
 } from './objects.js';
 

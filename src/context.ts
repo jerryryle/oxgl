@@ -3,7 +3,7 @@
 // WebIDL argument conversion happens here, before native code runs, so native
 // code never re-enters JS (conversions can call user `valueOf`). This file is
 // the seam a WebIDL generator will own (src/generated/).
-import type { NativeAttributes, NativeParameter } from './load-native.js';
+import type { NativeAttributes, NativeParameter, NativeTexArgs } from './load-native.js';
 import { native } from './native.js';
 import {
   objectState,
@@ -14,7 +14,9 @@ import {
   WebGLObject,
   WebGLProgram,
   WebGLShader,
+  WebGLSampler,
   WebGLShaderPrecisionFormat,
+  WebGLTexture,
   WebGLUniformLocation,
   locationState,
   type ObjectState,
@@ -134,6 +136,191 @@ interface ContextState {
   program: WebGLProgram | null;
   /** Per attribute: the type of the last `vertexAttrib*` setter (0 float, 1 int, 2 uint). */
   readonly attribKinds: number[];
+  /** Per texture unit: the texture bound to each target. */
+  readonly textureUnits: Map<number, WebGLTexture | null>[];
+  /** Per texture unit: the bound sampler (WebGL 2). */
+  readonly samplers: (WebGLSampler | null)[];
+  /** `activeTexture` − `TEXTURE0`. */
+  activeUnit: number;
+  /** `MAX_COMBINED_TEXTURE_IMAGE_UNITS`. */
+  maxUnits: number;
+}
+
+/** The contexts of canvases, so a canvas can be a `TexImageSource`. */
+const canvasContexts = new WeakMap<object, ContextState>();
+
+/** The active unit's texture bindings. */
+function unitOf(s: ContextState): Map<number, WebGLTexture | null> {
+  let unit = s.textureUnits[s.activeUnit];
+  if (unit === undefined) {
+    unit = new Map();
+    s.textureUnits[s.activeUnit] = unit;
+  }
+  return unit;
+}
+
+/** The arguments of a texture upload, converted per WebIDL in call order by the caller's argument order. */
+function texArgs(
+  target: unknown,
+  level: unknown,
+  internalformat: unknown,
+  xoffset: unknown,
+  yoffset: unknown,
+  zoffset: unknown,
+  width: unknown,
+  height: unknown,
+  depth: unknown,
+  border: unknown,
+  format: unknown,
+  type: unknown,
+): NativeTexArgs {
+  return {
+    target: toUnsignedLong(target),
+    level: toLong(level),
+    internalformat: toLong(internalformat),
+    xoffset: toLong(xoffset),
+    yoffset: toLong(yoffset),
+    zoffset: toLong(zoffset),
+    width: toLong(width),
+    height: toLong(height),
+    depth: toLong(depth),
+    border: toLong(border),
+    format: toUnsignedLong(format),
+    ty: toUnsignedLong(type),
+  };
+}
+
+interface Pixels {
+  data: ArrayBufferView;
+  width: number;
+  height: number;
+}
+
+const EMPTY: Pixels = { data: new Uint8Array(0), width: 0, height: 0 };
+
+interface Canvas2D {
+  getImageData(x: number, y: number, w: number, h: number): { data: ArrayBufferView };
+  drawImage?(image: unknown, x: number, y: number): void;
+}
+
+/** The 2D context of an object with `getContext('2d')`, if it has one. */
+function context2d(canvas: unknown): Canvas2D | null {
+  const getContext = (canvas as { getContext?: unknown }).getContext;
+  if (typeof getContext !== 'function') return null;
+  const context = (getContext as (type: string) => unknown).call(canvas, '2d') as Partial<Canvas2D> | null;
+  return context !== null && typeof context === 'object' && typeof context.getImageData === 'function'
+    ? (context as Canvas2D)
+    : null;
+}
+
+/**
+ * A `TexImageSource` as RGBA8, top row first (design: "TexImageSource"):
+ * an `ImageData`-shaped object, an oxgl context's canvas, an object with a
+ * 2D context, or a document image. Anything else is a `TypeError`.
+ */
+function imagePixels(source: unknown, method: string, position: number): Pixels {
+  if (typeof source !== 'object' || source === null) throw typeError(method, position, 'TexImageSource');
+  const shaped = source as Partial<Pixels> & { naturalWidth?: unknown; naturalHeight?: unknown; ownerDocument?: unknown };
+  if (ArrayBuffer.isView(shaped.data) && typeof shaped.width === 'number' && typeof shaped.height === 'number') {
+    return { data: shaped.data, width: shaped.width, height: shaped.height };
+  }
+  const owner = canvasContexts.get(source);
+  if (owner !== undefined) {
+    if (owner.destroyed) return EMPTY;
+    return native.drawingBufferPixels(owner.index, owner.version) ?? EMPTY;
+  }
+  const width = Number((shaped as { width?: unknown }).width) >>> 0;
+  const height = Number((shaped as { height?: unknown }).height) >>> 0;
+  const canvas = context2d(source);
+  if (canvas !== null) {
+    if (width === 0 || height === 0) return EMPTY;
+    return { data: canvas.getImageData(0, 0, width, height).data, width, height };
+  }
+  const document = shaped.ownerDocument as { createElement?: (name: string) => unknown } | null | undefined;
+  if (typeof shaped.naturalWidth === 'number' && typeof document?.createElement === 'function') {
+    const w = shaped.naturalWidth >>> 0;
+    const h = Number(shaped.naturalHeight) >>> 0;
+    // A broken or unloaded image uploads as 0×0, as in browsers.
+    if (w === 0 || h === 0) return EMPTY;
+    const scratch = document.createElement('canvas') as { width: number; height: number };
+    scratch.width = w;
+    scratch.height = h;
+    const drawn = context2d(scratch);
+    if (drawn?.drawImage === undefined) throw typeError(method, position, 'TexImageSource');
+    drawn.drawImage(source, 0, 0);
+    return { data: drawn.getImageData(0, 0, w, h).data, width: w, height: h };
+  }
+  throw typeError(method, position, 'TexImageSource');
+}
+
+/**
+ * One texture upload whose source is `data`: a `TexImageSource` when
+ * `sourceOnly` (WebGL 1's six-argument forms), else a view, `null`, a pixel
+ * unpack buffer offset (WebGL 2) or a `TexImageSource` (WebGL 2), resolved
+ * as WebIDL overloads are. `call` is 0 texImage2D, 1 texSubImage2D, 2
+ * texImage3D, 3 texSubImage3D.
+ */
+function upload(
+  s: ContextState,
+  call: number,
+  args: NativeTexArgs,
+  data: unknown,
+  srcOffset: unknown,
+  method: string,
+  position: number,
+  sourceOnly: boolean,
+): void {
+  const ranged = srcOffset !== undefined;
+  if (sourceOnly) {
+    const pixels = imagePixels(data, method, position);
+    if (s.destroyed) return;
+    args.width = pixels.width;
+    args.height = pixels.height;
+    native.texUpload(s.index, s.version, call, args, 3, pixels.data, 0, pixels.width, pixels.height);
+    return;
+  }
+  if (data === null || data === undefined) {
+    if (ranged) throw typeError(method, position, 'ArrayBufferView');
+    if (!s.destroyed) native.texUpload(s.index, s.version, call, args, 0, null, 0, 0, 0);
+    return;
+  }
+  if (ArrayBuffer.isView(data)) {
+    const size = (data as Partial<{ BYTES_PER_ELEMENT: number }>).BYTES_PER_ELEMENT ?? 1;
+    const offset = ranged ? toUnsignedLongLong(srcOffset) * size : 0;
+    if (!s.destroyed) native.texUpload(s.index, s.version, call, args, 1, data, offset, 0, 0);
+    return;
+  }
+  if (typeof data !== 'object' && typeof data !== 'function') {
+    if (!s.webgl2 || ranged) throw typeError(method, position, 'ArrayBufferView');
+    const offset = toLongLong(data);
+    if (!s.destroyed) native.texUpload(s.index, s.version, call, args, 2, null, offset, 0, 0);
+    return;
+  }
+  if (!s.webgl2 || ranged) throw typeError(method, position, 'ArrayBufferView');
+  const pixels = imagePixels(data, method, position);
+  if (!s.destroyed) native.texUpload(s.index, s.version, call, args, 3, pixels.data, 0, pixels.width, pixels.height);
+}
+
+/**
+ * A compressed upload: `rest` is `[data]` (WebGL 1), or on WebGL 2
+ * `[srcData, srcOffset?, srcLengthOverride?]` or `[imageSize, offset]` for a
+ * pixel unpack buffer, which oxgl does not support yet (no compressed format
+ * exists before the extensions change), so that form generates
+ * `INVALID_OPERATION`.
+ */
+function compressed(s: ContextState, call: number, args: NativeTexArgs, rest: unknown[], method: string, position: number): void {
+  const [data, srcOffset, length] = rest;
+  if (s.webgl2 && typeof data === 'number') {
+    toLong(data);
+    toLongLong(srcOffset);
+    if (!s.destroyed) native.synthesizeError(s.index, s.version, GL.INVALID_OPERATION);
+    return;
+  }
+  if (!ArrayBuffer.isView(data)) throw typeError(method, position, 'ArrayBufferView');
+  const size = (data as Partial<{ BYTES_PER_ELEMENT: number }>).BYTES_PER_ELEMENT ?? 1;
+  const offset = s.webgl2 ? toUnsignedLongLong(srcOffset) * size : 0;
+  const count = s.webgl2 ? toUnsignedLong(length) * size : 0;
+  if (!s.destroyed) native.compressedTexUpload(s.index, s.version, call, args, data, offset, count);
 }
 
 /** A context's state; assigned by `ContextBase`'s static block. */
@@ -249,8 +436,20 @@ function boundObject(s: ContextState, pname: number): WebGLObject | null | undef
       return s.vao.element;
     case GL.CURRENT_PROGRAM:
       return s.program;
+    case GL.TEXTURE_BINDING_2D:
+      return unitOf(s).get(GL.TEXTURE_2D) ?? null;
+    case GL.TEXTURE_BINDING_CUBE_MAP:
+      return unitOf(s).get(GL.TEXTURE_CUBE_MAP) ?? null;
   }
   if (!s.webgl2) return undefined;
+  switch (pname) {
+    case GL.TEXTURE_BINDING_3D:
+      return unitOf(s).get(GL.TEXTURE_3D) ?? null;
+    case GL.TEXTURE_BINDING_2D_ARRAY:
+      return unitOf(s).get(GL.TEXTURE_2D_ARRAY) ?? null;
+    case GL.SAMPLER_BINDING:
+      return s.samplers[s.activeUnit] ?? null;
+  }
   const target = BINDING_TARGETS.get(pname);
   return target === undefined ? undefined : (s.buffers.get(target) ?? null);
 }
@@ -385,8 +584,15 @@ abstract class ContextBase {
       vao: { element: null, attribs: [] },
       program: null,
       attribKinds: [],
+      textureUnits: [],
+      samplers: [],
+      activeUnit: 0,
+      maxUnits: 0,
     };
+    const units = native.getParameter(index, version, GL.MAX_COMBINED_TEXTURE_IMAGE_UNITS);
+    this.#s.maxUnits = units?.numbers[0] ?? 0;
     this.#s.canvas = canvas ?? new HeadlessCanvas(CONSTRUCTING, this, requestedWidth, requestedHeight);
+    canvasContexts.set(this.#s.canvas, this.#s);
     collected.register(this, Object.freeze([index, version] as const), this);
   }
 
@@ -507,7 +713,12 @@ abstract class ContextBase {
   /** WebGL 1.0 §5.14.3. */
   activeTexture(texture: number): void {
     requireArguments('activeTexture', 1, arguments.length);
-    this.#state(native.activeTexture, toUnsignedLong(texture));
+    const s = this.#s;
+    const t = toUnsignedLong(texture);
+    if (s.destroyed) return;
+    native.activeTexture(s.index, s.version, t);
+    const unit = t - GL.TEXTURE0;
+    if (unit >= 0 && unit < s.maxUnits) s.activeUnit = unit;
   }
 
   /** WebGL 1.0 §5.14.3. */
@@ -1352,6 +1563,152 @@ abstract class ContextBase {
     this.#state(native.drawElements, toUnsignedLong(mode), toLong(count), toUnsignedLong(type), toLongLong(offset));
   }
 
+  // --- Textures (WebGL 1.0 §5.14.8) --------------------------------------
+
+  /** WebGL 1.0 §5.14.8. */
+  createTexture(): WebGLTexture {
+    return createObject(this.#s, WebGLTexture, 3, 0, {}) as WebGLTexture;
+  }
+
+  /** WebGL 1.0 §5.14.8. */
+  bindTexture(target: number, texture: WebGLTexture | null): void {
+    requireArguments('bindTexture', 2, arguments.length);
+    const s = this.#s;
+    const t = toUnsignedLong(target);
+    const state = checkObject(s, texture, WebGLTexture, 'bindTexture', 2, true, GL.INVALID_OPERATION);
+    if (state === undefined) return;
+    if (native.bindTexture(s.index, s.version, t, ...keyOf(state))) unitOf(s).set(t, texture);
+  }
+
+  /** WebGL 1.0 §5.14.8; GL unbinds it from every unit of this context. */
+  deleteTexture(texture: WebGLTexture | null): void {
+    requireArguments('deleteTexture', 1, arguments.length);
+    const s = this.#s;
+    const state = checkObject(s, texture, WebGLTexture, 'deleteTexture', 1, true, 0);
+    if (!state || texture === null) return;
+    state.deleted = true;
+    collectedObjects.unregister(texture);
+    for (const unit of s.textureUnits) {
+      for (const [target, bound] of unit) if (bound === texture) unit.set(target, null);
+    }
+    native.deleteObject(s.index, s.version, ...keyOf(state));
+  }
+
+  /** WebGL 1.0 §5.14.8: true once the texture has been bound. */
+  isTexture(texture: WebGLTexture | null): boolean {
+    requireArguments('isTexture', 1, arguments.length);
+    const s = this.#s;
+    const state = checkObject(s, texture, WebGLTexture, 'isTexture', 1, true, 0);
+    return !!state && native.hasObject(s.index, s.version, ...keyOf(state));
+  }
+
+  /** WebGL 1.0 §5.14.8. */
+  texParameterf(target: number, pname: number, param: number): void {
+    requireArguments('texParameterf', 3, arguments.length);
+    this.#state(native.texParameter, toUnsignedLong(target), toUnsignedLong(pname), toFloat(param), true);
+  }
+
+  /** WebGL 1.0 §5.14.8. */
+  texParameteri(target: number, pname: number, param: number): void {
+    requireArguments('texParameteri', 3, arguments.length);
+    this.#state(native.texParameter, toUnsignedLong(target), toUnsignedLong(pname), toLong(param), false);
+  }
+
+  /** WebGL 1.0 §5.14.8. */
+  getTexParameter(target: number, pname: number): unknown {
+    requireArguments('getTexParameter', 2, arguments.length);
+    const s = this.#s;
+    const t = toUnsignedLong(target);
+    const p = toUnsignedLong(pname);
+    if (s.destroyed) return null;
+    return parameterValue(native.getTexParameter(s.index, s.version, t, p));
+  }
+
+  /** WebGL 1.0 §5.14.8. */
+  generateMipmap(target: number): void {
+    requireArguments('generateMipmap', 1, arguments.length);
+    this.#state(native.generateMipmap, toUnsignedLong(target));
+  }
+
+  /**
+   * WebGL 1.0 §5.14.8 and WebGL 2.0 §3.7.6: the `ArrayBufferView`,
+   * `TexImageSource` and (WebGL 2) pixel-unpack-buffer forms.
+   */
+  texImage2D(target: number, level: number, internalformat: number, ...rest: unknown[]): void {
+    const count = arguments.length;
+    const s = this.#s;
+    if (count === 6) {
+      requireArguments('texImage2D', 6, count);
+      const args = texArgs(target, level, internalformat, 0, 0, 0, 0, 0, 0, 0, rest[0], rest[1]);
+      upload(s, 0, args, rest[2], undefined, 'texImage2D', 6, true);
+      return;
+    }
+    requireArguments('texImage2D', 9, count);
+    const args = texArgs(target, level, internalformat, 0, 0, 0, rest[0], rest[1], 1, rest[2], rest[3], rest[4]);
+    upload(s, 0, args, rest[5], count > 9 ? rest[6] : undefined, 'texImage2D', 9, false);
+  }
+
+  /** WebGL 1.0 §5.14.8 and WebGL 2.0 §3.7.6. */
+  texSubImage2D(target: number, level: number, xoffset: number, yoffset: number, ...rest: unknown[]): void {
+    const count = arguments.length;
+    const s = this.#s;
+    if (count === 7) {
+      const args = texArgs(target, level, 0, xoffset, yoffset, 0, 0, 0, 0, 0, rest[0], rest[1]);
+      upload(s, 1, args, rest[2], undefined, 'texSubImage2D', 7, true);
+      return;
+    }
+    requireArguments('texSubImage2D', 9, count);
+    const args = texArgs(target, level, 0, xoffset, yoffset, 0, rest[0], rest[1], 1, 0, rest[2], rest[3]);
+    upload(s, 1, args, rest[4], count > 9 ? rest[5] : undefined, 'texSubImage2D', 9, false);
+  }
+
+  /** WebGL 1.0 §5.14.8; WebGL 2 adds the unpack-buffer and `srcOffset` forms. */
+  compressedTexImage2D(target: number, level: number, internalformat: number, width: number, height: number, border: number, ...rest: unknown[]): void {
+    requireArguments('compressedTexImage2D', 7, arguments.length);
+    const args = texArgs(target, level, internalformat, 0, 0, 0, width, height, 1, border, 0, 0);
+    compressed(this.#s, 0, args, rest, 'compressedTexImage2D', 7);
+  }
+
+  /** WebGL 1.0 §5.14.8; WebGL 2 adds the unpack-buffer and `srcOffset` forms. */
+  compressedTexSubImage2D(target: number, level: number, xoffset: number, yoffset: number, width: number, height: number, format: number, ...rest: unknown[]): void {
+    requireArguments('compressedTexSubImage2D', 8, arguments.length);
+    const args = texArgs(target, level, 0, xoffset, yoffset, 0, width, height, 1, 0, format, 0);
+    compressed(this.#s, 1, args, rest, 'compressedTexSubImage2D', 8);
+  }
+
+  /** WebGL 1.0 §5.14.8. */
+  copyTexImage2D(target: number, level: number, internalformat: number, x: number, y: number, width: number, height: number, border: number): void {
+    requireArguments('copyTexImage2D', 8, arguments.length);
+    this.#state(
+      native.copyTexImage2D,
+      toUnsignedLong(target),
+      toLong(level),
+      toUnsignedLong(internalformat),
+      toLong(x),
+      toLong(y),
+      toLong(width),
+      toLong(height),
+      toLong(border),
+    );
+  }
+
+  /** WebGL 1.0 §5.14.8. */
+  copyTexSubImage2D(target: number, level: number, xoffset: number, yoffset: number, x: number, y: number, width: number, height: number): void {
+    requireArguments('copyTexSubImage2D', 8, arguments.length);
+    this.#state(
+      native.copyTexSubImage,
+      toUnsignedLong(target),
+      toLong(level),
+      toLong(xoffset),
+      toLong(yoffset),
+      null,
+      toLong(x),
+      toLong(y),
+      toLong(width),
+      toLong(height),
+    );
+  }
+
   /**
    * Non-standard: releases the context's native resources now and puts it in
    * the lost state. Later calls are no-ops; calling it again does nothing.
@@ -1500,6 +1857,119 @@ abstract class WebGL2Members extends ContextBase {
     uniformMatrixList(this, 'uniformMatrix4x3fv', 4, 3, arguments.length, location, transpose, data, srcOffset, srcLength);
   }
 
+  /** WebGL 2.0 §3.7.6. */
+  texImage3D(target: number, level: number, internalformat: number, width: number, height: number, depth: number, border: number, format: number, type: number, ...rest: unknown[]): void {
+    requireArguments('texImage3D', 10, arguments.length);
+    const args = texArgs(target, level, internalformat, 0, 0, 0, width, height, depth, border, format, type);
+    upload(contextState(this), 2, args, rest[0], rest.length > 1 ? rest[1] : undefined, 'texImage3D', 10, false);
+  }
+
+  /** WebGL 2.0 §3.7.6. */
+  texSubImage3D(target: number, level: number, xoffset: number, yoffset: number, zoffset: number, width: number, height: number, depth: number, format: number, type: number, ...rest: unknown[]): void {
+    requireArguments('texSubImage3D', 11, arguments.length);
+    const args = texArgs(target, level, 0, xoffset, yoffset, zoffset, width, height, depth, 0, format, type);
+    upload(contextState(this), 3, args, rest[0], rest.length > 1 ? rest[1] : undefined, 'texSubImage3D', 11, false);
+  }
+
+  /** WebGL 2.0 §3.7.6. */
+  compressedTexImage3D(target: number, level: number, internalformat: number, width: number, height: number, depth: number, border: number, ...rest: unknown[]): void {
+    requireArguments('compressedTexImage3D', 8, arguments.length);
+    const args = texArgs(target, level, internalformat, 0, 0, 0, width, height, depth, border, 0, 0);
+    compressed(contextState(this), 2, args, rest, 'compressedTexImage3D', 8);
+  }
+
+  /** WebGL 2.0 §3.7.6. */
+  compressedTexSubImage3D(target: number, level: number, xoffset: number, yoffset: number, zoffset: number, width: number, height: number, depth: number, format: number, ...rest: unknown[]): void {
+    requireArguments('compressedTexSubImage3D', 10, arguments.length);
+    const args = texArgs(target, level, 0, xoffset, yoffset, zoffset, width, height, depth, 0, format, 0);
+    compressed(contextState(this), 3, args, rest, 'compressedTexSubImage3D', 10);
+  }
+
+  /** WebGL 2.0 §3.7.6. */
+  copyTexSubImage3D(target: number, level: number, xoffset: number, yoffset: number, zoffset: number, x: number, y: number, width: number, height: number): void {
+    requireArguments('copyTexSubImage3D', 9, arguments.length);
+    const s = contextState(this);
+    const args = [toUnsignedLong(target), toLong(level), toLong(xoffset), toLong(yoffset), toLong(zoffset), toLong(x), toLong(y), toLong(width), toLong(height)] as const;
+    if (!s.destroyed) native.copyTexSubImage(s.index, s.version, ...args);
+  }
+
+  /** WebGL 2.0 §3.7.6. */
+  texStorage2D(target: number, levels: number, internalformat: number, width: number, height: number): void {
+    requireArguments('texStorage2D', 5, arguments.length);
+    const s = contextState(this);
+    const args = [toUnsignedLong(target), toLong(levels), toUnsignedLong(internalformat), toLong(width), toLong(height)] as const;
+    if (!s.destroyed) native.texStorage(s.index, s.version, ...args, null);
+  }
+
+  /** WebGL 2.0 §3.7.6. */
+  texStorage3D(target: number, levels: number, internalformat: number, width: number, height: number, depth: number): void {
+    requireArguments('texStorage3D', 6, arguments.length);
+    const s = contextState(this);
+    const args = [toUnsignedLong(target), toLong(levels), toUnsignedLong(internalformat), toLong(width), toLong(height), toLong(depth)] as const;
+    if (!s.destroyed) native.texStorage(s.index, s.version, ...args);
+  }
+
+  // --- Samplers (WebGL 2.0 §3.7.13) --------------------------------------
+
+  /** WebGL 2.0 §3.7.13. */
+  createSampler(): WebGLSampler {
+    return createObject(contextState(this), WebGLSampler, 4, 0, {}) as WebGLSampler;
+  }
+
+  /** WebGL 2.0 §3.7.13; GL unbinds it from every unit of this context. */
+  deleteSampler(sampler: WebGLSampler | null): void {
+    requireArguments('deleteSampler', 1, arguments.length);
+    const s = contextState(this);
+    const state = checkObject(s, sampler, WebGLSampler, 'deleteSampler', 1, true, 0);
+    if (!state || sampler === null) return;
+    state.deleted = true;
+    collectedObjects.unregister(sampler);
+    s.samplers.forEach((bound, unit) => {
+      if (bound === sampler) s.samplers[unit] = null;
+    });
+    native.deleteObject(s.index, s.version, ...keyOf(state));
+  }
+
+  /** WebGL 2.0 §3.7.13. */
+  isSampler(sampler: WebGLSampler | null): boolean {
+    requireArguments('isSampler', 1, arguments.length);
+    const s = contextState(this);
+    const state = checkObject(s, sampler, WebGLSampler, 'isSampler', 1, true, 0);
+    return !!state && native.hasObject(s.index, s.version, ...keyOf(state));
+  }
+
+  /** WebGL 2.0 §3.7.13. */
+  bindSampler(unit: number, sampler: WebGLSampler | null): void {
+    requireArguments('bindSampler', 2, arguments.length);
+    const s = contextState(this);
+    const u = toUnsignedLong(unit);
+    const state = checkObject(s, sampler, WebGLSampler, 'bindSampler', 2, true, GL.INVALID_OPERATION);
+    if (state === undefined) return;
+    if (native.bindSampler(s.index, s.version, u, ...keyOf(state))) s.samplers[u] = sampler;
+  }
+
+  /** WebGL 2.0 §3.7.13. */
+  samplerParameteri(sampler: WebGLSampler, pname: number, param: number): void {
+    requireArguments('samplerParameteri', 3, arguments.length);
+    samplerParameter(this, sampler, toUnsignedLong(pname), toLong(param), false, 'samplerParameteri');
+  }
+
+  /** WebGL 2.0 §3.7.13. */
+  samplerParameterf(sampler: WebGLSampler, pname: number, param: number): void {
+    requireArguments('samplerParameterf', 3, arguments.length);
+    samplerParameter(this, sampler, toUnsignedLong(pname), toFloat(param), true, 'samplerParameterf');
+  }
+
+  /** WebGL 2.0 §3.7.13. */
+  getSamplerParameter(sampler: WebGLSampler, pname: number): unknown {
+    requireArguments('getSamplerParameter', 2, arguments.length);
+    const s = contextState(this);
+    const p = toUnsignedLong(pname);
+    const state = checkObject(s, sampler, WebGLSampler, 'getSamplerParameter', 1, false, GL.INVALID_OPERATION);
+    if (!state) return null;
+    return parameterValue(native.getSamplerParameter(s.index, s.version, ...keyOf(state), p));
+  }
+
   /** WebGL 2.0 §3.7.8. */
   vertexAttribI4i(index: number, x: number, y: number, z: number, w: number): void {
     requireArguments('vertexAttribI4i', 5, arguments.length);
@@ -1543,6 +2013,13 @@ export const WebGL2RenderingContext: WebGL2Constants & {
   readonly prototype: WebGL2RenderingContext;
   new (...args: ContextArguments): WebGL2RenderingContext;
 } = withConstants(class WebGL2RenderingContext extends WebGL2Members {}, WEBGL2_CONSTANTS);
+
+/** `samplerParameter[if]`. */
+function samplerParameter(gl: ContextBase, sampler: unknown, pname: number, value: number, float: boolean, method: string): void {
+  const s = contextState(gl);
+  const state = checkObject(s, sampler, WebGLSampler, method, 1, false, GL.INVALID_OPERATION);
+  if (state) native.samplerParameter(s.index, s.version, ...keyOf(state), pname, value, float);
+}
 
 /** `uniform[1234]ui` on a WebGL 2 context. */
 function uniformUint(gl: ContextBase, method: string, location: unknown, values: number[]): void {

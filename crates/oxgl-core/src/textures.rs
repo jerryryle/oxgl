@@ -169,6 +169,92 @@ fn usize_of(value: i32) -> Option<usize> {
     usize::try_from(value).ok()
 }
 
+/// A 2D view upload's pixels, tightly repacked with flip and premultiply
+/// applied. `Err(None)` for sizes ANGLE rejects itself, `Err(Some(code))`
+/// for an error oxgl generates.
+fn repacked_view(
+    source: &dyn ByteSource,
+    offset: usize,
+    args: TexImage,
+    codec: &Codec,
+    saved: UnpackParams,
+    unpack: crate::state::UnpackState,
+) -> Result<Vec<u8>, Option<u32>> {
+    let (Some(width), Some(height)) = (usize_of(args.width), usize_of(args.height)) else {
+        return Err(None);
+    };
+    let rows = saved
+        .unpack()
+        .rows(width, height, codec.bytes_per_pixel())
+        .ok_or(Some(GL_INVALID_OPERATION))?;
+    let mut image = None;
+    source.with_bytes(offset..source.byte_len(), &mut |bytes| {
+        image = codec::repack(
+            bytes,
+            rows,
+            width,
+            codec,
+            unpack.flip_y,
+            unpack.premultiply_alpha,
+        );
+    });
+    image.map(|i| i.data).ok_or(Some(GL_INVALID_OPERATION))
+}
+
+/// A `TexImageSource` upload's pixels: the selected rectangle (and, for 3D,
+/// slices) of the RGBA8 source, encoded for the format and type, with the
+/// WebGL 2 sub-rectangle unpack parameters applied (WebGL 2.0 §5.35).
+fn rgba8_pixels(
+    source: &dyn ByteSource,
+    (width, height): (usize, usize),
+    args: TexImage,
+    is_3d: bool,
+    saved: UnpackParams,
+    unpack: crate::state::UnpackState,
+) -> Result<Vec<u8>, Option<u32>> {
+    let codec = Codec::new(args.format, args.ty).ok_or(None)?;
+    let (Some(w), Some(h), Some(d)) = (
+        usize_of(args.width),
+        usize_of(args.height),
+        usize_of(args.depth.max(1)),
+    ) else {
+        return Err(None);
+    };
+    let skip_x = usize_of(saved.skip_pixels).unwrap_or(0);
+    let skip_y = usize_of(saved.skip_rows).unwrap_or(0);
+    let image_height = usize_of(saved.image_height).filter(|&n| n > 0).unwrap_or(h);
+    let skip_images = if is_3d {
+        usize_of(saved.skip_images).unwrap_or(0)
+    } else {
+        0
+    };
+    let mut data = Vec::new();
+    let mut fits = true;
+    source.with_bytes(0..source.byte_len(), &mut |bytes| {
+        for slice in 0..d {
+            let y = skip_y + (skip_images + slice) * image_height;
+            let rect = (skip_x, y, w, h);
+            match codec::from_rgba8(
+                bytes,
+                width,
+                height,
+                rect,
+                &codec,
+                unpack.flip_y,
+                unpack.premultiply_alpha,
+            ) {
+                Some(image) => data.extend_from_slice(&image.data),
+                None => fits = false,
+            }
+        }
+    });
+    if fits {
+        Ok(data)
+    } else {
+        Err(Some(GL_INVALID_OPERATION))
+    }
+}
+
 impl Context {
     /// Whether a buffer is bound to `PIXEL_UNPACK_BUFFER` (WebGL 2).
     fn unpack_buffer_bound(&self, current: &Current<'_>) -> bool {
@@ -206,13 +292,14 @@ impl Context {
         };
         let name = match texture {
             None => 0,
-            Some(key) => match self.texture_name(key) {
-                Some(name) => name,
-                None => {
+            Some(key) => {
+                if let Some(name) = self.texture_name(key) {
+                    name
+                } else {
                     self.synthesize_error(GL_INVALID_OPERATION);
                     return false;
                 }
-            },
+            }
         };
         let Some(current) = current(&self.buffer, &mut self.errors) else {
             return false;
@@ -324,84 +411,31 @@ impl Context {
                 }
                 let Some(codec) = codec else { return };
                 let saved = UnpackParams::read(&current, webgl2);
-                let (Some(width), Some(height)) = (usize_of(args.width), usize_of(args.height))
-                else {
-                    // Negative sizes: ANGLE generates INVALID_VALUE.
-                    current.tex_upload(call, args, UploadData::Client(Some(&[])));
-                    return;
-                };
-                let Some(rows) = saved.unpack().rows(width, height, codec.bytes_per_pixel()) else {
-                    self.errors.synthesize(GL_INVALID_OPERATION);
-                    return;
-                };
-                let (flip, premultiply) = (self.unpack.flip_y, self.unpack.premultiply_alpha);
-                let mut image = None;
-                source.with_bytes(offset..source.byte_len(), &mut |bytes| {
-                    image = codec::repack(bytes, rows, width, &codec, flip, premultiply);
-                });
-                let Some(image) = image else {
-                    self.errors.synthesize(GL_INVALID_OPERATION);
-                    return;
-                };
-                with_neutral_unpack(&current, saved, webgl2, || {
-                    current.tex_upload(call, args, UploadData::Client(Some(&image.data)));
-                });
+                let unpack = self.unpack;
+                match repacked_view(source, offset, args, &codec, saved, unpack) {
+                    Ok(data) => with_neutral_unpack(&current, saved, webgl2, || {
+                        current.tex_upload(call, args, UploadData::Client(Some(&data)));
+                    }),
+                    // Negative sizes: ANGLE generates the error.
+                    Err(None) => current.tex_upload(call, args, UploadData::Client(Some(&[]))),
+                    Err(Some(code)) => self.errors.synthesize(code),
+                }
             }
             TexSource::Rgba8 {
                 source,
                 width,
                 height,
             } => {
-                let Some(codec) = Codec::new(args.format, args.ty) else {
-                    // Not a TexImageSource combination: ANGLE generates the
-                    // error for the format/type pair.
-                    current.tex_upload(call, args, UploadData::Client(Some(&[])));
-                    return;
-                };
                 let saved = UnpackParams::read(&current, webgl2);
-                let (Some(w), Some(h), Some(d)) = (
-                    usize_of(args.width),
-                    usize_of(args.height),
-                    usize_of(args.depth.max(1)),
-                ) else {
-                    current.tex_upload(call, args, UploadData::Client(Some(&[])));
-                    return;
-                };
-                let skip_x = usize_of(saved.skip_pixels).unwrap_or(0);
-                let skip_y = usize_of(saved.skip_rows).unwrap_or(0);
-                let image_height = usize_of(saved.image_height).filter(|&n| n > 0).unwrap_or(h);
-                let skip_images = if is_3d {
-                    usize_of(saved.skip_images).unwrap_or(0)
-                } else {
-                    0
-                };
-                let (flip, premultiply) = (self.unpack.flip_y, self.unpack.premultiply_alpha);
-                let mut data = Vec::new();
-                let mut fits = true;
-                source.with_bytes(0..source.byte_len(), &mut |bytes| {
-                    for slice in 0..d {
-                        let y = skip_y + (skip_images + slice) * image_height;
-                        match codec::from_rgba8(
-                            bytes,
-                            width,
-                            height,
-                            (skip_x, y, w, h),
-                            &codec,
-                            flip,
-                            premultiply,
-                        ) {
-                            Some(image) => data.extend_from_slice(&image.data),
-                            None => fits = false,
-                        }
-                    }
-                });
-                if !fits {
-                    self.errors.synthesize(GL_INVALID_OPERATION);
-                    return;
+                match rgba8_pixels(source, (width, height), args, is_3d, saved, self.unpack) {
+                    Ok(data) => with_neutral_unpack(&current, saved, webgl2, || {
+                        current.tex_upload(call, args, UploadData::Client(Some(&data)));
+                    }),
+                    // Not a TexImageSource combination, or negative sizes:
+                    // ANGLE generates the error.
+                    Err(None) => current.tex_upload(call, args, UploadData::Client(Some(&[]))),
+                    Err(Some(code)) => self.errors.synthesize(code),
                 }
-                with_neutral_unpack(&current, saved, webgl2, || {
-                    current.tex_upload(call, args, UploadData::Client(Some(&data)));
-                });
             }
         }
     }
@@ -426,7 +460,7 @@ impl Context {
             return;
         }
         source.with_bytes(range, &mut |bytes| {
-            current.compressed_tex_upload(call, args, bytes)
+            current.compressed_tex_upload(call, args, bytes);
         });
     }
 
@@ -500,7 +534,7 @@ impl Context {
             match depth {
                 None => current.tex_storage_2d(target, levels, internal_format, width, height),
                 Some(depth) => {
-                    current.tex_storage_3d(target, levels, internal_format, width, height, depth)
+                    current.tex_storage_3d(target, levels, internal_format, width, height, depth);
                 }
             }
         }
@@ -510,13 +544,14 @@ impl Context {
     pub fn bind_sampler(&mut self, unit: u32, sampler: Option<ObjectKey>) -> bool {
         let name = match sampler {
             None => 0,
-            Some(key) => match self.sampler_name(key) {
-                Some(name) => name,
-                None => {
+            Some(key) => {
+                if let Some(name) = self.sampler_name(key) {
+                    name
+                } else {
                     self.synthesize_error(GL_INVALID_OPERATION);
                     return false;
                 }
-            },
+            }
         };
         let Some(current) = current(&self.buffer, &mut self.errors) else {
             return false;

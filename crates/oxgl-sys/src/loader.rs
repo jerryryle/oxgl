@@ -272,6 +272,7 @@ entry_points! {
     glGenSamplers: PFNGLGENSAMPLERSPROC,
     glDeleteSamplers: PFNGLDELETESAMPLERSPROC,
     glBindTexture: PFNGLBINDTEXTUREPROC,
+    glIsTexture: PFNGLISTEXTUREPROC,
     glTexParameteri: PFNGLTEXPARAMETERIPROC,
     glTexParameterf: PFNGLTEXPARAMETERFPROC,
     glGenerateMipmap: PFNGLGENERATEMIPMAPPROC,

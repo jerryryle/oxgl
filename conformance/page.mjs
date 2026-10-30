@@ -194,6 +194,8 @@ const INTERFACES = [
   'WebGLBuffer',
   'WebGLProgram',
   'WebGLShader',
+  'WebGLTexture',
+  'WebGLSampler',
   'WebGLUniformLocation',
   'WebGLActiveInfo',
 ];

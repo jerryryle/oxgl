@@ -37,6 +37,22 @@ export interface NativeAttributes {
   failIfMajorPerformanceCaveat: boolean;
 }
 
+/** The arguments of a texture upload (native `TexArgs`). */
+export interface NativeTexArgs {
+  target: number;
+  level: number;
+  internalformat: number;
+  xoffset: number;
+  yoffset: number;
+  zoffset: number;
+  width: number;
+  height: number;
+  depth: number;
+  border: number;
+  format: number;
+  ty: number;
+}
+
 /**
  * Native interface exported by the oxgl addon. Arguments are already converted
  * per WebIDL; contexts are identified by their key's `index` and `version`.
@@ -89,6 +105,19 @@ export interface NativeBinding {
   getVertexAttribOffset: (index: number, version: number, attrib: number, pname: number) => number;
   drawArrays: (index: number, version: number, mode: number, first: number, count: number) => void;
   drawElements: (index: number, version: number, mode: number, count: number, type: number, offset: number) => void;
+  bindTexture: (index: number, version: number, target: number, oi: number, ov: number) => boolean;
+  texParameter: (index: number, version: number, target: number, pname: number, value: number, float: boolean) => void;
+  getTexParameter: (index: number, version: number, target: number, pname: number) => NativeParameter | null;
+  generateMipmap: (index: number, version: number, target: number) => void;
+  texUpload: (index: number, version: number, call: number, args: NativeTexArgs, kind: number, source: ArrayBufferView | null, offset: number, sourceWidth: number, sourceHeight: number) => void;
+  compressedTexUpload: (index: number, version: number, call: number, args: NativeTexArgs, source: ArrayBufferView, offset: number, length: number) => void;
+  copyTexImage2D: (index: number, version: number, target: number, level: number, internalFormat: number, x: number, y: number, width: number, height: number, border: number) => void;
+  copyTexSubImage: (index: number, version: number, target: number, level: number, xoffset: number, yoffset: number, zoffset: number | null, x: number, y: number, width: number, height: number) => void;
+  texStorage: (index: number, version: number, target: number, levels: number, internalFormat: number, width: number, height: number, depth: number | null) => void;
+  bindSampler: (index: number, version: number, unit: number, oi: number, ov: number) => boolean;
+  samplerParameter: (index: number, version: number, oi: number, ov: number, pname: number, value: number, float: boolean) => void;
+  getSamplerParameter: (index: number, version: number, oi: number, ov: number, pname: number) => NativeParameter | null;
+  drawingBufferPixels: (index: number, version: number) => { data: Uint8Array; width: number; height: number } | null;
   drawRangeElements: (index: number, version: number, mode: number, start: number, end: number, count: number, type: number, offset: number) => void;
   resize(index: number, version: number, width: number, height: number): { width: number; height: number };
   destroy(index: number, version: number): void;
@@ -151,7 +180,7 @@ export interface NativeBinding {
 }
 
 /** Version of the JS ↔ native interface this package was built for. */
-export const NATIVE_ABI_VERSION = 5;
+export const NATIVE_ABI_VERSION = 6;
 
 function nativeMissing(detail: string, cause?: unknown): Error {
   const error = new Error(

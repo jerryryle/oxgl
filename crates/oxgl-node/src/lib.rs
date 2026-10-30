@@ -13,6 +13,7 @@
 #![allow(clippy::missing_errors_doc)]
 
 pub mod rendering;
+pub mod textures;
 
 use std::path::PathBuf;
 
@@ -32,7 +33,7 @@ use oxgl_sys::{ReadPixels, StateCall};
 #[napi]
 #[must_use]
 pub fn native_abi_version() -> u32 {
-    5
+    6
 }
 
 /// The environment's runtime, created by [`init`]. Node-API instance data is

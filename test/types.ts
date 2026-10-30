@@ -12,7 +12,9 @@ import {
   type WebGLBuffer,
   type WebGLObject,
   type WebGLProgram,
+  type WebGLSampler,
   type WebGLShader,
+  type WebGLTexture,
   type WebGLUniformLocation,
 } from '../src/index.js';
 
@@ -118,3 +120,14 @@ const asObject: WebGLObject = buffer;
 export { shaderOrNull, info, asObject };
 // @ts-expect-error -- a shader is not a buffer
 glr.bindBuffer(glr.ARRAY_BUFFER, shaderOrNull as WebGLShader);
+
+// textures.
+const texture: WebGLTexture = glr.createTexture();
+glr.bindTexture(glr.TEXTURE_2D, texture);
+glr.texImage2D(glr.TEXTURE_2D, 0, glr.RGBA, 1, 1, 0, glr.RGBA, glr.UNSIGNED_BYTE, new Uint8Array(4));
+glr.texImage2D(glr.TEXTURE_2D, 0, glr.RGBA, glr.RGBA, glr.UNSIGNED_BYTE, { width: 1, height: 1, data: new Uint8ClampedArray(4) });
+glr.texStorage2D(glr.TEXTURE_2D, 1, glr.RGBA8, 1, 1);
+const sampler: WebGLSampler = glr.createSampler();
+glr.bindSampler(0, sampler);
+// @ts-expect-error -- a texture is not a sampler
+glr.bindSampler(0, texture);

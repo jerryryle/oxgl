@@ -327,16 +327,23 @@ impl Context {
     pub fn has_object(&self, key: ObjectKey) -> bool {
         // A buffer becomes a buffer object when first bound (OpenGL ES 2.0
         // §2.9), so `isBuffer` is false before that.
-        !self.errors.is_lost()
-            && self.objects.get(key).is_some_and(|o| {
-                !matches!(
-                    o,
-                    Object::Buffer {
-                        kind: BufferKind::Unbound,
-                        ..
-                    }
-                )
-            })
+        if self.errors.is_lost() {
+            return false;
+        }
+        match self.objects.get(key) {
+            None
+            | Some(Object::Buffer {
+                kind: BufferKind::Unbound,
+                ..
+            }) => false,
+            // Likewise a texture, once bound; GL tracks that.
+            Some(Object::Texture { name }) => self
+                .buffer
+                .context()
+                .make_current()
+                .is_ok_and(|current| current.is_texture(*name) != 0),
+            Some(_) => true,
+        }
     }
 
     /// `bindBuffer` (WebGL 1.0 §5.14.5). Returns whether the binding changed
