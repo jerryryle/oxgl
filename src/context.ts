@@ -299,12 +299,13 @@ function context2d(canvas: unknown): Canvas2D | null {
 
 /**
  * What compositing does to `gl`'s drawing buffer in a browser: cleared when
- * `preserveDrawingBuffer` is false. For hosts that composite canvases (the
+ * `preserveDrawingBuffer` is false, or `always` (an OffscreenCanvas's
+ * `transferToImageBitmap`). For hosts that composite canvases (the
  * conformance runner's DOM); headless contexts are never composited.
  */
-export function presentDrawingBuffer(gl: ContextBase): void {
+export function presentDrawingBuffer(gl: ContextBase, always = false): void {
   const s = contextState(gl);
-  if (!s.destroyed) native.presentDrawingBuffer(s.index, s.version);
+  if (!s.destroyed) native.presentDrawingBuffer(s.index, s.version, always);
 }
 
 /**
@@ -3284,6 +3285,8 @@ function setAttribList(gl: ContextBase, index: number, kind: number, values: Arr
 }
 
 exposeMembers(ContextBase, WebGL2Members);
+// oxgl's own methods are not WebIDL members, and stay out of enumerations.
+for (const name of ['resize', 'destroy']) Object.defineProperty(ContextBase.prototype, name, { enumerable: false });
 flattenPrototype(WebGLRenderingContext);
 flattenPrototype(WebGL2RenderingContext);
 

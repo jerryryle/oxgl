@@ -432,9 +432,9 @@ impl Context {
     }
 
     /// The drawing buffer after compositing; see [`DrawingBuffer::present`].
-    pub fn present(&mut self) {
+    pub fn present(&mut self, always: bool) {
         if !self.errors.is_lost() {
-            self.buffer.present(&mut self.errors);
+            self.buffer.present(&mut self.errors, always);
         }
     }
 

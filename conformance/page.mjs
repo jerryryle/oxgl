@@ -13,14 +13,15 @@ import { appendFileSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { compileFunction } from 'node:vm';
-import { Worker as ThreadWorker } from 'node:worker_threads';
 
 import jsdom from 'jsdom';
 
 import { native } from '../dist/native.js';
 
+import { bitmapPixels, imageBitmapClass, offscreenCanvasClass } from './offscreen.mjs';
 import { decodePng, encodePng } from './png.mjs';
 import { resolveFile } from './server.mjs';
+import { decodeMessage, workerClass } from './workers.mjs';
 
 const { JSDOM, VirtualConsole, requestInterceptor } = jsdom;
 
@@ -407,6 +408,12 @@ function installShim(window, state) {
     const bytes = fetched?.url === image.src ? fetched.bytes : dataUrlBytes(image.src);
     return bytes === undefined ? undefined : decodeImage(bytes);
   }, canvasPixels);
+  // An OffscreenCanvas from transferControlToOffscreen shows its frames in
+  // its placeholder canvas, and is composited as that canvas would be.
+  const placeholders = new WeakMap();
+  window.OffscreenCanvas = offscreenCanvasClass(window, oxgl, window.ImageBitmap, (canvas, gl) => {
+    if (placeholders.has(canvas)) own.add(new WeakRef(gl));
+  });
   // jsdom's own getContext gives 2D contexts (through the canvas package).
   // It does not know oxgl's contexts, so one type per canvas is enforced here
   // in both directions (HTML §4.12.5).
@@ -425,7 +432,7 @@ function installShim(window, state) {
       }
       return context ?? null;
     }
-    if (canvases2d.has(this)) return null;
+    if (canvases2d.has(this) || placeholders.has(this)) return null;
     // WebIDL converts the attributes dictionary before anything else.
     if (attributes !== undefined && attributes !== null && typeof attributes !== 'object' && typeof attributes !== 'function') {
       throw new window.TypeError("Failed to execute 'getContext': The provided value is not of type 'WebGLContextAttributes'.");
@@ -445,13 +452,22 @@ function installShim(window, state) {
     return gl;
   };
   forwardResizes(window, contexts);
-  compositeEachFrame(window, own, oxgl.presentDrawingBuffer);
+  window.HTMLCanvasElement.prototype.transferControlToOffscreen = function () {
+    if (contexts.has(this) || canvases2d.has(this) || placeholders.has(this)) {
+      throw new window.DOMException("Failed to execute 'transferControlToOffscreen': Cannot transfer control from a canvas that has a rendering context.", 'InvalidStateError');
+    }
+    const offscreen = new window.OffscreenCanvas(this.width, this.height);
+    placeholders.set(this, offscreen);
+    placeholders.set(offscreen, this);
+    return offscreen;
+  };
+  compositeEachFrame(window, own, oxgl.presentDrawingBuffer, placeholders);
   for (const name of INTERFACES) window[name] = oxgl[name];
   window.ImageData = canvasPackage().ImageData;
   if (state.root !== undefined) window.CLOSURE_IMPORT_SCRIPT = closureImport(window, state.root);
   deliverMessages(window);
   failMedia(window);
-  installWorker(window);
+  installWorkers(window, state.root);
   loadOnce(window);
 }
 
@@ -477,16 +493,18 @@ function loadOnce(window) {
  * Composites the page's WebGL canvases at the start of each animation frame,
  * before that frame's callbacks, as a browser presents what the previous
  * frame drew: drawing buffers without preserveDrawingBuffer are cleared.
- * Canvases outside the document are never composited.
+ * Canvases outside the document are never composited; an OffscreenCanvas
+ * from transferControlToOffscreen is, when its placeholder is in it.
  */
-function compositeEachFrame(window, own, present) {
+function compositeEachFrame(window, own, present, placeholders) {
   const requestAnimationFrame = window.requestAnimationFrame;
   let scheduled = false;
   const composite = () => {
     scheduled = false;
     for (const ref of own) {
       const gl = ref.deref();
-      if (gl?.canvas.isConnected === true) present(gl);
+      const shown = placeholders.get(gl?.canvas) ?? gl?.canvas;
+      if (shown?.isConnected === true) present(gl);
     }
   };
   window.requestAnimationFrame = function (callback) {
@@ -628,9 +646,6 @@ const keepImageBytes = requestInterceptor(async (request, { element }) => {
   return new Response(bytes, { status: response.status, headers: response.headers });
 });
 
-/** ImageBitmaps' pixels, as browsers upload them. */
-const bitmapPixels = new WeakMap();
-
 /**
  * Image bytes decoded as browsers do for WebGL: PNGs by the runner's own
  * decoder; others (JPEG) by the canvas package, which applies EXIF
@@ -683,26 +698,7 @@ function flipRows({ data, width, height }) {
  * image element's bytes; `canvasPixels` reads a WebGL canvas.
  */
 function installImageBitmap(window, decodeElement, canvasPixels) {
-  class ImageBitmap {
-    #width;
-    #height;
-    constructor(pixels) {
-      this.#width = pixels.width;
-      this.#height = pixels.height;
-      bitmapPixels.set(this, pixels);
-    }
-    get width() {
-      return this.#width;
-    }
-    get height() {
-      return this.#height;
-    }
-    close() {
-      this.#width = 0;
-      this.#height = 0;
-      bitmapPixels.set(this, { data: new Uint8ClampedArray(0), width: 0, height: 0, asIs: true });
-    }
-  }
+  const ImageBitmap = imageBitmapClass();
   window.ImageBitmap = ImageBitmap;
   window.createImageBitmap = async (source, options = {}) => {
     let pixels;
@@ -710,7 +706,7 @@ function installImageBitmap(window, decodeElement, canvasPixels) {
     else if (typeof source?.arrayBuffer === 'function') pixels = decodeImage(Buffer.from(await source.arrayBuffer()));
     else if (source instanceof window.HTMLImageElement) pixels = decodeElement(source);
     else if (ArrayBuffer.isView(source?.data)) pixels = { data: source.data, width: source.width, height: source.height };
-    else if (source instanceof window.HTMLCanvasElement) {
+    else if (source instanceof window.HTMLCanvasElement || source instanceof window.OffscreenCanvas) {
       pixels = canvasPixels(source) ?? source.getContext('2d')?.getImageData(0, 0, source.width, source.height);
     }
     if (pixels === undefined || pixels === null) throw new window.DOMException('The source image could not be decoded.', 'InvalidStateError');
@@ -718,7 +714,7 @@ function installImageBitmap(window, decodeElement, canvasPixels) {
     pixels = { data: pixels.data, width: pixels.width, height: pixels.height };
     if (options?.imageOrientation === 'flipY') pixels = flipRows(pixels);
     if (options?.premultiplyAlpha === 'premultiply') pixels = premultiply(pixels);
-    return new ImageBitmap({ ...pixels, asIs: true });
+    return new ImageBitmap(pixels);
   };
   if (typeof window.fetch !== 'function') {
     window.fetch = (input, init) => fetch(new URL(String(input), window.document.baseURI), init);
@@ -798,76 +794,33 @@ function dataUrlBytes(url) {
   }
 }
 
-/** What a worker thread runs before its script: the worker globals pages use. */
-const WORKER_PRELUDE = `
-const { parentPort, workerData } = require('node:worker_threads');
-const listeners = [];
-globalThis.self = globalThis;
-globalThis.postMessage = (data, transfer) => parentPort.postMessage(data, transfer);
-globalThis.close = () => parentPort.close();
-globalThis.addEventListener = (type, listener) => { if (type === 'message') listeners.push(listener); };
-globalThis.importScripts = () => { throw new Error('importScripts is not supported by the conformance runner'); };
-parentPort.on('message', (data) => {
-  const event = { type: 'message', data };
-  if (typeof globalThis.onmessage === 'function') globalThis.onmessage(event);
-  for (const listener of listeners) listener(event);
-});
-require('node:vm').runInThisContext(workerData.source, { filename: workerData.url });
-`;
-
 /**
- * Dedicated workers for classic scripts (HTML §10.2.6), on Node worker
- * threads, so pages that use one run instead of skipping. Messages are
- * structured clones; those reaching the page are rebuilt in its realm.
- * Workers have no WebGL, OffscreenCanvas or importScripts.
+ * Workers on worker threads (workers.mjs), whose `importScripts` reads the
+ * suite's files under `root`, and Blob URLs for their scripts:
+ * a page's Blob URL is one of Node's, so the thread that starts a worker
+ * can read it.
  */
-function installWorker(window) {
-  window.Worker = class Worker extends window.EventTarget {
-    onmessage = null;
-    onerror = null;
-    #thread;
-    #queue = [];
-    #terminated = false;
-
-    constructor(url) {
-      super();
-      const href = new window.URL(String(url), window.document.baseURI).href;
-      fetch(href)
-        .then((response) => (response.ok ? response.text() : Promise.reject(new Error(`${href}: HTTP ${response.status}`))))
-        .then((source) => {
-          if (this.#terminated) return;
-          this.#thread = new ThreadWorker(WORKER_PRELUDE, { eval: true, workerData: { source, url: href } });
-          this.#thread.unref();
-          this.#thread.on('message', (data) => this.#fire('message', new window.MessageEvent('message', { data: toRealm(window, data) })));
-          this.#thread.on('error', (error) => this.#fail(error));
-          for (const [data, transfer] of this.#queue) this.#thread.postMessage(data, transfer);
-          this.#queue = [];
-        })
-        .catch((error) => this.#fail(error));
-    }
-
-    postMessage(data, transfer = []) {
-      if (this.#terminated) return;
-      if (this.#thread === undefined) this.#queue.push([structuredClone(data, { transfer }), []]);
-      else this.#thread.postMessage(data, transfer);
-    }
-
-    terminate() {
-      this.#terminated = true;
-      void this.#thread?.terminate();
-    }
-
-    #fail(error) {
-      this.#fire('error', new window.ErrorEvent('error', { message: String(error?.message ?? error) }));
-    }
-
-    #fire(type, event) {
-      const handler = type === 'message' ? this.onmessage : this.onerror;
-      if (typeof handler === 'function') handler.call(this, event);
-      this.dispatchEvent(event);
-    }
-  };
+function installWorkers(window, root) {
+  window.Worker = workerClass({
+    root,
+    EventTarget: window.EventTarget,
+    messageEvent: (data) => new window.MessageEvent('message', { data }),
+    errorEvent: (message) => new window.ErrorEvent('error', { message }),
+    base: () => window.document.baseURI,
+    receive: (data) => toRealm(window, decodeMessage(data, window.ImageBitmap)),
+  });
+  window.URL.createObjectURL = (blob) => URL.createObjectURL(new Blob([blobBytes(blob)], { type: blob.type }));
+  window.URL.revokeObjectURL = (url) => URL.revokeObjectURL(String(url));
 }
+
+/** The bytes of a jsdom Blob, which has no synchronous reader. */
+function blobBytes(blob) {
+  const bytes = blobImpl(blob)?._bytes;
+  if (!(bytes instanceof Uint8Array)) throw new TypeError('URL.createObjectURL: not a Blob');
+  return bytes;
+}
+
+const blobImpl = createRequire(import.meta.url)('jsdom/lib/generated/idl/utils.js').implForWrapper;
 
 /** A structured-cloned value from Node's realm, rebuilt in `window`'s. */
 function toRealm(window, value) {

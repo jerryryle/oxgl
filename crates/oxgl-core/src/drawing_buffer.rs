@@ -299,9 +299,10 @@ impl DrawingBuffer {
     /// without `preserveDrawingBuffer`, the drawing buffer is cleared to its
     /// defaults, whatever the context's clear state. Headless contexts are
     /// never composited; a host that composites (the conformance runner)
-    /// calls this.
-    pub fn present(&self, errors: &mut ErrorState) {
-        if self.requested.preserve_drawing_buffer {
+    /// calls this. `always` clears with `preserveDrawingBuffer` too, as an
+    /// `OffscreenCanvas`'s `transferToImageBitmap` does.
+    pub fn present(&self, errors: &mut ErrorState, always: bool) {
+        if self.requested.preserve_drawing_buffer && !always {
             return;
         }
         if let Ok(current) = self.context.make_current() {

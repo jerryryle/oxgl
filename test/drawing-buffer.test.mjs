@@ -390,3 +390,25 @@ test('compositing clears even with the draw buffer set to NONE', async () => {
   assert.equal(gl.getError(), gl.NO_ERROR);
   gl.destroy();
 });
+
+test('a forced present clears with preserveDrawingBuffer too', async () => {
+  // An OffscreenCanvas's transferToImageBitmap leaves a cleared buffer.
+  const { presentDrawingBuffer } = await import('../dist/context.js');
+  const gl = createContext({ width: 2, height: 2, attributes: { preserveDrawingBuffer: true } });
+  gl.clearColor(1, 0, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  presentDrawingBuffer(gl);
+  assert.ok(allPixels(readAll(gl), [255, 0, 0, 255]));
+  presentDrawingBuffer(gl, true);
+  assert.ok(allPixels(readAll(gl), [0, 0, 0, 0]));
+  gl.destroy();
+});
+
+test('oxgl methods outside WebIDL are not enumerable', () => {
+  const gl = createContext({ width: 1, height: 1 });
+  const names = [];
+  for (const name in gl) names.push(name);
+  assert.ok(names.includes('drawArrays'));
+  assert.ok(!names.includes('resize') && !names.includes('destroy'));
+  gl.destroy();
+});
