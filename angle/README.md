@@ -126,8 +126,13 @@ A deleted or broken release asset is replaced the same way, under a new
 
 ### Known upstream issues
 
+ANGLE behavior oxgl does not work around, listed so that every ANGLE update
+rechecks it.
+
+#### Conformance failures
+
 Khronos conformance pages that fail because of ANGLE, or of the SwiftShader it
-bundles, and that oxgl does not work around. Each is an expected failure in
+bundles. Each is an expected failure in
 `conformance/expectations.txt`, tagged `ANGLE:` or `SwiftShader:`. Last checked
 against `angle_commit` `127e783de334` (`chromium/8078`).
 
@@ -143,3 +148,18 @@ the new bundle. A page here that now passes is reported as `expected FAIL, got
 PASS`, which fails the run: remove its expectation (`--update`) and its row,
 and update the commit above. To check one page,
 `npm run conformance -- --filter <page>`.
+
+#### Runtime issues
+
+ANGLE behavior that oxgl's README documents under "Known issues". Last checked
+against `angle_commit` `127e783de334`; still present on `chromium/8127` and
+`main` (October 2026).
+
+| Issue | Cause | Where | When it is fixed |
+| --- | --- | --- | --- |
+| SwiftShader initialization briefly changes process-global state (`VK_ICD_FILENAMES`, and the working directory on Linux and Windows) | ANGLE points the Vulkan loader at SwiftShader's ICD through the environment and working directory | `angle::vk::ScopedVkLoaderEnvironment`, used in `src/libANGLE/renderer/vulkan/vk_renderer.cpp` | Remove the entry from oxgl's README "Known issues" |
+| Each thread that uses EGL leaves 72 bytes behind | ANGLE allocates each thread's `egl::Thread` and Display TLS data on its first EGL call and never frees them ("Global thread intentionally leaked") | `src/libGLESv2/global_state.cpp`, `egl::GetCurrentThread` | Remove the README "Known issues" entry and the `leak:egl::GetCurrentThread` line in `.github/lsan-suppressions.txt` |
+
+After changing `angle_commit`, check that the code above is still in the new
+commit's sources. For the leak, also run the `asan` job without its
+suppression: it reports the 72-byte allocations for as long as ANGLE makes them.
