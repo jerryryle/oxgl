@@ -61,7 +61,7 @@ pub const EXTENSIONS: &[Extension] = extensions! {
     "EXT_texture_filter_anisotropic" Both ["GL_EXT_texture_filter_anisotropic"];
     "EXT_texture_mirror_clamp_to_edge" Both ["GL_EXT_texture_mirror_clamp_to_edge"];
     "EXT_texture_norm16" Two ["GL_EXT_texture_norm16"];
-    "KHR_parallel_shader_compile" Both [];
+    "KHR_parallel_shader_compile" Both ["GL_KHR_parallel_shader_compile"];
     "NV_shader_noperspective_interpolation" Two ["GL_NV_shader_noperspective_interpolation"];
     "OES_draw_buffers_indexed" Two ["GL_OES_draw_buffers_indexed"];
     "OES_element_index_uint" One ["GL_OES_element_index_uint"];
@@ -74,7 +74,6 @@ pub const EXTENSIONS: &[Extension] = extensions! {
     "OES_vertex_array_object" One ["GL_OES_vertex_array_object"];
     "WEBGL_blend_func_extended" Both ["GL_EXT_blend_func_extended"];
     "WEBGL_clip_cull_distance" Two ["GL_ANGLE_clip_cull_distance"];
-    "WEBGL_color_buffer_float" One ["GL_CHROMIUM_color_buffer_float_rgba"];
     "WEBGL_compressed_texture_astc" Both ["GL_KHR_texture_compression_astc_ldr"];
     "WEBGL_compressed_texture_etc" Both ["GL_ANGLE_compressed_texture_etc"];
     "WEBGL_compressed_texture_etc1" Both ["GL_OES_compressed_ETC1_RGB8_texture"];
@@ -95,6 +94,18 @@ pub const EXTENSIONS: &[Extension] = extensions! {
     "WEBGL_render_shared_exponent" Two ["GL_QCOM_render_shared_exponent"];
     "WEBGL_stencil_texturing" Two ["GL_ANGLE_stencil_texturing"];
 };
+
+/// Extensions that enabling another enables too, where supported: float
+/// color buffers float blending (`EXT_float_blend`'s specification),
+/// half-float textures their color buffers (`OES_texture_half_float`'s), and
+/// multi-draw on WebGL 1 the instanced arrays its instanced forms need.
+/// `WEBGL_color_buffer_float` is not offered: ANGLE's ES 2.0 contexts on
+/// `SwiftShader` cannot render to `RGBA`/`FLOAT` textures even with it.
+const IMPLIED: &[(&str, &str)] = &[
+    ("EXT_color_buffer_float", "EXT_float_blend"),
+    ("OES_texture_half_float", "EXT_color_buffer_half_float"),
+    ("WEBGL_multi_draw", "ANGLE_instanced_arrays"),
+];
 
 /// The table row for `name`, matched ASCII case-insensitively (WebGL 1.0
 /// §5.14.14), if it exists on the version.
@@ -173,7 +184,7 @@ impl Context {
             return None;
         }
         let webgl2 = self.webgl2;
-        let available = self.available()?.clone();
+        let available = self.available()?;
         Some(
             EXTENSIONS
                 .iter()
@@ -191,20 +202,17 @@ impl Context {
             return None;
         }
         let extension = find(name, self.webgl2)?;
+        if self.extensions.enabled.contains(extension.name) {
+            return Some(extension.name);
+        }
+        // Cloned only on this first enabling, as the loop below mutates self.
         let available = self.available()?.clone();
         if !available.has(extension) {
             return None;
         }
-        if !self.extensions.enabled.contains(extension.name) {
+        {
             let current = current(&self.buffer, &mut self.errors)?;
-            // On ES 2.0, multi-draw's instanced entry points need ANGLE's
-            // instanced arrays as well.
-            let extra: &[&'static str] = if extension.name == "WEBGL_multi_draw" && !self.webgl2 {
-                &["GL_ANGLE_instanced_arrays"]
-            } else {
-                &[]
-            };
-            for &gl in extension.requires.iter().chain(extra) {
+            for &gl in extension.requires {
                 if available.requestable.contains(gl)
                     && self.extensions.requested.insert(gl)
                     && let Ok(gl) = CString::new(gl)
@@ -213,6 +221,11 @@ impl Context {
                 }
             }
             self.extensions.enabled.insert(extension.name);
+            for &(by, implied) in IMPLIED {
+                if by == extension.name {
+                    self.enable_extension(implied);
+                }
+            }
         }
         Some(extension.name)
     }
@@ -354,6 +367,18 @@ mod tests {
                     b.name
                 );
             }
+        }
+    }
+
+    #[test]
+    fn implied_extensions_exist_with_their_implier() {
+        for &(by, implied) in IMPLIED {
+            let by = EXTENSIONS.iter().find(|e| e.name == by).map(|e| e.versions);
+            let implied = EXTENSIONS
+                .iter()
+                .find(|e| e.name == implied)
+                .map(|e| e.versions);
+            assert!(by.is_some() && implied.is_some());
         }
     }
 

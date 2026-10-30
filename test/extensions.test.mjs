@@ -198,15 +198,6 @@ test('debug extensions', () => {
   gl.destroy();
 });
 
-test('parallel shader compile reports completion', () => {
-  const gl = createContext({ width: 1, height: 1 });
-  const ext = gl.getExtension('KHR_parallel_shader_compile');
-  const p = program(gl);
-  assert.equal(gl.getProgramParameter(p, ext.COMPLETION_STATUS_KHR), true);
-  assert.equal(gl.getError(), gl.NO_ERROR);
-  gl.destroy();
-});
-
 test('compressed formats follow enabled extensions', (t) => {
   const gl = createContext({ width: 1, height: 1 });
   assert.deepEqual([...gl.getParameter(gl.COMPRESSED_TEXTURE_FORMATS)], []);
@@ -216,6 +207,31 @@ test('compressed formats follow enabled extensions', (t) => {
   } else {
     assert.ok(gl.getParameter(gl.COMPRESSED_TEXTURE_FORMATS).includes(ext.COMPRESSED_RGB_S3TC_DXT1_EXT));
   }
+  gl.destroy();
+});
+
+test('compressed uploads from client memory and a pixel unpack buffer', (t) => {
+  const gl = createContext({ width: 1, height: 1, webgl2: true });
+  const ext = gl.getExtension('WEBGL_compressed_texture_s3tc');
+  if (ext === null) {
+    t.skip('no S3TC on this backend');
+    gl.destroy();
+    return;
+  }
+  // One 4x4 DXT1 block, all texels color0 = pure red (RGB565 0xf800).
+  const block = new Uint8Array([0x00, 0xf8, 0x00, 0xf8, 0, 0, 0, 0]);
+  gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
+  gl.compressedTexImage2D(gl.TEXTURE_2D, 0, ext.COMPRESSED_RGB_S3TC_DXT1_EXT, 4, 4, 0, block);
+  assert.equal(gl.getError(), gl.NO_ERROR);
+  gl.compressedTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 4, 4, ext.COMPRESSED_RGB_S3TC_DXT1_EXT, 8, 0);
+  assert.equal(gl.getError(), gl.INVALID_OPERATION);
+  const pbo = gl.createBuffer();
+  gl.bindBuffer(gl.PIXEL_UNPACK_BUFFER, pbo);
+  gl.bufferData(gl.PIXEL_UNPACK_BUFFER, new Uint8Array([0, ...block]), gl.STATIC_DRAW);
+  gl.compressedTexSubImage2D(gl.TEXTURE_2D, 0, 0, 0, 4, 4, ext.COMPRESSED_RGB_S3TC_DXT1_EXT, 8, 1);
+  assert.equal(gl.getError(), gl.NO_ERROR);
+  gl.compressedTexImage2D(gl.TEXTURE_2D, 0, ext.COMPRESSED_RGB_S3TC_DXT1_EXT, 4, 4, 0, block);
+  assert.equal(gl.getError(), gl.INVALID_OPERATION);
   gl.destroy();
 });
 

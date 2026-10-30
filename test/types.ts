@@ -8,6 +8,7 @@ import {
   WebGL2RenderingContext,
   WebGLRenderingContext,
   WebGLShaderPrecisionFormat,
+  WebGLContextEvent,
   type WebGLActiveInfo,
   type WebGLBuffer,
   type WebGLFramebuffer,
@@ -168,4 +169,6 @@ const oesVao = gl1.getExtension('OES_vertex_array_object');
 const vaoOES: WebGLVertexArrayObjectOES | undefined = oesVao?.createVertexArrayOES();
 const anisotropy: number | undefined = gl1.getExtension('EXT_texture_filter_anisotropic')?.TEXTURE_MAX_ANISOTROPY_EXT;
 const anyExtension: object | null = gl1.getExtension('SOME_EXTENSION');
-export { sync, feedback, vaoOES, anisotropy, anyExtension };
+const lostEvent: WebGLContextEvent = new WebGLContextEvent('webglcontextlost', { statusMessage: '' });
+const statusMessage: string = lostEvent.statusMessage;
+export { sync, feedback, vaoOES, anisotropy, anyExtension, statusMessage };

@@ -53,6 +53,20 @@ pub enum Upload {
     SubImage3D,
 }
 
+/// Where compressed data comes from.
+#[derive(Debug, Clone, Copy)]
+pub enum CompressedData<'a> {
+    /// Client memory; its length is the image size.
+    Client(&'a [u8]),
+    /// `size` bytes at an offset into the bound pixel unpack buffer.
+    UnpackBuffer {
+        /// The byte offset.
+        offset: GLintptr,
+        /// The image size in bytes.
+        size: GLsizei,
+    },
+}
+
 /// Where the pixels come from.
 #[derive(Debug, Clone, Copy)]
 pub enum UploadData<'a> {
@@ -156,22 +170,29 @@ impl Current<'_> {
         }
     }
 
-    /// A compressed upload from client memory (`format` is the internal
-    /// format for `Image*`, the format for `SubImage*`).
-    pub fn compressed_tex_upload(&self, call: Upload, args: TexImage, data: &[u8]) {
+    /// A compressed upload (`format` is the internal format for `Image*`,
+    /// the format for `SubImage*`). For [`CompressedData::UnpackBuffer`] the
+    /// caller must have checked that a pixel unpack buffer is bound.
+    pub fn compressed_tex_upload(&self, call: Upload, args: TexImage, data: CompressedData<'_>) {
         let gl = self.fns();
         let a = args;
-        let Ok(size) = GLsizei::try_from(data.len()) else {
-            return;
+        let (size, pixels): (GLsizei, *const c_void) = match data {
+            CompressedData::Client(bytes) => match GLsizei::try_from(bytes.len()) {
+                Ok(size) => (size, bytes.as_ptr().cast()),
+                Err(_) => return,
+            },
+            CompressedData::UnpackBuffer { offset, size } => (size, offset as *const c_void),
         };
-        let pixels: *const c_void = data.as_ptr().cast();
         let internal = a.internal_format.cast_unsigned();
         /// Issues one compressed upload entry point.
         macro_rules! call {
             ($f:ident($($arg:expr),*)) => {
-                // SAFETY: a context is current; the GL reads exactly
-                // `imageSize` bytes, the slice's length (INVALID_VALUE,
-                // reading nothing, when that does not match the format).
+                // SAFETY: a context is current. From client memory the GL
+                // reads exactly `imageSize` bytes, the slice's length
+                // (INVALID_VALUE, reading nothing, when that does not match
+                // the format). From a pixel unpack buffer, which the caller
+                // has bound, `pixels` is an offset the GL validates against
+                // that buffer and never dereferences.
                 unsafe { (gl.$f)($($arg),*) }
             };
         }

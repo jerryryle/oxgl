@@ -9,7 +9,7 @@
 // errors, at that first error; { type: 'harness-error', message } when the
 // runner itself fails. A page that never completes sends
 // nothing: the parent's time limit decides it.
-import { readFileSync } from 'node:fs';
+import { appendFileSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { compileFunction } from 'node:vm';
@@ -146,6 +146,10 @@ export async function runPage(url, { endEarly = false, root } = {}, hooks = {}) 
           else {
             state.failed += 1;
             state.firstFailure ??= String(msg);
+            // A debugging aid: OXGL_CONFORMANCE_TRACE names a file that
+            // collects every failed assertion, not only the first.
+            const trace = process.env.OXGL_CONFORMANCE_TRACE;
+            if (trace) appendFileSync(trace, `FAILED ${url}: ${String(msg)}\n`);
           }
           sendCounts();
         },
@@ -189,6 +193,7 @@ let contextBody;
 const INTERFACES = [
   'WebGLRenderingContext',
   'WebGL2RenderingContext',
+  'WebGLContextEvent',
   'WebGLShaderPrecisionFormat',
   'WebGLObject',
   'WebGLBuffer',

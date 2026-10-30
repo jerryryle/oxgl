@@ -42,6 +42,6 @@ pub use pointers::{
     ActiveInfo, AttribQuery, Quad, UniformData, UniformMatrix, UniformOut, UniformVector,
 };
 pub use state::{PrecisionFormat, StateCall, ValueType, Values};
-pub use textures::{TexImage, Upload, UploadData};
+pub use textures::{CompressedData, TexImage, Upload, UploadData};
 pub use view::{ByteSource, PixelDestination, ViewKind};
 pub use webgl2::SyncHandle;

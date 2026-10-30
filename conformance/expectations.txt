@@ -14,16 +14,17 @@ webgl1 conformance/canvas/to-data-url-test.html FAIL # should be 0,255,0,255
 webgl1 conformance/canvas/webgl-to-2d-canvas.html FAIL # canvas 2d is correct color
 webgl1 conformance/context/context-attribute-preserve-drawing-buffer.html FAIL # Did not render ok with preserveDrawingBuffer false.
 webgl1 conformance/context/context-release-with-workers.html TIMEOUT # no new result within the time limit
-webgl1 conformance/context/context-type-test.html FAIL # WebGLRenderingContext should only have Object in it's prototype chain
-webgl1 conformance/context/incorrect-context-object-behaviour.html FAIL # getError expected: NO_ERROR. Was INVALID_OPERATION : after evaluating: contextA.isBuffer(bufferB)
 webgl1 conformance/context/premultiplyalpha-test.html FAIL # should draw with 64,128,255,128
+webgl1 conformance/extensions/angle-instanced-arrays-out-of-bounds.html FAIL # getError expected: INVALID_OPERATION. Was NO_ERROR : after evaluating: ext.drawArraysInstancedANGLE(gl.TRIANGLES, 0, 9, 1)
+webgl1 conformance/extensions/angle-instanced-arrays.html FAIL # remainder of buffer should be cleared
+webgl1 conformance/extensions/ext-sRGB.html FAIL # getError expected: NO_ERROR. Was INVALID_OPERATION :
 webgl1 conformance/extensions/webgl-depth-texture.html FAIL # getError expected one of: INVALID_ENUM or INVALID_VALUE. Was NO_ERROR : after evaluating: gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT, 1, 1, 0, gl.DEPTH_COMPONENT, gl.UNSIGNED_SHORT, null)
+webgl1 conformance/extensions/webgl-draw-buffers.html FAIL # getError expected: NO_ERROR. Was INVALID_OPERATION : should be able to attach to the max attachment point: gl.COLOR_ATTACHMENT0 + 7
 webgl1 conformance/extensions/webgl-multi-draw.html FAIL # remainder of buffer should be cleared
 webgl1 conformance/glsl/misc/shader-with-double-underscore.html FAIL # [unexpected vertex shader compile status] (expected: true) fragment shader that uses double-underscore in identifier should succeed
 webgl1 conformance/misc/expando-loss.html FAIL # TypeError: Cannot read properties of null (reading 'expando1')
 webgl1 conformance/misc/null-object-behaviour.html FAIL # getError expected: INVALID_OPERATION. Was NO_ERROR : after evaluating: context.texImage2D(context.TEXTURE_2D, 0, context.RGBA, 1, 1, 0, context.RGBA, context.UNSIGNED_BYTE, new Uint8Array([0,0,0,0]))
 webgl1 conformance/misc/object-deletion-behaviour.html FAIL # gl.isShader(vertexShader) should be true. Was false.
-webgl1 conformance/more/conformance/quickCheckAPI-S_V.html FAIL # testValidArgs
 webgl1 conformance/more/functions/readPixelsBadArgs.html TIMEOUT # no new result within the time limit
 webgl1 conformance/more/functions/texImage2DBadArgs.html FAIL # testTexImage2D
 webgl1 conformance/more/functions/texImage2DHTML.html TIMEOUT # no new result within the time limit
@@ -78,13 +79,11 @@ webgl2 conformance/canvas/to-data-url-test.html FAIL # should be 0,255,0,255
 webgl2 conformance/canvas/webgl-to-2d-canvas.html FAIL # canvas 2d is correct color
 webgl2 conformance/context/context-attribute-preserve-drawing-buffer.html FAIL # Did not render ok with preserveDrawingBuffer false.
 webgl2 conformance/context/context-release-with-workers.html TIMEOUT # no new result within the time limit
-webgl2 conformance/context/incorrect-context-object-behaviour.html FAIL # getError expected: NO_ERROR. Was INVALID_OPERATION : after evaluating: contextA.isBuffer(bufferB)
 webgl2 conformance/context/premultiplyalpha-test.html FAIL # should draw with 64,128,255,128
 webgl2 conformance/extensions/webgl-multi-draw.html FAIL # remainder of buffer should be cleared
 webgl2 conformance/glsl/misc/shader-with-double-underscore.html FAIL # [unexpected vertex shader compile status] (expected: true) fragment shader that uses double-underscore in identifier should succeed
 webgl2 conformance/misc/null-object-behaviour.html FAIL # getError expected: INVALID_OPERATION. Was NO_ERROR : after evaluating: context.texImage2D(context.TEXTURE_2D, 0, context.RGBA, 1, 1, 0, context.RGBA, context.UNSIGNED_BYTE, new Uint8Array([0,0,0,0]))
 webgl2 conformance/misc/object-deletion-behaviour.html FAIL # gl.isShader(vertexShader) should be true. Was false.
-webgl2 conformance/more/conformance/quickCheckAPI-S_V.html FAIL # testValidArgs
 webgl2 conformance/more/functions/readPixelsBadArgs.html TIMEOUT # no new result within the time limit
 webgl2 conformance/more/functions/texImage2DBadArgs.html FAIL # testTexImage2D
 webgl2 conformance/more/functions/texImage2DHTML.html TIMEOUT # no new result within the time limit
@@ -126,9 +125,6 @@ webgl2 conformance/uniforms/no-over-optimization-on-uniform-array-16.html TIMEOU
 webgl2 conformance/uniforms/no-over-optimization-on-uniform-array-17.html TIMEOUT # no new result within the time limit
 webgl2 conformance/uniforms/uniform-default-values.html FAIL # should be green
 webgl2 conformance2/attribs/gl-vertexattribipointer.html FAIL # getError expected: INVALID_OPERATION. Was NO_ERROR : vertexAttribIPointer should fail if no buffer is bound and offset is non-zero
-webgl2 conformance2/context/incorrect-context-object-behaviour.html FAIL # getError expected: NO_ERROR. Was INVALID_OPERATION : after evaluating: contextA.isQuery(queryB)
-webgl2 conformance2/extensions/oes-draw-buffers-indexed.html TIMEOUT # no new result within the time limit
-webgl2 conformance2/extensions/required-extensions.html FAIL # ((has_s3tc && has_s3tc_srgb && has_rgtc) || has_etc) should be true. Was false.
 webgl2 conformance2/extensions/webgl-multi-draw-instanced-base-vertex-base-instance.html FAIL # remainder of buffer should be cleared
 webgl2 conformance2/misc/views-with-offsets.html FAIL # getError expected: INVALID_OPERATION. Was INVALID_VALUE :
 webgl2 conformance2/query/query.html FAIL # gl.isQuery(q1) should be true. Was false.
@@ -149,16 +145,13 @@ webgl2 conformance2/textures/image_data/tex-3d-rgb8ui-rgb_integer-unsigned_byte.
 webgl2 conformance2/textures/image_data/tex-3d-rgba8ui-rgba_integer-unsigned_byte.html FAIL # should be 0,0,0
 webgl2 conformance2/textures/misc/immutable-tex-render-feedback.html FAIL # checkFramebufferStatus expected: FRAMEBUFFER_INCOMPLETE_ATTACHMENT. Was FRAMEBUFFER_COMPLETE: {immutable: false, level_prime_base/max: [1, 0], minFilter: LINEAR, dest: 1}
 webgl2 conformance2/textures/misc/origin-clean-conformance-offscreencanvas.html FAIL # Image setup failed (TypeError: img.decode is not a function).
-webgl2 conformance2/textures/misc/pbo-texture-uploads.html FAIL # TypeError: Failed to execute 'texSubImage2D': parameter 7 is not of type 'TexImageSource'.
 webgl2 conformance2/textures/misc/tex-image-10bpc.html FAIL # uniquePixels.size should be >= 7. Was 2 (of type number).
 webgl2 conformance2/textures/misc/tex-image-with-bad-args-from-dom-elements.html FAIL # getError expected one of: INVALID_VALUE or INVALID_ENUM or INVALID_OPERATION. Was NO_ERROR : TexImage2D taking RGB10_A2UI/RGBA_INTEGER/UNSIGNED_INT_2_10_10_10_REV should fail
 webgl2 conformance2/textures/misc/tex-image-with-different-data-source.html FAIL # getError expected one of: INVALID_VALUE or INVALID_ENUM. Was NO_ERROR : TexImage2D taking RGB10_A2UI internalformat and a canvas source should fail
 webgl2 conformance2/textures/misc/tex-input-validation.html FAIL # getError expected: INVALID_ENUM. Was NO_ERROR : paramName: 0x8e42
 webgl2 conformance2/textures/misc/tex-unpack-params-with-flip-y-and-premultiply-alpha.html FAIL # getError expected: INVALID_OPERATION. Was NO_ERROR : invalid unpack params combination
-webgl2 conformance2/vertex_arrays/vertex-array-object.html FAIL # VERTEX_ATTRIB_ARRAY_* not preserved
 webgl2 deqp/functional/gles3/attriblocation.html FAIL # attribute_location.bind_time.reattach:
 webgl2 deqp/functional/gles3/booleanstatequery.html FAIL # boolean.color_writemask:
-webgl2 deqp/functional/gles3/internalformatquery.html FAIL # internal_format.rgba_samples: Cannot read properties of null (reading 'length')
 webgl2 deqp/functional/gles3/lifetime.html FAIL # lifetime.attach.deleted_name.shader_program: Attachment name not returned by query after attachment was deleted.
 webgl2 deqp/functional/gles3/negativestateapi.html FAIL # state.get_query_parameter: Expected gl.INVALID_OPERATION, but got gl.NO_ERROR.
 webgl2 deqp/functional/gles3/primitiverestart/00.html FAIL # primitive_restart.basic.points.unsigned_byte.draw_elements:

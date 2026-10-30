@@ -101,13 +101,17 @@ test('objects of a lost context', () => {
 test('dropped buffers are released after collection', async () => {
   const gl = createContext({ width: 1, height: 1 });
   const before = liveObjects();
-  const data = new Uint8Array(1024);
-  for (let i = 0; i < 10_000; i++) {
-    const buffer = gl.createBuffer();
-    gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
-    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
-  }
-  gl.bindBuffer(gl.ARRAY_BUFFER, null);
+  // In a function of its own: a suspended async frame can keep the last
+  // loop variable alive across the awaits below.
+  (() => {
+    const data = new Uint8Array(1024);
+    for (let i = 0; i < 10_000; i++) {
+      const buffer = gl.createBuffer();
+      gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+      gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+    }
+    gl.bindBuffer(gl.ARRAY_BUFFER, null);
+  })();
   for (let i = 0; i < 10 && liveObjects() > before; i++) {
     gc();
     await turn();

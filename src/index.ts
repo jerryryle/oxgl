@@ -5,6 +5,8 @@ export {
   HeadlessCanvas,
   WebGL2RenderingContext,
   WebGLRenderingContext,
+  WebGLContextEvent,
+  type WebGLContextEventInit,
   type ContextBackend,
   type ContextOptions,
   type WebGLContextAttributes,

@@ -13,6 +13,8 @@ import {
   deleteVertexArrayIn,
   isVertexArrayIn,
   keyOf,
+  loseContext,
+  restoreContext,
 } from './context.js';
 
 const INVALID_ENUM = 0x0500;
@@ -399,14 +401,16 @@ export const WEBGL_lose_context = extensionConstants(
       constructing(token);
     }
 
+    // Both act on the context's current state, which a restore replaces:
+    // this object survives restores (WebGL 1.0 §5.15.2).
     loseContext(): void {
-      const s = live(this);
-      if (s) native.loseContext(s.index, s.version);
+      const gl = ownerOf(this).gl.deref();
+      if (gl) loseContext(gl);
     }
 
     restoreContext(): void {
-      const s = live(this);
-      if (s) native.synthesizeError(s.index, s.version, INVALID_OPERATION);
+      const gl = ownerOf(this).gl.deref();
+      if (gl) restoreContext(gl);
     }
   },
   {},
@@ -492,7 +496,6 @@ const CONSTANTS_ONLY = {
     MAX_COMBINED_CLIP_AND_CULL_DISTANCES_WEBGL: 0x82fa,
     ...Object.fromEntries(Array.from({ length: 8 }, (_, i) => [`CLIP_DISTANCE${String(i)}_WEBGL`, 0x3000 + i])),
   },
-  WEBGL_color_buffer_float: { RGBA32F_EXT: 0x8814, ...COLOR_BUFFER_CONSTANTS },
   WEBGL_compressed_texture_etc: {
     COMPRESSED_R11_EAC: 0x9270,
     COMPRESSED_SIGNED_R11_EAC: 0x9271,
@@ -562,11 +565,11 @@ export type ExtensionMap = {
 
 /**
  * A new object for the enabled extension `name` (canonical case) of the
- * context `s`. Every name `oxgl-core` enables has a class here.
+ * context `s`.
  */
 export function createExtension(name: string, s: ContextState): object {
-  const Class = CLASSES.get(name);
-  if (Class === undefined) throw new Error(`oxgl: no class for extension ${name}`);
+  // A name oxgl-core enables without a class here still gets an object.
+  const Class = CLASSES.get(name) ?? constantsOnly(name, {});
   const extension = new Class(CONSTRUCTING);
   owners.set(extension, s);
   return extension;

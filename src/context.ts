@@ -132,6 +132,27 @@ export interface ContextState {
   readonly index: number;
   readonly version: number;
   readonly webgl2: boolean;
+  /**
+   * The context these are the state of, which a restore gives a new state.
+   * Weak: objects reference their state, and must not keep a dropped
+   * context (and its native context) alive.
+   */
+  readonly gl: WeakRef<ContextBase>;
+  /** What created the native context, for creating it again on restore. */
+  readonly creation: Creation;
+  /** A loss was observed and its `webglcontextlost` task queued. */
+  lossObserved: boolean;
+  /** The loss came from `WEBGL_lose_context.loseContext()`. */
+  lostByExtension: boolean;
+  /** The `webglcontextlost` event was cancelled, so restoring is allowed. */
+  restorable: boolean;
+  restoreQueued: boolean;
+  /**
+   * Errors `WEBGL_lose_context` generates on a lost context, which
+   * `getError` reports after `CONTEXT_LOST_WEBGL`, as Chromium does; other
+   * calls on a lost context generate none.
+   */
+  readonly lostErrors: number[];
   // Zeroed by destroy(), as Chromium reports for a lost context.
   width: number;
   height: number;
@@ -145,7 +166,7 @@ export interface ContextState {
   /** Per attribute: the type of the last `vertexAttrib*` setter (0 float, 1 int, 2 uint). */
   readonly attribKinds: number[];
   /** Per texture unit: the texture bound to each target. */
-  readonly textureUnits: Map<number, WebGLTexture | null>[];
+  readonly textureUnits: (Map<number, WebGLTexture | null> | undefined)[];
   /** Per texture unit: the bound sampler (WebGL 2). */
   readonly samplers: (WebGLSampler | null)[];
   /** `activeTexture` − `TEXTURE0`. */
@@ -295,6 +316,9 @@ function imagePixels(source: unknown, method: string, position: number): Pixels 
     if (width === 0 || height === 0) return EMPTY;
     return { data: canvas.getImageData(0, 0, width, height).data, width, height };
   }
+  // A video element: Node decodes no video, so it never has a frame and
+  // uploads as 0×0, as one without data does in browsers.
+  if (typeof (shaped as { videoWidth?: unknown }).videoWidth === 'number') return EMPTY;
   const document = shaped.ownerDocument as { createElement?: (name: string) => unknown } | null | undefined;
   if (typeof shaped.naturalWidth === 'number' && typeof document?.createElement === 'function') {
     const w = shaped.naturalWidth >>> 0;
@@ -370,9 +394,10 @@ function upload(
 function compressed(s: ContextState, call: number, args: NativeTexArgs, rest: unknown[], method: string, position: number): void {
   const [data, srcOffset, length] = rest;
   if (s.webgl2 && typeof data === 'number') {
-    toLong(data);
-    toLongLong(srcOffset);
-    if (!s.destroyed) native.synthesizeError(s.index, s.version, GL.INVALID_OPERATION);
+    // The pixel unpack buffer form: (imageSize, offset).
+    const imageSize = toLong(data);
+    const offset = toLongLong(srcOffset);
+    if (!s.destroyed) native.compressedTexUploadBuffer(s.index, s.version, call, args, imageSize, offset);
     return;
   }
   if (!ArrayBuffer.isView(data)) throw typeError(method, position, 'ArrayBufferView');
@@ -384,6 +409,8 @@ function compressed(s: ContextState, call: number, args: NativeTexArgs, rest: un
 
 /** A context's state; assigned by `ContextBase`'s static block. */
 let contextState: (gl: ContextBase) => ContextState;
+/** Gives a restored context its new state; assigned by `ContextBase`'s static block. */
+let replaceState: (gl: ContextBase, s: ContextState) => void;
 /** `framebufferTextureLayer`'s attachment; assigned by `ContextBase`'s static block. */
 let attachLayer: (gl: ContextBase, target: number, attachment: number, texture: unknown, level: number, layer: number) => void;
 
@@ -425,8 +452,9 @@ function typeError(method: string, position: number, type: string): TypeError {
  * Checks an object argument. Throws `TypeError` for a value of the wrong
  * type (or `null` when not nullable), as WebIDL conversion does. Returns
  * `undefined` when the call must stop: the context is lost, the object
- * belongs to another context (`INVALID_OPERATION`), or it is deleted
- * (`deletedError`, or a silent stop when 0). Returns `null` for `null`.
+ * belongs to another context (`foreignError`, `INVALID_OPERATION` unless
+ * given; `is*` give 0 and stop silently), or it is deleted (`deletedError`,
+ * or a silent stop when 0). Returns `null` for `null`.
  */
 export function checkObject(
   s: ContextState,
@@ -436,6 +464,7 @@ export function checkObject(
   position: number,
   nullable: boolean,
   deletedError: number,
+  foreignError: number = GL.INVALID_OPERATION,
 ): ObjectState | null | undefined {
   if (value === null || value === undefined) {
     if (!nullable) throw typeError(method, position, Class.name);
@@ -445,29 +474,15 @@ export function checkObject(
   if (s.destroyed) return undefined;
   const state = objectState(value);
   if (state.owner !== s) {
-    native.synthesizeError(s.index, s.version, GL.INVALID_OPERATION);
+    if (foreignError !== 0) native.synthesizeError(s.index, s.version, foreignError);
     return undefined;
   }
-  if (state.deleted || state.key === null) {
+  // A deleted program stays usable while current (OpenGL ES 2.0 §2.10.3).
+  if ((state.deleted && value !== s.program) || state.key === null) {
     if (deletedError !== 0) native.synthesizeError(s.index, s.version, deletedError);
     return undefined;
   }
   return state;
-}
-
-/**
- * checkObject for a program, except that a deleted program still counts while
- * it is current (OpenGL ES 2.0 §2.10.3).
- */
-function currentOrCheckProgram(
-  s: ContextState,
-  program: unknown,
-  method: string,
-  nullable: boolean,
-  deletedError: number,
-): ObjectState | null | undefined {
-  if (s.program !== null && program === s.program && !s.destroyed) return objectState(s.program);
-  return checkObject(s, program, WebGLProgram, method, 1, nullable, deletedError);
 }
 
 // Vertex array calls, shared by WebGL 2 and OES_vertex_array_object.
@@ -477,7 +492,7 @@ export function createVertexArrayIn<T extends WebGLObject>(
   s: ContextState,
   Class: new (token: symbol, state: ObjectState) => T,
 ): T {
-  return createObject(s, Class, 7, 0, { element: null, attribs: [] }) as T;
+  return createObject(s, Class, 7, 0, { element: null, attribs: [], normalized: [] }) as T;
 }
 
 /** `deleteVertexArray`; the default vertex array is bound if it was. */
@@ -495,7 +510,7 @@ export function deleteVertexArrayIn(s: ContextState, vertexArray: unknown, Class
 
 /** `isVertexArray`: true once bound. */
 export function isVertexArrayIn(s: ContextState, vertexArray: unknown, Class: ObjectClass<WebGLObject>, method: string): boolean {
-  const state = checkObject(s, vertexArray, Class, method, 1, true, 0);
+  const state = checkObject(s, vertexArray, Class, method, 1, true, 0, 0);
   return !!state && native.hasObject(s.index, s.version, ...keyOf(state));
 }
 
@@ -674,74 +689,232 @@ export class HeadlessCanvas extends EventTarget {
   }
 }
 
+/** WebGL 1.0 §5.15.1. */
+export interface WebGLContextEventInit {
+  bubbles?: boolean;
+  cancelable?: boolean;
+  composed?: boolean;
+  statusMessage?: string;
+}
+
+/** The event of a lost or restored context (WebGL 1.0 §5.15.1). */
+export class WebGLContextEvent extends Event {
+  readonly #statusMessage: string;
+
+  constructor(type: string, eventInit: WebGLContextEventInit = {}) {
+    requireArguments('WebGLContextEvent', 1, arguments.length);
+    super(type, eventInit);
+    this.#statusMessage = eventInit.statusMessage === undefined ? '' : toDOMString(eventInit.statusMessage);
+  }
+
+  /** Additional information about the loss, `''` here. */
+  get statusMessage(): string {
+    return this.#statusMessage;
+  }
+}
+
+/** Fires `event` at the canvas, when it is an event target. */
+function fire(canvas: object, event: Event): void {
+  const target = canvas as Partial<EventTarget>;
+  if (typeof target.dispatchEvent === 'function') target.dispatchEvent(event);
+}
+
+/**
+ * WebGL 1.0 §5.15.2's steps, once per loss: a task fires
+ * `webglcontextlost`; cancelling it allows restoring, which a backend loss
+ * then does at once and a simulated one on `restoreContext()`.
+ */
+function observeLoss(s: ContextState): void {
+  if (s.destroyed || s.lossObserved) return;
+  s.lossObserved = true;
+  setTimeout(() => {
+    if (s.destroyed) return;
+    const event = new WebGLContextEvent('webglcontextlost', { cancelable: true });
+    fire(s.canvas, event);
+    if (!event.defaultPrevented) return;
+    s.restorable = true;
+    // A backend loss restores in a task of its own (WebGL 1.0 §5.15.2).
+    if (!s.lostByExtension) {
+      setTimeout(() => {
+        restore(s);
+      }, 0);
+    }
+  }, 0);
+}
+
+/** A canvas dimension for a restored drawing buffer, or `fallback`. */
+function canvasSize(value: unknown, fallback: number): number {
+  return typeof value === 'number' && Number.isInteger(value) && value >= 0 && value <= MAX_DIMENSION ? value : fallback;
+}
+
+/**
+ * WebGL 1.0 §5.15.3: gives the context a new native context with the original
+ * creation parameters and fresh state, then fires `webglcontextrestored`.
+ * Objects of the old state fail the ownership check from then on. A failed
+ * creation leaves the context lost.
+ */
+function restore(s: ContextState): void {
+  const gl = s.gl.deref();
+  if (s.destroyed || gl === undefined) return;
+  const { canvas, creation } = s;
+  const { width, height } = canvas as Partial<Record<'width' | 'height', unknown>>;
+  const created = native.createContext(
+    creation.backend,
+    canvasSize(width, creation.width),
+    canvasSize(height, creation.height),
+    s.webgl2,
+    creation.attributes,
+  );
+  if (created.errorCode !== undefined) return;
+  const next = initialState(gl, s.webgl2, created, creation, canvas);
+  // WEBGL_lose_context stays enabled, as the same object (WebGL 1.0 §5.15.2).
+  const loseContext = s.extensions.get('WEBGL_lose_context');
+  if (loseContext !== undefined) {
+    native.enableExtension(next.index, next.version, 'WEBGL_lose_context');
+    next.extensions.set('WEBGL_lose_context', loseContext);
+  }
+  s.destroyed = true;
+  collected.unregister(gl);
+  native.destroy(s.index, s.version);
+  replaceState(gl, next);
+  canvasContexts.set(canvas, next);
+  collected.register(gl, Object.freeze([next.index, next.version] as const), gl);
+  fire(canvas, new WebGLContextEvent('webglcontextrestored'));
+}
+
+/** Records an error of `WEBGL_lose_context`, which may run on a lost context. */
+function loseContextError(s: ContextState): void {
+  if (!native.isContextLost(s.index, s.version)) {
+    native.synthesizeError(s.index, s.version, GL.INVALID_OPERATION);
+  } else if (!s.lostErrors.includes(GL.INVALID_OPERATION)) {
+    s.lostErrors.push(GL.INVALID_OPERATION);
+  }
+}
+
+/** `WEBGL_lose_context.loseContext()`: `INVALID_OPERATION` when already lost. */
+export function loseContext(gl: ContextBase): void {
+  const s = contextState(gl);
+  if (s.destroyed) return;
+  if (native.isContextLost(s.index, s.version)) {
+    observeLoss(s);
+    loseContextError(s);
+    return;
+  }
+  native.loseContext(s.index, s.version);
+  s.lostByExtension = true;
+  observeLoss(s);
+}
+
+/**
+ * `WEBGL_lose_context.restoreContext()`: queues the restore of a lost
+ * context whose lost event was cancelled; `INVALID_OPERATION` otherwise.
+ */
+export function restoreContext(gl: ContextBase): void {
+  const s = contextState(gl);
+  if (s.destroyed) return;
+  if (!native.isContextLost(s.index, s.version) || !s.restorable) {
+    loseContextError(s);
+    return;
+  }
+  if (s.restoreQueued) return;
+  s.restoreQueued = true;
+  setTimeout(() => {
+    restore(s);
+  }, 0);
+}
+
+/** The native context `createContext` returns. */
+interface CreatedContext {
+  readonly index: number;
+  readonly version: number;
+  readonly width: number;
+  readonly height: number;
+}
+
+/** The arguments a context was created with. */
+interface Creation {
+  readonly backend: ContextBackend;
+  readonly attributes: NativeAttributes;
+  /** The size first requested, used on restore when the canvas has none. */
+  readonly width: number;
+  readonly height: number;
+}
+
+/** The state of a new or restored context. */
+function initialState(gl: ContextBase, webgl2: boolean, created: CreatedContext, creation: Creation, canvas: object): ContextState {
+  const s: ContextState = {
+    index: created.index,
+    version: created.version,
+    webgl2,
+    gl: new WeakRef(gl),
+    creation,
+    lossObserved: false,
+    lostByExtension: false,
+    restorable: false,
+    restoreQueued: false,
+    lostErrors: [],
+    width: created.width,
+    height: created.height,
+    destroyed: false,
+    lostReported: false,
+    canvas,
+    buffers: new Map(),
+    vao: { element: null, attribs: [], normalized: [] },
+    program: null,
+    attribKinds: [],
+    textureUnits: [],
+    samplers: [],
+    activeUnit: 0,
+    maxUnits: 0,
+    drawFramebuffer: null,
+    readFramebuffer: null,
+    renderbuffer: null,
+    defaultVao: { element: null, attribs: [], normalized: [] },
+    vertexArray: null,
+    extensions: new Map(),
+    transformFeedback: null,
+    tfBuffers: [],
+    defaultTfBuffers: [],
+    uniformBuffers: [],
+    queries: new Map(),
+  };
+  s.vao = s.defaultVao;
+  s.tfBuffers = s.defaultTfBuffers;
+  const units = native.getParameter(s.index, s.version, GL.MAX_COMBINED_TEXTURE_IMAGE_UNITS);
+  s.maxUnits = units?.numbers[0] ?? 0;
+  return s;
+}
+
 /**
  * Members shared by WebGL 1 and WebGL 2 (the `WebGLRenderingContextBase`
  * mixin). Not exported: as in browsers, the two context classes are unrelated.
  */
 abstract class ContextBase {
-  readonly #s: ContextState;
+  #s: ContextState;
 
   static {
     resizeDrawingBuffer = (gl, width, height) => {
       gl.#resizeTo(width, height);
     };
     contextState = (gl) => gl.#s;
+    replaceState = (gl, s) => {
+      gl.#s = s;
+    };
     attachLayer = (gl, target, attachment, texture, level, layer) => {
       gl.#attachLayer(target, attachment, texture, level, layer);
     };
   }
 
   /** @internal Use {@link createContext}. */
-  constructor(
-    token: symbol,
-    index: number,
-    version: number,
-    width: number,
-    height: number,
-    canvas: object | undefined,
-    requestedWidth: number,
-    requestedHeight: number,
-  ) {
+  constructor(token: symbol, created: CreatedContext, canvas: object | undefined, creation: Creation) {
     if (token !== CONSTRUCTING) {
       throw new TypeError('Illegal constructor');
     }
     const webgl2 = this instanceof WebGL2RenderingContext;
-    this.#s = {
-      index,
-      version,
-      webgl2,
-      width,
-      height,
-      destroyed: false,
-      lostReported: false,
-      canvas: undefined as unknown as object,
-      buffers: new Map(),
-      vao: { element: null, attribs: [] },
-      program: null,
-      attribKinds: [],
-      textureUnits: [],
-      samplers: [],
-      activeUnit: 0,
-      maxUnits: 0,
-      drawFramebuffer: null,
-      readFramebuffer: null,
-      renderbuffer: null,
-      defaultVao: { element: null, attribs: [] },
-      vertexArray: null,
-      extensions: new Map(),
-      transformFeedback: null,
-      tfBuffers: [],
-      defaultTfBuffers: [],
-      uniformBuffers: [],
-      queries: new Map(),
-    };
-    this.#s.vao = this.#s.defaultVao;
-    this.#s.tfBuffers = this.#s.defaultTfBuffers;
-    const units = native.getParameter(index, version, GL.MAX_COMBINED_TEXTURE_IMAGE_UNITS);
-    this.#s.maxUnits = units?.numbers[0] ?? 0;
-    this.#s.canvas = canvas ?? new HeadlessCanvas(CONSTRUCTING, this, requestedWidth, requestedHeight);
+    this.#s = initialState(this, webgl2, created, creation, undefined as unknown as object);
+    this.#s.canvas = canvas ?? new HeadlessCanvas(CONSTRUCTING, this, creation.width, creation.height);
     canvasContexts.set(this.#s.canvas, this.#s);
-    collected.register(this, Object.freeze([index, version] as const), this);
+    collected.register(this, Object.freeze([created.index, created.version] as const), this);
   }
 
   /** The canvas this context draws for (WebGL 1.0 §5.14.1). */
@@ -826,7 +999,11 @@ abstract class ContextBase {
       this.#s.lostReported = true;
       return WEBGL1_CONSTANTS.CONTEXT_LOST_WEBGL;
     }
-    return native.getError(this.#s.index, this.#s.version);
+    const s = this.#s;
+    const error = native.getError(s.index, s.version);
+    if (error === WEBGL1_CONSTANTS.CONTEXT_LOST_WEBGL) observeLoss(s);
+    if (error === WEBGL1_CONSTANTS.NO_ERROR && s.lostErrors.length > 0) return s.lostErrors.shift() ?? error;
+    return error;
   }
 
   /** WebGL 1.0 §5.14.12 (the `ArrayBufferView` overload). */
@@ -1045,7 +1222,11 @@ abstract class ContextBase {
 
   /** WebGL 1.0 §5.14.13. */
   isContextLost(): boolean {
-    return this.#s.destroyed || native.isContextLost(this.#s.index, this.#s.version);
+    const s = this.#s;
+    if (s.destroyed) return true;
+    const lost = native.isContextLost(s.index, s.version);
+    if (lost) observeLoss(s);
+    return lost;
   }
 
   /** WebGL 1.0 §5.14.3. */
@@ -1182,7 +1363,7 @@ abstract class ContextBase {
   isBuffer(buffer: WebGLBuffer | null): boolean {
     requireArguments('isBuffer', 1, arguments.length);
     const s = this.#s;
-    const state = checkObject(s, buffer, WebGLBuffer, 'isBuffer', 1, true, 0);
+    const state = checkObject(s, buffer, WebGLBuffer, 'isBuffer', 1, true, 0, 0);
     return !!state && native.hasObject(s.index, s.version, ...keyOf(state));
   }
 
@@ -1294,7 +1475,7 @@ abstract class ContextBase {
   isShader(shader: WebGLShader | null): boolean {
     requireArguments('isShader', 1, arguments.length);
     const s = this.#s;
-    const state = checkObject(s, shader, WebGLShader, 'isShader', 1, true, 0);
+    const state = checkObject(s, shader, WebGLShader, 'isShader', 1, true, 0, 0);
     return !!state && native.hasObject(s.index, s.version, ...keyOf(state));
   }
 
@@ -1302,7 +1483,7 @@ abstract class ContextBase {
   isProgram(program: WebGLProgram | null): boolean {
     requireArguments('isProgram', 1, arguments.length);
     const s = this.#s;
-    const state = currentOrCheckProgram(s, program, 'isProgram', true, 0);
+    const state = checkObject(s, program, WebGLProgram, 'isProgram', 1, true, 0, 0);
     return !!state && native.hasObject(s.index, s.version, ...keyOf(state));
   }
 
@@ -1425,7 +1606,7 @@ abstract class ContextBase {
     requireArguments('getProgramParameter', 2, arguments.length);
     const s = this.#s;
     const name = toUnsignedLong(pname);
-    const p = currentOrCheckProgram(s, program, 'getProgramParameter', false, GL.INVALID_VALUE);
+    const p = checkObject(s, program, WebGLProgram, 'getProgramParameter', 1, false, GL.INVALID_VALUE);
     if (!p) return null;
     if (p.deleted && name === GL.DELETE_STATUS) return true;
     return parameterValue(native.getProgramParameter(s.index, s.version, ...keyOf(p), name));
@@ -1660,6 +1841,7 @@ abstract class ContextBase {
     if (s.destroyed) return;
     if (native.vertexAttribPointer(s.index, s.version, index, size, type, normalized, stride, offset)) {
       s.vao.attribs[index] = s.buffers.get(GL.ARRAY_BUFFER) ?? null;
+      s.vao.normalized[index] = normalized === 1;
     }
   }
 
@@ -1727,7 +1909,11 @@ abstract class ContextBase {
       if (native.getVertexAttrib(s.index, s.version, i, GL.VERTEX_ATTRIB_ARRAY_ENABLED, 0) === null) return null;
       return s.vao.attribs[i] ?? null;
     }
-    return parameterValue(native.getVertexAttrib(s.index, s.version, i, p, s.attribKinds[i] ?? 0));
+    const value = parameterValue(native.getVertexAttrib(s.index, s.version, i, p, s.attribKinds[i] ?? 0));
+    // ANGLE derives the flag from the vertex format, false for FLOAT, so
+    // the flag the page passed comes from the mirror.
+    if (p === GL.VERTEX_ATTRIB_ARRAY_NORMALIZED && value !== null) return s.vao.normalized[i] ?? false;
+    return value;
   }
 
   /** WebGL 1.0 §5.14.10. */
@@ -1790,7 +1976,7 @@ abstract class ContextBase {
   isFramebuffer(framebuffer: WebGLFramebuffer | null): boolean {
     requireArguments('isFramebuffer', 1, arguments.length);
     const s = this.#s;
-    const state = checkObject(s, framebuffer, WebGLFramebuffer, 'isFramebuffer', 1, true, 0);
+    const state = checkObject(s, framebuffer, WebGLFramebuffer, 'isFramebuffer', 1, true, 0, 0);
     return !!state && native.hasObject(s.index, s.version, ...keyOf(state));
   }
 
@@ -1826,7 +2012,7 @@ abstract class ContextBase {
   isRenderbuffer(renderbuffer: WebGLRenderbuffer | null): boolean {
     requireArguments('isRenderbuffer', 1, arguments.length);
     const s = this.#s;
-    const state = checkObject(s, renderbuffer, WebGLRenderbuffer, 'isRenderbuffer', 1, true, 0);
+    const state = checkObject(s, renderbuffer, WebGLRenderbuffer, 'isRenderbuffer', 1, true, 0, 0);
     return !!state && native.hasObject(s.index, s.version, ...keyOf(state));
   }
 
@@ -1898,8 +2084,10 @@ abstract class ContextBase {
     requireArguments('checkFramebufferStatus', 1, arguments.length);
     const s = this.#s;
     const t = toUnsignedLong(target);
-    if (s.destroyed) return 0;
-    return native.checkFramebufferStatus(s.index, s.version, t);
+    // FRAMEBUFFER_UNSUPPORTED when lost (WebGL 1.0 §5.14.6, [WebGLHandlesContextLoss]).
+    if (s.destroyed) return GL.FRAMEBUFFER_UNSUPPORTED;
+    const status = native.checkFramebufferStatus(s.index, s.version, t);
+    return status === 0 && native.isContextLost(s.index, s.version) ? GL.FRAMEBUFFER_UNSUPPORTED : status;
   }
 
   /** WebGL 1.0 §5.14.6. */
@@ -1953,7 +2141,9 @@ abstract class ContextBase {
     if (!state || texture === null) return;
     state.deleted = true;
     collectedObjects.unregister(texture);
+    // Units get their map when first used, so the array has holes.
     for (const unit of s.textureUnits) {
+      if (unit === undefined) continue;
       for (const [target, bound] of unit) if (bound === texture) unit.set(target, null);
     }
     detach(s, texture);
@@ -1964,7 +2154,7 @@ abstract class ContextBase {
   isTexture(texture: WebGLTexture | null): boolean {
     requireArguments('isTexture', 1, arguments.length);
     const s = this.#s;
-    const state = checkObject(s, texture, WebGLTexture, 'isTexture', 1, true, 0);
+    const state = checkObject(s, texture, WebGLTexture, 'isTexture', 1, true, 0, 0);
     return !!state && native.hasObject(s.index, s.version, ...keyOf(state));
   }
 
@@ -2113,6 +2303,8 @@ type WebGL2Constants = typeof WEBGL2_CONSTANTS;
 
 /** A WebGL 1 context (WebGL 1.0 §5.14). */
 export interface WebGLRenderingContext extends ContextBase, WebGL1Constants {}
+exposeMembers(WebGLContextEvent);
+
 export const WebGLRenderingContext: WebGL1Constants & {
   readonly prototype: WebGLRenderingContext;
   new (...args: ContextArguments): WebGLRenderingContext;
@@ -2492,7 +2684,7 @@ abstract class WebGL2Members extends ContextBase {
   isTransformFeedback(transformFeedback: WebGLTransformFeedback | null): boolean {
     requireArguments('isTransformFeedback', 1, arguments.length);
     const s = contextState(this);
-    const state = checkObject(s, transformFeedback, WebGLTransformFeedback, 'isTransformFeedback', 1, true, 0);
+    const state = checkObject(s, transformFeedback, WebGLTransformFeedback, 'isTransformFeedback', 1, true, 0, 0);
     return !!state && native.hasObject(s.index, s.version, ...keyOf(state));
   }
 
@@ -2578,7 +2770,7 @@ abstract class WebGL2Members extends ContextBase {
   isQuery(query: WebGLQuery | null): boolean {
     requireArguments('isQuery', 1, arguments.length);
     const s = contextState(this);
-    const state = checkObject(s, query, WebGLQuery, 'isQuery', 1, true, 0);
+    const state = checkObject(s, query, WebGLQuery, 'isQuery', 1, true, 0, 0);
     return !!state && native.hasObject(s.index, s.version, ...keyOf(state));
   }
 
@@ -2663,7 +2855,7 @@ abstract class WebGL2Members extends ContextBase {
   isSync(sync: WebGLSync | null): boolean {
     requireArguments('isSync', 1, arguments.length);
     const s = contextState(this);
-    const state = checkObject(s, sync, WebGLSync, 'isSync', 1, true, 0);
+    const state = checkObject(s, sync, WebGLSync, 'isSync', 1, true, 0, 0);
     return !!state && native.hasObject(s.index, s.version, ...keyOf(state));
   }
 
@@ -2790,7 +2982,7 @@ abstract class WebGL2Members extends ContextBase {
   isSampler(sampler: WebGLSampler | null): boolean {
     requireArguments('isSampler', 1, arguments.length);
     const s = contextState(this);
-    const state = checkObject(s, sampler, WebGLSampler, 'isSampler', 1, true, 0);
+    const state = checkObject(s, sampler, WebGLSampler, 'isSampler', 1, true, 0, 0);
     return !!state && native.hasObject(s.index, s.version, ...keyOf(state));
   }
 
@@ -2859,6 +3051,7 @@ abstract class WebGL2Members extends ContextBase {
     if (s.destroyed) return;
     if (native.vertexAttribPointer(s.index, s.version, args[0], args[1], args[2], -1, args[3], args[4])) {
       s.vao.attribs[args[0]] = s.buffers.get(GL.ARRAY_BUFFER) ?? null;
+      s.vao.normalized[args[0]] = false;
     }
   }
 }
@@ -2869,6 +3062,25 @@ export const WebGL2RenderingContext: WebGL2Constants & {
   readonly prototype: WebGL2RenderingContext;
   new (...args: ContextArguments): WebGL2RenderingContext;
 } = withConstants(class WebGL2RenderingContext extends WebGL2Members {}, WEBGL2_CONSTANTS);
+
+/**
+ * Moves the members a context class inherits from its implementation base
+ * classes onto its own prototype, whose prototype becomes
+ * `Object.prototype`: WebIDL interfaces without a parent have only Object in
+ * their prototype chain (Khronos `conformance/context/context-type-test.html`).
+ * Construction is unchanged, since `super()` follows the constructor's own
+ * prototype, not the prototype object's.
+ */
+function flattenPrototype(cls: { readonly prototype: object }): void {
+  const prototype = cls.prototype;
+  for (let base = Object.getPrototypeOf(prototype) as object | null; base !== null && base !== Object.prototype; base = Object.getPrototypeOf(base) as object | null) {
+    for (const key of Reflect.ownKeys(base)) {
+      const descriptor = Object.getOwnPropertyDescriptor(base, key);
+      if (key !== 'constructor' && descriptor !== undefined && !Object.hasOwn(prototype, key)) Object.defineProperty(prototype, key, descriptor);
+    }
+  }
+  Object.setPrototypeOf(prototype, Object.prototype);
+}
 
 /** A `sequence<DOMString>`. */
 function toStrings(value: unknown, method: string): string[] {
@@ -2980,6 +3192,8 @@ function setAttribList(gl: ContextBase, index: number, kind: number, values: Arr
 }
 
 exposeMembers(ContextBase, WebGL2Members);
+flattenPrototype(WebGLRenderingContext);
+flattenPrototype(WebGL2RenderingContext);
 
 function codedError(code: string, message: string): Error {
   return Object.assign(new Error(message), { code });
@@ -3104,14 +3318,5 @@ export function createContext(options: unknown): WebGLRenderingContext | WebGL2R
     throw codedError(created.errorCode, created.errorMessage ?? created.errorCode);
   }
   const Class = webgl2 ? WebGL2RenderingContext : WebGLRenderingContext;
-  return new Class(
-    CONSTRUCTING,
-    created.index,
-    created.version,
-    created.width,
-    created.height,
-    canvas,
-    width,
-    height,
-  );
+  return new Class(CONSTRUCTING, created, canvas, { backend: resolved, attributes, width, height });
 }

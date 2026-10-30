@@ -160,6 +160,34 @@ pub fn tex_upload(
     })
 }
 
+/// `compressedTex[Sub]Image[23]D` from `image_size` bytes at `offset` of
+/// the bound pixel unpack buffer (WebGL 2).
+#[napi]
+#[allow(
+    clippy::too_many_arguments,
+    clippy::needless_pass_by_value,
+    clippy::cast_possible_truncation,
+    reason = "mirrors the WebGL signature; WebIDL-converted integers"
+)]
+pub fn compressed_tex_upload_buffer(
+    env: Env,
+    index: u32,
+    version: u32,
+    call: u32,
+    args: TexArgs,
+    image_size: i32,
+    offset: f64,
+) -> napi::Result<()> {
+    with_context(env, index, version, |c| {
+        c.compressed_tex_upload_buffer(
+            upload_call(call),
+            TexImage::from(&args),
+            image_size,
+            offset as i64,
+        );
+    })
+}
+
 /// `compressedTex[Sub]Image[23]D` from `length` bytes of a view at `offset`.
 #[napi]
 #[allow(

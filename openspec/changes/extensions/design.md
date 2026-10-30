@@ -13,10 +13,14 @@
 `oxgl-core` has one table of WebGL extensions. Each row names the WebGL extension, the versions it exists on, the GL extensions it needs (all must be requestable or already enabled), and what enabling it adds to oxgl's own WebGL 1 lists and `getParameter` table. `getSupportedExtensions` filters the table by version and ANGLE's lists, read once per context. `getExtension` matches names case-insensitively (WebGL 1.0 §5.14.14), requests the GL extensions, records the WebGL extension as enabled, and returns its object; the TS layer caches the object, so repeated calls return the same one. Asking for an extension again after the context is lost returns `null`.
 
 Enabled extensions extend, in `oxgl-core`:
-- WebGL 1 renderbuffer formats: `SRGB8_ALPHA8_EXT` (`EXT_sRGB`), `RGBA16F_EXT`/`RGB16F_EXT` (`EXT_color_buffer_half_float`), `RGBA32F_EXT` (`WEBGL_color_buffer_float`);
+- WebGL 1 renderbuffer formats: `SRGB8_ALPHA8_EXT` (`EXT_sRGB`), `RGBA16F_EXT`/`RGB16F_EXT` (`EXT_color_buffer_half_float`);
 - WebGL 1 attachments: `COLOR_ATTACHMENTi_WEBGL` up to `MAX_COLOR_ATTACHMENTS_WEBGL` (`WEBGL_draw_buffers`);
 - `getParameter` rows: for example `MAX_TEXTURE_MAX_ANISOTROPY_EXT`, `FRAGMENT_SHADER_DERIVATIVE_HINT_OES`, `MAX_DRAW_BUFFERS_WEBGL`/`DRAW_BUFFERi_WEBGL`, `MAX_COLOR_ATTACHMENTS_WEBGL`, `VERTEX_ARRAY_BINDING_OES` (an object, answered in TS), `UNMASKED_VENDOR_WEBGL`/`UNMASKED_RENDERER_WEBGL` (strings from `GL_VENDOR`/`GL_RENDERER`), `MAX_CLIP_DISTANCES_WEBGL`, `CLIP_ORIGIN_EXT`, `POLYGON_OFFSET_CLAMP_EXT`, `PROVOKING_VERTEX_WEBGL`, `POLYGON_MODE_WEBGL`, `MAX_DUAL_SOURCE_DRAW_BUFFERS_WEBGL`;
 - `COMPRESSED_TEXTURE_FORMATS`: the formats of enabled compressed-texture extensions, read from GL.
+
+### Implied extensions
+
+Enabling `EXT_color_buffer_float` also enables `EXT_float_blend` and enabling `OES_texture_half_float` also enables `EXT_color_buffer_half_float`, as their specifications require, and enabling `WEBGL_multi_draw` on WebGL 1 also enables `ANGLE_instanced_arrays`, whose divisor query and entry points its instanced forms need. Each GL extension is requested at most once per context, and only when it is requestable: requesting one that is already enabled is `INVALID_OPERATION` in ANGLE.
 
 ### WebGL 1 forms of WebGL 2 features call the extension entry points
 

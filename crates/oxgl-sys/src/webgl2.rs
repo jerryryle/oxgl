@@ -173,22 +173,27 @@ impl Current<'_> {
         text(&buffer, length)
     }
 
-    /// `glGetInteger64i_vRobustANGLE` for one value.
+    /// `glGetInteger64i_vRobustANGLE`: up to four values (`COLOR_WRITEMASK`
+    /// has four), empty after an error.
     #[must_use]
-    pub fn integer64_indexed(&self, target: GLenum, index: GLuint) -> Option<GLint64> {
-        let (mut value, mut length) = (0, 0);
-        // SAFETY: a context is current; one GLint64 (bufSize 1) into the
-        // local and one GLsizei into `length`.
+    pub fn integer64_indexed(&self, target: GLenum, index: GLuint) -> Vec<GLint64> {
+        let mut values = [0; 4];
+        let mut length = 0;
+        // SAFETY: a context is current; at most four GLint64 (bufSize 4)
+        // into the local array and one GLsizei into `length`.
         unsafe {
             (self.fns().glGetInteger64i_vRobustANGLE)(
                 target,
                 index,
-                1,
+                4,
                 &raw mut length,
-                &raw mut value,
+                values.as_mut_ptr(),
             );
         };
-        (length > 0).then_some(value)
+        values
+            .into_iter()
+            .take(usize::try_from(length).unwrap_or(0))
+            .collect()
     }
 
     /// `glGetUniformBlockIndex`.

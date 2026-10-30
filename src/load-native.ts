@@ -110,6 +110,7 @@ export interface NativeBinding {
   getTexParameter: (index: number, version: number, target: number, pname: number) => NativeParameter | null;
   generateMipmap: (index: number, version: number, target: number) => void;
   texUpload: (index: number, version: number, call: number, args: NativeTexArgs, kind: number, source: ArrayBufferView | null, offset: number, sourceWidth: number, sourceHeight: number) => void;
+  compressedTexUploadBuffer: (index: number, version: number, call: number, args: NativeTexArgs, imageSize: number, offset: number) => void;
   compressedTexUpload: (index: number, version: number, call: number, args: NativeTexArgs, source: ArrayBufferView, offset: number, length: number) => void;
   copyTexImage2D: (index: number, version: number, target: number, level: number, internalFormat: number, x: number, y: number, width: number, height: number, border: number) => void;
   copyTexSubImage: (index: number, version: number, target: number, level: number, xoffset: number, yoffset: number, zoffset: number | null, x: number, y: number, width: number, height: number) => void;
@@ -224,7 +225,7 @@ export interface NativeBinding {
 }
 
 /** Version of the JS ↔ native interface this package was built for. */
-export const NATIVE_ABI_VERSION = 9;
+export const NATIVE_ABI_VERSION = 10;
 
 function nativeMissing(detail: string, cause?: unknown): Error {
   const error = new Error(

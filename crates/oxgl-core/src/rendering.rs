@@ -616,12 +616,12 @@ impl Context {
             GL_DELETE_STATUS | GL_COMPILE_STATUS => current
                 .shader_parameter(name, pname)
                 .map(|v| Scalar::Bool(v != 0)),
-            // Compiling and linking finish within the call, so oxgl
-            // emulates KHR_parallel_shader_compile, as Chromium does.
             GL_COMPLETION_STATUS_KHR
                 if self.extensions.is_enabled("KHR_parallel_shader_compile") =>
             {
-                Some(Scalar::Bool(true))
+                current
+                    .shader_parameter(name, pname)
+                    .map(|v| Scalar::Bool(v != 0))
             }
             _ => {
                 self.errors.synthesize(GL_INVALID_ENUM);
@@ -700,12 +700,12 @@ impl Context {
             GL_DELETE_STATUS | GL_LINK_STATUS | GL_VALIDATE_STATUS => current
                 .program_parameter(name, pname)
                 .map(|v| Scalar::Bool(v != 0)),
-            // Compiling and linking finish within the call, so oxgl
-            // emulates KHR_parallel_shader_compile, as Chromium does.
             GL_COMPLETION_STATUS_KHR
                 if self.extensions.is_enabled("KHR_parallel_shader_compile") =>
             {
-                Some(Scalar::Bool(true))
+                current
+                    .program_parameter(name, pname)
+                    .map(|v| Scalar::Bool(v != 0))
             }
             GL_ATTACHED_SHADERS | GL_ACTIVE_ATTRIBUTES | GL_ACTIVE_UNIFORMS => {
                 current.program_parameter(name, pname).map(Scalar::Int)

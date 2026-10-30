@@ -135,20 +135,26 @@ impl Context {
             None => current.bind_buffer_base(target, index, name),
             Some((offset, size)) => current.bind_buffer_range(target, index, name, offset, size),
         }
-        current.integer64_indexed(binding, index) == Some(i64::from(name))
+        current.integer64_indexed(binding, index).first() == Some(&i64::from(name))
     }
 
     /// `getIndexedParameter` for the `*_START` and `*_SIZE` pnames (the
     /// bindings are answered by the TS layer).
     pub fn indexed_parameter(&mut self, target: u32, index: u32) -> Option<Parameter> {
         let current = current(&self.buffer, &mut self.errors)?;
+        let values = current.integer64_indexed(target, index);
+        let first = *values.first()?;
+        // OES_draw_buffers_indexed's COLOR_WRITEMASK is four booleans.
+        if target == GL_COLOR_WRITEMASK {
+            return Some(Parameter::Booleans(
+                values.iter().map(|&v| v != 0).collect(),
+            ));
+        }
         #[allow(
             clippy::cast_precision_loss,
-            reason = "offsets and sizes fit a JS number"
+            reason = "offsets, sizes and enums fit a JS number"
         )]
-        current
-            .integer64_indexed(target, index)
-            .map(|value| Parameter::Number(value as f64))
+        Some(Parameter::Number(first as f64))
     }
 
     fn program_key_name(&mut self, program: ObjectKey) -> Option<u32> {

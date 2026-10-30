@@ -60,6 +60,13 @@ On WebGL 2, enabling `EXT_color_buffer_float` SHALL make `RGBA16F`, `RGBA32F`, `
 - **WHEN** `EXT_color_buffer_float` is enabled and an `RGBA16F` texture is attached to a framebuffer
 - **THEN** the framebuffer is complete, and incomplete without the extension (cf. Khronos `conformance2/extensions/ext-color-buffer-float.html`)
 
+### Requirement: Compressed texture uploads
+With a compressed-texture extension enabled, `compressedTexImage*` and `compressedTexSubImage*` SHALL upload its formats from client memory and, on WebGL 2, from the bound pixel unpack buffer with the `(imageSize, offset)` forms, generating `INVALID_OPERATION` when the form does not match whether a pixel unpack buffer is bound (WebGL 2.0 §3.7.6).
+
+#### Scenario: Upload from a pixel unpack buffer
+- **WHEN** `WEBGL_compressed_texture_s3tc` is enabled on WebGL 2 and one DXT1 block is uploaded from client memory, then from a bound pixel unpack buffer at offset 1
+- **THEN** both uploads succeed, and each form generates `INVALID_OPERATION` in the other binding state (cf. Khronos `conformance/extensions/s3tc-and-rgtc.html`)
+
 ### Requirement: Debug extensions
 `WEBGL_debug_renderer_info` SHALL report `GL_VENDOR` and `GL_RENDERER` through `UNMASKED_VENDOR_WEBGL` and `UNMASKED_RENDERER_WEBGL`, and `WEBGL_debug_shaders.getTranslatedShaderSource` SHALL return ANGLE's translated source of a compiled shader, or `''` before compilation.
 

@@ -1,8 +1,9 @@
 # oxgl
 
 Standards-compliant WebGL 1 and WebGL 2 for Node.js, rendered headless through
-ANGLE, with a SwiftShader software fallback. Early development: contexts
-support `clearColor`, `clear`, `readPixels`, and `getError` so far.
+ANGLE, with a SwiftShader software fallback. The full WebGL 1 and WebGL 2 APIs
+are implemented, with extensions and context loss, and are checked against the
+Khronos conformance suite; three.js renders through it unmodified.
 
 ## Platforms
 
@@ -104,6 +105,27 @@ The `OXGL_BACKEND` environment variable (`auto`, `gpu`, or `software`)
 overrides the `backend` option. It is read from the calling thread's
 `process.env` on every `createContext` call, so a worker can set its own. An
 empty value is ignored.
+
+### Extensions
+
+`getSupportedExtensions()` lists the WebGL extensions ANGLE can enable on the
+context's backend, and `getExtension(name)` enables one and returns its object
+(the same object on every call). On the software backend that includes
+`ANGLE_instanced_arrays`, `OES_vertex_array_object`, `WEBGL_draw_buffers`,
+`OES_texture_float`, `OES_texture_half_float`, `EXT_color_buffer_float`,
+`EXT_color_buffer_half_float`, `EXT_texture_filter_anisotropic`,
+`WEBGL_depth_texture`, `WEBGL_multi_draw`, the S3TC, ETC, ASTC, BPTC and RGTC
+compressed-texture extensions, `WEBGL_lose_context` and the debug extensions.
+`WEBGL_color_buffer_float` is not offered (SwiftShader cannot render to
+`RGBA`/`FLOAT` textures under it), nor are the timer-query extensions.
+
+### Context loss
+
+A context lost through `WEBGL_lose_context.loseContext()` or by the backend
+fires `webglcontextlost` at its canvas in a later task; calling
+`preventDefault()` on it allows restoring, after which `webglcontextrestored`
+fires and the context renders again with fresh state. Objects created before
+the loss are invalid afterwards, as in browsers.
 
 ### Releasing contexts
 

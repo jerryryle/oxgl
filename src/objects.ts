@@ -97,6 +97,8 @@ export class WebGLVertexArrayObjectOES extends WebGLObject {
 export interface VertexArrayState {
   element: WebGLBuffer | null;
   readonly attribs: (WebGLBuffer | null)[];
+  /** The `normalized` argument of each attribute's last `vertexAttribPointer`. */
+  readonly normalized: boolean[];
 }
 /** WebGL 2.0 §3.5. */
 export class WebGLTransformFeedback extends WebGLObject {

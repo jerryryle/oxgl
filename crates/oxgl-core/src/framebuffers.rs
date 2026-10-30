@@ -152,7 +152,6 @@ impl Context {
         match format {
             GL_SRGB8_ALPHA8_EXT => enabled("EXT_sRGB"),
             GL_RGBA16F_EXT | GL_RGB16F_EXT => enabled("EXT_color_buffer_half_float"),
-            GL_RGBA32F_EXT => enabled("WEBGL_color_buffer_float"),
             _ => false,
         }
     }

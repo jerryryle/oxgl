@@ -280,3 +280,14 @@ test('flip applies to depth uploads', () => {
   assert.equal(gl.getError(), gl.INVALID_OPERATION, 'a short view is still rejected');
   gl.destroy();
 });
+
+test('deleting a texture bound only to a high unit', () => {
+  const gl = createContext({ width: 1, height: 1 });
+  const texture = gl.createTexture();
+  gl.activeTexture(gl.TEXTURE3);
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.deleteTexture(texture);
+  assert.equal(gl.getParameter(gl.TEXTURE_BINDING_2D), null);
+  assert.equal(gl.getError(), gl.NO_ERROR);
+  gl.destroy();
+});

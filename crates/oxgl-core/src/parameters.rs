@@ -307,6 +307,14 @@ pub const EXTENSION_TABLE: &[ExtensionEntry] = extension_table! {
     "WEBGL_clip_cull_distance" 0x0D32 "MAX_CLIP_DISTANCES_WEBGL" Int;
     "WEBGL_clip_cull_distance" 0x82F9 "MAX_CULL_DISTANCES_WEBGL" Int;
     "WEBGL_clip_cull_distance" 0x82FA "MAX_COMBINED_CLIP_AND_CULL_DISTANCES_WEBGL" Int;
+    "WEBGL_clip_cull_distance" 0x3000 "CLIP_DISTANCE0_WEBGL" Bool;
+    "WEBGL_clip_cull_distance" 0x3001 "CLIP_DISTANCE1_WEBGL" Bool;
+    "WEBGL_clip_cull_distance" 0x3002 "CLIP_DISTANCE2_WEBGL" Bool;
+    "WEBGL_clip_cull_distance" 0x3003 "CLIP_DISTANCE3_WEBGL" Bool;
+    "WEBGL_clip_cull_distance" 0x3004 "CLIP_DISTANCE4_WEBGL" Bool;
+    "WEBGL_clip_cull_distance" 0x3005 "CLIP_DISTANCE5_WEBGL" Bool;
+    "WEBGL_clip_cull_distance" 0x3006 "CLIP_DISTANCE6_WEBGL" Bool;
+    "WEBGL_clip_cull_distance" 0x3007 "CLIP_DISTANCE7_WEBGL" Bool;
     "WEBGL_blend_func_extended" 0x88FC "MAX_DUAL_SOURCE_DRAW_BUFFERS_WEBGL" Int;
 };
 

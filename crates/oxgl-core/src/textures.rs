@@ -8,7 +8,9 @@
     reason = "this module names many GL_ constants"
 )]
 use oxgl_sys::bindings::*;
-use oxgl_sys::{ByteSource, Current, TexImage, Upload, UploadData, ValueType, Values, ViewKind};
+use oxgl_sys::{
+    ByteSource, CompressedData, Current, TexImage, Upload, UploadData, ValueType, Values, ViewKind,
+};
 
 use crate::codec::{self, Codec, HALF_FLOAT_OES, Unpack};
 use crate::context::{Context, Object, ObjectKey, current};
@@ -345,6 +347,9 @@ impl Context {
             GL_TEXTURE_MAX_ANISOTROPY_EXT => {
                 self.extensions.is_enabled("EXT_texture_filter_anisotropic")
             }
+            GL_DEPTH_STENCIL_TEXTURE_MODE_ANGLE => {
+                self.extensions.is_enabled("WEBGL_stencil_texturing")
+            }
             _ => false,
         };
         if !known {
@@ -486,8 +491,38 @@ impl Context {
             return;
         }
         source.with_bytes(range, &mut |bytes| {
-            current.compressed_tex_upload(call, args, bytes);
+            current.compressed_tex_upload(call, args, CompressedData::Client(bytes));
         });
+    }
+
+    /// The pixel unpack buffer form of a compressed upload (WebGL 2):
+    /// `image_size` bytes at `offset` of the bound buffer, which must exist.
+    pub fn compressed_tex_upload_buffer(
+        &mut self,
+        call: Upload,
+        args: TexImage,
+        image_size: i32,
+        offset: i64,
+    ) {
+        let Some(current) = current(&self.buffer, &mut self.errors) else {
+            return;
+        };
+        if !self.unpack_buffer_bound(&current) {
+            self.errors.synthesize(GL_INVALID_OPERATION);
+            return;
+        }
+        if offset < 0 {
+            self.errors.synthesize(GL_INVALID_VALUE);
+            return;
+        }
+        current.compressed_tex_upload(
+            call,
+            args,
+            CompressedData::UnpackBuffer {
+                offset,
+                size: image_size,
+            },
+        );
     }
 
     /// `copyTexImage2D`, `copyTexSubImage2D` and `copyTexSubImage3D`, from
