@@ -28,11 +28,15 @@ The runner SHALL provide two suites, each selected by the suite's own test lists
 - **THEN** no page under `conformance2/` is run
 
 ### Requirement: Pages obtain oxgl contexts through canvas
-Within a page, `getContext` on a canvas element SHALL return an oxgl context for `'webgl'` and `'experimental-webgl'` (WebGL 1) and for `'webgl2'` (WebGL 2), sized to the canvas's `width` and `height` when it is first created, and a working 2D context for `'2d'`. It SHALL return the same context on later calls for that canvas, and `null` for any other context type. The page's global scope SHALL expose oxgl's `WebGLRenderingContext` and `WebGL2RenderingContext`.
+Within a page, `getContext` on a canvas element SHALL return an oxgl context for `'webgl'` and `'experimental-webgl'` (WebGL 1) and for `'webgl2'` (WebGL 2), and a working 2D context for `'2d'`. An oxgl context SHALL be created with the canvas's `width` and `height`, the attributes passed to `getContext`, and the element as its `canvas`. Later calls on that canvas SHALL return the same context, and `null` for any other context type. The page's global scope SHALL expose oxgl's `WebGLRenderingContext` and `WebGL2RenderingContext`.
 
 #### Scenario: Default canvas size
 - **WHEN** a page calls `getContext('webgl')` on a canvas with no size attributes
 - **THEN** it receives an oxgl `WebGLRenderingContext` with a 300×150 drawing buffer (cf. Khronos `conformance/canvas/drawingbuffer-test.html`)
+
+#### Scenario: Context belongs to its canvas
+- **WHEN** a page calls `canvas.getContext('webgl', { alpha: false })`
+- **THEN** `gl.canvas === canvas` and `gl.getContextAttributes().alpha` is `false`
 
 #### Scenario: Unsupported context type
 - **WHEN** a page calls `getContext('bitmaprenderer')`
@@ -60,7 +64,7 @@ As in a browser, oxgl's context classes, the contexts a page creates and the err
 When oxgl rejects a context creation requested through `getContext`, `getContext` SHALL return `null`, as a browser does when creation fails, and the rejection message SHALL be recorded with the page's results.
 
 #### Scenario: Creation rejected by oxgl
-- **WHEN** a page calls `getContext('webgl')` on a 0×0 canvas and oxgl's `createContext` throws
+- **WHEN** a page running on the software backend calls `getContext('webgl', { failIfMajorPerformanceCaveat: true })` and oxgl's `createContext` throws
 - **THEN** `getContext` returns `null` instead of throwing, and the report's entry for the page includes oxgl's error message
 
 ### Requirement: Unsupported media fails promptly
@@ -265,3 +269,14 @@ The runner SHALL refuse to run pages when the `canvas` package cannot be loaded,
 #### Scenario: Canvas package missing
 - **WHEN** `npm run conformance` runs and `require('canvas')` fails
 - **THEN** the run stops before any page with an error naming `canvas` and `npm ci`, and no page outcome is recorded
+
+### Requirement: Canvas resizes reach the drawing buffer
+When a page changes the `width` or `height` of a canvas that has an oxgl context, through the property or the content attribute, the context's drawing buffer SHALL be resized to the canvas's new size before that call returns, as a browser does (WebGL 1.0 §2.2).
+
+#### Scenario: Page resizes its canvas
+- **WHEN** a page sets `canvas.width = 20` on a canvas with a WebGL context
+- **THEN** `gl.drawingBufferWidth` is `20` (cf. Khronos `conformance/canvas/drawingbuffer-test.html`)
+
+#### Scenario: Page resizes through the attribute
+- **WHEN** a page calls `canvas.setAttribute('height', '30')` and then `canvas.removeAttribute('width')` on a canvas with a WebGL context
+- **THEN** `gl.drawingBufferHeight` is `30` right after the first call, and `gl.drawingBufferWidth` is `300` right after the second
