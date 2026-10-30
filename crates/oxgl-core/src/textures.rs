@@ -398,6 +398,31 @@ impl Context {
         current.generate_mipmap(target);
     }
 
+    /// The error WebGL 1's depth texture rules give an upload, if any.
+    /// ANGLE enables its GL depth textures on every ES 2.0 context; WebGL 1
+    /// has them only with `WEBGL_depth_texture`, and then only as a
+    /// `TEXTURE_2D` level 0 without data, never through `texSubImage2D`.
+    fn depth_texture_error(
+        &self,
+        call: Upload,
+        args: &TexImage,
+        source: &TexSource<'_>,
+    ) -> Option<u32> {
+        if self.webgl2 || !matches!(args.format, GL_DEPTH_COMPONENT | GL_DEPTH_STENCIL) {
+            None
+        } else if !self.extensions.is_enabled("WEBGL_depth_texture") {
+            Some(GL_INVALID_ENUM)
+        } else if call != Upload::Image2D
+            || args.target != GL_TEXTURE_2D
+            || args.level != 0
+            || !matches!(source, TexSource::None)
+        {
+            Some(GL_INVALID_OPERATION)
+        } else {
+            None
+        }
+    }
+
     /// `texImage2D`/`texSubImage2D`/`texImage3D`/`texSubImage3D` from any
     /// source.
     pub fn tex_upload(&mut self, call: Upload, args: TexImage, source: TexSource<'_>) {
@@ -409,6 +434,10 @@ impl Context {
             return;
         }
         let webgl2 = self.webgl2;
+        if let Some(code) = self.depth_texture_error(call, &args, &source) {
+            self.errors.synthesize(code);
+            return;
+        }
         let is_3d = matches!(call, Upload::Image3D | Upload::SubImage3D);
         let flags = self.unpack.flip_y || self.unpack.premultiply_alpha;
         let bound = self.unpack_buffer_bound(&current);

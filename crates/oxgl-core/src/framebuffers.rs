@@ -403,9 +403,18 @@ impl Context {
             }
         }
         // Ask the type first: querying the name of an empty attachment point
-        // is an error in ES 2.0, which must not reach the page.
+        // is an error in ES 2.0, which must not reach the page. WebGL 1's
+        // DEPTH_STENCIL_ATTACHMENT is a point of its own that ES 2.0 can be
+        // asked about only while attached; WebGL 2's sets the depth point.
         let point = if attachment == GL_DEPTH_STENCIL_ATTACHMENT {
-            GL_DEPTH_ATTACHMENT
+            if !self.webgl2 && name == 0 {
+                return true;
+            }
+            if self.webgl2 {
+                GL_DEPTH_ATTACHMENT
+            } else {
+                attachment
+            }
         } else {
             attachment
         };

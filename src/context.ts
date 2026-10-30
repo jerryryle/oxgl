@@ -2047,7 +2047,9 @@ abstract class ContextBase {
     const framebuffer = framebufferFor(this.#s, target);
     if (framebuffer === null) return;
     const { attachments } = objectState(framebuffer) as FramebufferState;
-    const points = attachment === GL.DEPTH_STENCIL_ATTACHMENT ? [GL.DEPTH_ATTACHMENT, GL.STENCIL_ATTACHMENT] : [attachment];
+    // WebGL 2's DEPTH_STENCIL_ATTACHMENT sets both points; WebGL 1's is a
+    // point of its own (WebGL 1.0 §6.6).
+    const points = this.#s.webgl2 && attachment === GL.DEPTH_STENCIL_ATTACHMENT ? [GL.DEPTH_ATTACHMENT, GL.STENCIL_ATTACHMENT] : [attachment];
     for (const point of points) {
       if (object === null) attachments.delete(point);
       else attachments.set(point, object);
@@ -2108,27 +2110,25 @@ abstract class ContextBase {
     if (s.destroyed) return null;
     const framebuffer = framebufferFor(s, args[0]);
     if (args[2] === GL.FRAMEBUFFER_ATTACHMENT_OBJECT_NAME && framebuffer !== null) {
-      // The type query validates the target and attachment. ES 2.0 cannot be
-      // asked about DEPTH_STENCIL_ATTACHMENT; its depth point answers.
-      const point = !s.webgl2 && args[1] === GL.DEPTH_STENCIL_ATTACHMENT ? GL.DEPTH_ATTACHMENT : args[1];
+      // On WebGL 2, DEPTH_STENCIL_ATTACHMENT names the object at both the
+      // depth and stencil points, compared as objects (WebGL 2.0 §3.7.4);
+      // ANGLE's own query also fails for different layers of one texture.
+      const combined = s.webgl2 && args[1] === GL.DEPTH_STENCIL_ATTACHMENT;
+      // The type query validates the target and attachment.
+      const point = combined ? GL.DEPTH_ATTACHMENT : args[1];
       const type = native.getFramebufferAttachmentParameter(s.index, s.version, args[0], point, GL.FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE);
       if (type === null) return null;
+      const { attachments } = objectState(framebuffer) as FramebufferState;
+      if (combined && (attachments.get(GL.DEPTH_ATTACHMENT) ?? null) !== (attachments.get(GL.STENCIL_ATTACHMENT) ?? null)) {
+        native.synthesizeError(s.index, s.version, GL.INVALID_OPERATION);
+        return null;
+      }
       if (type.numbers[0] === GL.NONE) {
         // WebGL 1 has no name to report for an empty point (OpenGL ES 2.0 §6.1.3).
         if (!s.webgl2) native.synthesizeError(s.index, s.version, GL.INVALID_ENUM);
         return null;
       }
-      const { attachments } = objectState(framebuffer) as FramebufferState;
-      if (args[1] === GL.DEPTH_STENCIL_ATTACHMENT) {
-        // Different objects at depth and stencil: WebGL 2.0 §3.7.4.
-        const depth = attachments.get(GL.DEPTH_ATTACHMENT) ?? null;
-        if (depth !== (attachments.get(GL.STENCIL_ATTACHMENT) ?? null)) {
-          native.synthesizeError(s.index, s.version, GL.INVALID_OPERATION);
-          return null;
-        }
-        return depth;
-      }
-      return attachments.get(args[1]) ?? null;
+      return attachments.get(point) ?? null;
     }
     return parameterValue(native.getFramebufferAttachmentParameter(s.index, s.version, ...args));
   }

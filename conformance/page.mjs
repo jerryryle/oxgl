@@ -298,6 +298,17 @@ function installShim(window, state) {
       });
     };
   }
+  // jsdom does no layout, so an element's client size is 0; an unstyled
+  // canvas's is its width and height, which pages read as the CSS size.
+  for (const [client, size] of [['clientWidth', 'width'], ['clientHeight', 'height']]) {
+    Object.defineProperty(window.HTMLCanvasElement.prototype, client, {
+      configurable: true,
+      enumerable: true,
+      get() {
+        return this[size];
+      },
+    });
+  }
   // A WebGL canvas drawn into a 2D canvas, or exported with toDataURL,
   // shows its drawing buffer, which jsdom's own canvas does not have.
   const { canvasPixels } = oxgl;
