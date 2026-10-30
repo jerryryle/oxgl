@@ -12,6 +12,7 @@
 // Each export's only error is a Node-API failure, thrown to JS by napi-rs.
 #![allow(clippy::missing_errors_doc)]
 
+pub mod extensions;
 pub mod framebuffers;
 pub mod rendering;
 pub mod textures;
@@ -35,7 +36,7 @@ use oxgl_sys::{ReadPixels, StateCall};
 #[napi]
 #[must_use]
 pub fn native_abi_version() -> u32 {
-    8
+    9
 }
 
 /// The environment's runtime, created by [`init`]. Node-API instance data is

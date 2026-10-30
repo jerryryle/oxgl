@@ -298,3 +298,24 @@ fn swiftshader_draws_a_triangle_body() {
         assert_eq!(current.get_error(), GL_NO_ERROR);
     }
 }
+
+#[test]
+fn requestable_extensions_are_listed() {
+    on_lasting_thread(|| {
+        use oxgl_sys::bindings::{GL_EXTENSIONS, GL_REQUESTABLE_EXTENSIONS_ANGLE};
+        let angle = Angle::load(&bundle_dir()).unwrap();
+        let display = Display::open(&angle, DisplayKind::SwiftShader).unwrap();
+        for version in [ClientVersion::Es2, ClientVersion::Es3] {
+            let context = display.create_context(version).unwrap();
+            let current = context.make_current().unwrap();
+            let requestable = current.get_string(GL_REQUESTABLE_EXTENSIONS_ANGLE).unwrap();
+            let enabled = current.get_string(GL_EXTENSIONS).unwrap();
+            eprintln!("{version:?} requestable: {requestable}");
+            eprintln!("{version:?} enabled: {enabled}");
+            assert!(
+                requestable.contains("GL_CHROMIUM_lose_context"),
+                "{requestable}"
+            );
+        }
+    });
+}

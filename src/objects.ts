@@ -89,6 +89,10 @@ export interface FramebufferState extends ObjectState {
 export class WebGLVertexArrayObject extends WebGLObject {
   declare private readonly brand: 'WebGLVertexArrayObject';
 }
+/** `OES_vertex_array_object`'s vertex array (WebGL 1). */
+export class WebGLVertexArrayObjectOES extends WebGLObject {
+  declare private readonly brand: 'WebGLVertexArrayObjectOES';
+}
 /** A vertex array's mirrored state: what GL holds references to. */
 export interface VertexArrayState {
   element: WebGLBuffer | null;

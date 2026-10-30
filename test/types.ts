@@ -18,6 +18,7 @@ import {
   type WebGLSync,
   type WebGLTransformFeedback,
   type WebGLVertexArrayObject,
+  type WebGLVertexArrayObjectOES,
   type WebGLSampler,
   type WebGLShader,
   type WebGLTexture,
@@ -158,4 +159,13 @@ const query: WebGLQuery = glr.createQuery();
 glr.beginQuery(glr.ANY_SAMPLES_PASSED, query);
 const sync: WebGLSync | null = glr.fenceSync(glr.SYNC_GPU_COMMANDS_COMPLETE, 0);
 const feedback: WebGLTransformFeedback = glr.createTransformFeedback();
-export { sync, feedback };
+
+
+// extensions.
+const instancing = gl1.getExtension('ANGLE_instanced_arrays');
+instancing?.drawArraysInstancedANGLE(gl1.TRIANGLES, 0, 3, 2);
+const oesVao = gl1.getExtension('OES_vertex_array_object');
+const vaoOES: WebGLVertexArrayObjectOES | undefined = oesVao?.createVertexArrayOES();
+const anisotropy: number | undefined = gl1.getExtension('EXT_texture_filter_anisotropic')?.TEXTURE_MAX_ANISOTROPY_EXT;
+const anyExtension: object | null = gl1.getExtension('SOME_EXTENSION');
+export { sync, feedback, vaoOES, anisotropy, anyExtension };

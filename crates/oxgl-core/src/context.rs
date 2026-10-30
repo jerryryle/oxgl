@@ -3,8 +3,9 @@
 use oxgl_sys::bindings::{
     GL_FRAGMENT_SHADER, GL_GUILTY_CONTEXT_RESET_EXT, GL_HIGH_INT, GL_INNOCENT_CONTEXT_RESET_EXT,
     GL_INVALID_ENUM, GL_INVALID_OPERATION, GL_INVALID_VALUE, GL_LOW_FLOAT, GL_NO_ERROR,
-    GL_PACK_ALIGNMENT, GL_PACK_ROW_LENGTH, GL_PACK_SKIP_PIXELS, GL_PACK_SKIP_ROWS,
-    GL_SHADING_LANGUAGE_VERSION, GL_VERSION, GL_VERTEX_SHADER,
+    GL_NUM_COMPRESSED_TEXTURE_FORMATS, GL_PACK_ALIGNMENT, GL_PACK_ROW_LENGTH, GL_PACK_SKIP_PIXELS,
+    GL_PACK_SKIP_ROWS, GL_RENDERER, GL_SHADING_LANGUAGE_VERSION, GL_VENDOR, GL_VERSION,
+    GL_VERTEX_SHADER,
 };
 use oxgl_sys::{
     Current, PixelDestination, PrecisionFormat, ReadPixels, StateCall, ValueType, Values,
@@ -97,6 +98,8 @@ pub struct Context {
     /// The renderbuffer bound to `RENDERBUFFER`, for the `DEPTH_STENCIL`
     /// format alias.
     pub(crate) bound_renderbuffer: Option<ObjectKey>,
+    /// Enabled WebGL extensions.
+    pub(crate) extensions: crate::extensions::ExtensionState,
 }
 
 /// Makes `buffer`'s context current, setting the lost flag if that fails: a
@@ -155,6 +158,7 @@ impl Context {
             unpack: UnpackState::default(),
             webgl2,
             bound_renderbuffer: None,
+            extensions: crate::extensions::ExtensionState::default(),
         }
     }
 
@@ -214,11 +218,15 @@ impl Context {
     /// for a query ANGLE rejected, and on a lost context.
     pub fn get_parameter(&mut self, pname: u32) -> Option<Parameter> {
         let current = current(&self.buffer, &mut self.errors)?;
-        let Some(entry) = parameters::lookup(pname, self.webgl2) else {
+        let extensions = &self.extensions;
+        let entry = parameters::lookup(pname, self.webgl2)
+            .or_else(|| parameters::lookup_extension(pname, |name| extensions.is_enabled(name)));
+        let Some(entry) = entry else {
             self.errors.synthesize(GL_INVALID_ENUM);
             return None;
         };
-        match self.buffer.parameter(&current, pname) {
+        let draw_buffers = self.webgl2 || self.extensions.is_enabled("WEBGL_draw_buffers");
+        match self.buffer.parameter(&current, pname, draw_buffers) {
             Some(Ok(value)) => return Some(Parameter::Number(f64::from(value))),
             Some(Err(code)) => {
                 self.errors.synthesize(code);
@@ -228,7 +236,22 @@ impl Context {
         }
         Some(match entry.kind {
             Kind::Object => Parameter::Null,
-            Kind::CompressedFormats => Parameter::Uint32(Vec::new()),
+            Kind::CompressedFormats => {
+                // ANGLE lists only the formats of enabled extensions.
+                let count = match current
+                    .get_values(GL_NUM_COMPRESSED_TEXTURE_FORMATS, ValueType::Integer)
+                {
+                    Some(Values::Integers([n, ..])) => usize::try_from(n).unwrap_or(0),
+                    _ => 0,
+                };
+                Parameter::Uint32(
+                    current
+                        .integers(pname, count)
+                        .into_iter()
+                        .map(i32::cast_unsigned)
+                        .collect(),
+                )
+            }
             Kind::ClientWaitTimeout => Parameter::Number(0.0),
             Kind::Shadow => match pname {
                 UNPACK_FLIP_Y_WEBGL => Parameter::Boolean(self.unpack.flip_y),
@@ -241,6 +264,12 @@ impl Context {
                     self.webgl2,
                     current.get_string(pname).as_deref(),
                 ),
+                parameters::UNMASKED_VENDOR_WEBGL => {
+                    current.get_string(GL_VENDOR).unwrap_or_default()
+                }
+                parameters::UNMASKED_RENDERER_WEBGL => {
+                    current.get_string(GL_RENDERER).unwrap_or_default()
+                }
                 _ => "oxgl".to_owned(),
             }),
             kind => {
@@ -380,6 +409,9 @@ impl Context {
         if let Some(current) = current(&self.buffer, &mut self.errors) {
             current.request_extension(c"GL_CHROMIUM_lose_context");
             current.lose_context(GL_GUILTY_CONTEXT_RESET_EXT, GL_INNOCENT_CONTEXT_RESET_EXT);
+            // WebGL 1.0 §5.15.3: the context is lost as soon as the call
+            // returns, not when the GL next reports it.
+            self.errors.mark_lost();
         }
     }
 }

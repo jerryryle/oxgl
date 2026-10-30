@@ -47,7 +47,7 @@ Query objects and calls SHALL behave as WebGL 2.0 §3.7.12 specifies, and a quer
 
 #### Scenario: Result after a turn
 - **WHEN** an `ANY_SAMPLES_PASSED` query surrounds a draw that covers pixels, and `QUERY_RESULT_AVAILABLE` is read at once and again after a `setTimeout`
-- **THEN** it is `false` at once, then `true`, and `QUERY_RESULT` is `true` (cf. Khronos `conformance2/query/occlusion-query.html`)
+- **THEN** it is `false` at once, then `true`, and `QUERY_RESULT` is `1`, a number (cf. Khronos `conformance2/query/occlusion-query.html`)
 
 ### Requirement: Sync objects
 `fenceSync`, `isSync`, `deleteSync`, `clientWaitSync`, `waitSync` and `getSyncParameter` SHALL behave as WebGL 2.0 §3.7.14 specifies. `clientWaitSync` SHALL NOT block; a timeout above `MAX_CLIENT_WAIT_TIMEOUT_WEBGL` SHALL generate `INVALID_VALUE`, and the sync SHALL NOT signal before control returns to the event loop.

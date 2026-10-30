@@ -248,6 +248,77 @@ pub fn lookup(pname: u32, webgl2: bool) -> Option<&'static Entry> {
         .find(|entry| entry.pname == pname && (webgl2 || !entry.webgl2_only))
 }
 
+/// A parameter an extension adds: its row and the WebGL extension that
+/// must be enabled.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ExtensionEntry {
+    /// The row.
+    pub entry: Entry,
+    /// The WebGL extension.
+    pub extension: &'static str,
+}
+
+macro_rules! extension_table {
+    ($($ext:literal $pname:literal $name:literal $kind:expr;)*) => {
+        &[$(ExtensionEntry {
+            entry: Entry { name: $name, pname: $pname, kind: $kind, webgl2_only: false },
+            extension: $ext,
+        },)*]
+    };
+}
+
+/// `UNMASKED_VENDOR_WEBGL` (`WEBGL_debug_renderer_info`).
+pub const UNMASKED_VENDOR_WEBGL: u32 = 0x9245;
+/// `UNMASKED_RENDERER_WEBGL` (`WEBGL_debug_renderer_info`).
+pub const UNMASKED_RENDERER_WEBGL: u32 = 0x9246;
+
+/// Parameters extensions add (each extension's specification).
+pub const EXTENSION_TABLE: &[ExtensionEntry] = extension_table! {
+    "EXT_texture_filter_anisotropic" 0x84FF "MAX_TEXTURE_MAX_ANISOTROPY_EXT" Float;
+    "OES_standard_derivatives" 0x8B8B "FRAGMENT_SHADER_DERIVATIVE_HINT_OES" Int;
+    "WEBGL_draw_buffers" 0x8CDF "MAX_COLOR_ATTACHMENTS_WEBGL" Int;
+    "WEBGL_draw_buffers" 0x8824 "MAX_DRAW_BUFFERS_WEBGL" Int;
+    "WEBGL_draw_buffers" 0x8825 "DRAW_BUFFER0_WEBGL" Int;
+    "WEBGL_draw_buffers" 0x8826 "DRAW_BUFFER1_WEBGL" Int;
+    "WEBGL_draw_buffers" 0x8827 "DRAW_BUFFER2_WEBGL" Int;
+    "WEBGL_draw_buffers" 0x8828 "DRAW_BUFFER3_WEBGL" Int;
+    "WEBGL_draw_buffers" 0x8829 "DRAW_BUFFER4_WEBGL" Int;
+    "WEBGL_draw_buffers" 0x882A "DRAW_BUFFER5_WEBGL" Int;
+    "WEBGL_draw_buffers" 0x882B "DRAW_BUFFER6_WEBGL" Int;
+    "WEBGL_draw_buffers" 0x882C "DRAW_BUFFER7_WEBGL" Int;
+    "WEBGL_draw_buffers" 0x882D "DRAW_BUFFER8_WEBGL" Int;
+    "WEBGL_draw_buffers" 0x882E "DRAW_BUFFER9_WEBGL" Int;
+    "WEBGL_draw_buffers" 0x882F "DRAW_BUFFER10_WEBGL" Int;
+    "WEBGL_draw_buffers" 0x8830 "DRAW_BUFFER11_WEBGL" Int;
+    "WEBGL_draw_buffers" 0x8831 "DRAW_BUFFER12_WEBGL" Int;
+    "WEBGL_draw_buffers" 0x8832 "DRAW_BUFFER13_WEBGL" Int;
+    "WEBGL_draw_buffers" 0x8833 "DRAW_BUFFER14_WEBGL" Int;
+    "WEBGL_draw_buffers" 0x8834 "DRAW_BUFFER15_WEBGL" Int;
+    "OES_vertex_array_object" 0x85B5 "VERTEX_ARRAY_BINDING_OES" Object;
+    "WEBGL_debug_renderer_info" 0x9245 "UNMASKED_VENDOR_WEBGL" String;
+    "WEBGL_debug_renderer_info" 0x9246 "UNMASKED_RENDERER_WEBGL" String;
+    "EXT_clip_control" 0x935C "CLIP_ORIGIN_EXT" Int;
+    "EXT_clip_control" 0x935D "CLIP_DEPTH_MODE_EXT" Int;
+    "EXT_depth_clamp" 0x864F "DEPTH_CLAMP_EXT" Bool;
+    "EXT_polygon_offset_clamp" 0x8E1B "POLYGON_OFFSET_CLAMP_EXT" Float;
+    "WEBGL_provoking_vertex" 0x8E4F "PROVOKING_VERTEX_WEBGL" Int;
+    "WEBGL_polygon_mode" 0x0B40 "POLYGON_MODE_WEBGL" Int;
+    "WEBGL_polygon_mode" 0x2A02 "POLYGON_OFFSET_LINE_WEBGL" Bool;
+    "WEBGL_clip_cull_distance" 0x0D32 "MAX_CLIP_DISTANCES_WEBGL" Int;
+    "WEBGL_clip_cull_distance" 0x82F9 "MAX_CULL_DISTANCES_WEBGL" Int;
+    "WEBGL_clip_cull_distance" 0x82FA "MAX_COMBINED_CLIP_AND_CULL_DISTANCES_WEBGL" Int;
+    "WEBGL_blend_func_extended" 0x88FC "MAX_DUAL_SOURCE_DRAW_BUFFERS_WEBGL" Int;
+};
+
+/// The extension row for `pname`, if `enabled` says its extension is on.
+#[must_use]
+pub fn lookup_extension(pname: u32, enabled: impl Fn(&str) -> bool) -> Option<&'static Entry> {
+    EXTENSION_TABLE
+        .iter()
+        .find(|row| row.entry.pname == pname && enabled(row.extension))
+        .map(|row| &row.entry)
+}
+
 /// A `getParameter` result, before conversion to a JS value.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Parameter {

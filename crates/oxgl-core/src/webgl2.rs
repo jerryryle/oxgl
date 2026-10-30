@@ -37,14 +37,22 @@ impl Context {
         let Some(current) = current(&self.buffer, &mut self.errors) else {
             return false;
         };
-        current.bind_vertex_array(name);
+        if self.webgl2 {
+            current.bind_vertex_array(name);
+        } else {
+            current.bind_vertex_array_oes(name);
+        }
         true
     }
 
     /// `drawArraysInstanced`.
     pub fn draw_arrays_instanced(&mut self, mode: u32, first: i32, count: i32, instances: i32) {
         if let Some(current) = current(&self.buffer, &mut self.errors) {
-            current.draw_arrays_instanced(mode, first, count, instances);
+            if self.webgl2 {
+                current.draw_arrays_instanced(mode, first, count, instances);
+            } else {
+                current.draw_arrays_instanced_angle(mode, first, count, instances);
+            }
         }
     }
 
@@ -64,13 +72,21 @@ impl Context {
             self.errors.synthesize(GL_INVALID_VALUE);
             return;
         }
-        current.draw_elements_instanced(mode, count, ty, offset, instances);
+        if self.webgl2 {
+            current.draw_elements_instanced(mode, count, ty, offset, instances);
+        } else {
+            current.draw_elements_instanced_angle(mode, count, ty, offset, instances);
+        }
     }
 
     /// `vertexAttribDivisor`.
     pub fn vertex_attrib_divisor(&mut self, index: u32, divisor: u32) {
         if let Some(current) = current(&self.buffer, &mut self.errors) {
-            current.vertex_attrib_divisor(index, divisor);
+            if self.webgl2 {
+                current.vertex_attrib_divisor(index, divisor);
+            } else {
+                current.vertex_attrib_divisor_angle(index, divisor);
+            }
         }
     }
 
@@ -222,6 +238,10 @@ impl Context {
     ) -> Option<Parameter> {
         let program = self.program_key_name(program)?;
         let current = current(&self.buffer, &mut self.errors)?;
+        if !linked(&current, program) {
+            self.errors.synthesize(GL_INVALID_OPERATION);
+            return None;
+        }
         let mut one = [0];
         match pname {
             GL_UNIFORM_BLOCK_ACTIVE_UNIFORM_INDICES => {
@@ -258,6 +278,10 @@ impl Context {
     pub fn active_uniform_block_name(&mut self, program: ObjectKey, index: u32) -> Option<String> {
         let program = self.program_key_name(program)?;
         let current = current(&self.buffer, &mut self.errors)?;
+        if !linked(&current, program) {
+            self.errors.synthesize(GL_INVALID_OPERATION);
+            return None;
+        }
         let count = current
             .program_parameter(program, GL_ACTIVE_UNIFORM_BLOCKS)
             .unwrap_or(0);
@@ -277,7 +301,11 @@ impl Context {
             return;
         };
         if let Some(current) = current(&self.buffer, &mut self.errors) {
-            current.uniform_block_binding(program, index, binding);
+            if linked(&current, program) {
+                current.uniform_block_binding(program, index, binding);
+            } else {
+                self.errors.synthesize(GL_INVALID_OPERATION);
+            }
         }
     }
 
@@ -387,8 +415,8 @@ impl Context {
     }
 
     /// `getQueryParameter` for a query whose result the TS layer has
-    /// released: `QUERY_RESULT` as a number (the TS layer makes boolean
-    /// targets booleans) or `QUERY_RESULT_AVAILABLE` as a boolean.
+    /// released: `QUERY_RESULT` as a number (a `GLuint`, also for boolean
+    /// targets) or `QUERY_RESULT_AVAILABLE` as a boolean.
     pub fn query_parameter(&mut self, query: ObjectKey, pname: u32) -> Option<Parameter> {
         let Some(name) = self.query_name(query) else {
             self.synthesize_error(GL_INVALID_OPERATION);
@@ -482,4 +510,13 @@ pub enum TransformFeedbackOp {
     Pause,
     /// `resumeTransformFeedback`.
     Resume,
+}
+
+/// Whether the program's last link succeeded: the uniform block queries
+/// need a linked program (WebGL 2.0 §3.7.16; ANGLE reports an out-of-range
+/// index instead).
+fn linked(current: &oxgl_sys::Current<'_>, program: u32) -> bool {
+    current
+        .program_parameter(program, GL_LINK_STATUS)
+        .is_some_and(|status| status != 0)
 }

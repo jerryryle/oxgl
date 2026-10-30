@@ -156,6 +156,12 @@ export interface NativeBinding {
   clientWaitSync: (index: number, version: number, oi: number, ov: number, flags: number, timeout: number) => number;
   waitSync: (index: number, version: number, oi: number, ov: number, flags: number, timeout: number) => void;
   getSyncParameter: (index: number, version: number, oi: number, ov: number, pname: number) => number | null;
+  getSupportedExtensions: (index: number, version: number) => string[] | null;
+  enableExtension: (index: number, version: number, name: string) => string | null;
+  extensionCall: (index: number, version: number, op: number, a: number, b: number, c: number, d: number, e: number) => void;
+  multiDraw: (index: number, version: number, mode: number, firstsOrOffsets: number[], counts: number[], instances: number[], type: number) => void;
+  translatedShaderSource: (index: number, version: number, oi: number, ov: number) => string | null;
+  loseContext: (index: number, version: number) => void;
   drawRangeElements: (index: number, version: number, mode: number, start: number, end: number, count: number, type: number, offset: number) => void;
   resize(index: number, version: number, width: number, height: number): { width: number; height: number };
   destroy(index: number, version: number): void;
@@ -218,7 +224,7 @@ export interface NativeBinding {
 }
 
 /** Version of the JS ↔ native interface this package was built for. */
-export const NATIVE_ABI_VERSION = 8;
+export const NATIVE_ABI_VERSION = 9;
 
 function nativeMissing(detail: string, cause?: unknown): Error {
   const error = new Error(

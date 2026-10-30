@@ -24,6 +24,47 @@ const WEBGL1_RENDERBUFFER_FORMATS: [u32; 6] = [
     GL_DEPTH_STENCIL,
 ];
 
+/// WebGL 2's renderbuffer formats: OpenGL ES 3.0 §4.4.2's color-, depth- and
+/// stencil-renderable sized formats (Table 3.13), and WebGL 2.0 §3.7.5's
+/// `DEPTH_STENCIL`.
+const WEBGL2_RENDERBUFFER_FORMATS: [u32; 35] = [
+    GL_R8,
+    GL_R8UI,
+    GL_R8I,
+    GL_R16UI,
+    GL_R16I,
+    GL_R32UI,
+    GL_R32I,
+    GL_RG8,
+    GL_RG8UI,
+    GL_RG8I,
+    GL_RG16UI,
+    GL_RG16I,
+    GL_RG32UI,
+    GL_RG32I,
+    GL_RGB8,
+    GL_RGB565,
+    GL_RGBA8,
+    GL_SRGB8_ALPHA8,
+    GL_RGB5_A1,
+    GL_RGBA4,
+    GL_RGB10_A2,
+    GL_RGBA8UI,
+    GL_RGBA8I,
+    GL_RGB10_A2UI,
+    GL_RGBA16UI,
+    GL_RGBA16I,
+    GL_RGBA32I,
+    GL_RGBA32UI,
+    GL_DEPTH_COMPONENT16,
+    GL_DEPTH_COMPONENT24,
+    GL_DEPTH_COMPONENT32F,
+    GL_DEPTH24_STENCIL8,
+    GL_DEPTH32F_STENCIL8,
+    GL_STENCIL_INDEX8,
+    GL_DEPTH_STENCIL,
+];
+
 /// WebGL 1's attachment points (WebGL 1.0 §5.14.6, §6.6).
 const WEBGL1_ATTACHMENTS: [u32; 4] = [
     GL_COLOR_ATTACHMENT0,
@@ -94,6 +135,47 @@ pub enum Attach {
 }
 
 impl Context {
+    /// Whether a WebGL 1 renderbuffer format comes from an enabled extension.
+    fn extension_format(&self, format: u32) -> bool {
+        let enabled = |name| self.extensions.is_enabled(name);
+        if self.webgl2 {
+            return match format {
+                GL_R16F | GL_RG16F | GL_RGBA16F => {
+                    enabled("EXT_color_buffer_float") || enabled("EXT_color_buffer_half_float")
+                }
+                GL_R32F | GL_RG32F | GL_RGBA32F | GL_R11F_G11F_B10F => {
+                    enabled("EXT_color_buffer_float")
+                }
+                _ => false,
+            };
+        }
+        match format {
+            GL_SRGB8_ALPHA8_EXT => enabled("EXT_sRGB"),
+            GL_RGBA16F_EXT | GL_RGB16F_EXT => enabled("EXT_color_buffer_half_float"),
+            GL_RGBA32F_EXT => enabled("WEBGL_color_buffer_float"),
+            _ => false,
+        }
+    }
+
+    /// Whether `format` is a renderbuffer format here: the version's list,
+    /// grown by enabled extensions.
+    fn renderbuffer_format_allowed(&self, format: u32) -> bool {
+        let list: &[u32] = if self.webgl2 {
+            &WEBGL2_RENDERBUFFER_FORMATS
+        } else {
+            &WEBGL1_RENDERBUFFER_FORMATS
+        };
+        list.contains(&format) || self.extension_format(format)
+    }
+
+    /// Whether `attachment` is an attachment point here: WebGL 1's list,
+    /// grown by `WEBGL_draw_buffers` (ANGLE checks the maximum).
+    fn attachment_allowed(&self, attachment: u32) -> bool {
+        is_attachment(attachment, self.webgl2)
+            || (self.extensions.is_enabled("WEBGL_draw_buffers")
+                && (GL_COLOR_ATTACHMENT0..=GL_COLOR_ATTACHMENT15).contains(&attachment))
+    }
+
     fn framebuffer_name(&self, key: ObjectKey) -> Option<u32> {
         match self.objects.get(key)? {
             Object::Framebuffer { name } => Some(*name),
@@ -192,7 +274,7 @@ impl Context {
             self.errors.synthesize(GL_INVALID_ENUM);
             return;
         }
-        if !self.webgl2 && !WEBGL1_RENDERBUFFER_FORMATS.contains(&format) {
+        if !self.renderbuffer_format_allowed(format) {
             self.errors.synthesize(GL_INVALID_ENUM);
             return;
         }
@@ -218,6 +300,24 @@ impl Context {
     /// `getRenderbufferParameter`.
     pub fn renderbuffer_parameter(&mut self, target: u32, pname: u32) -> Option<i32> {
         let current = current(&self.buffer, &mut self.errors)?;
+        // ANGLE also answers pnames of GL extensions enabled for oxgl's own
+        // use, such as RENDERBUFFER_SAMPLES on ES 2.0.
+        let known = matches!(
+            pname,
+            GL_RENDERBUFFER_WIDTH
+                | GL_RENDERBUFFER_HEIGHT
+                | GL_RENDERBUFFER_INTERNAL_FORMAT
+                | GL_RENDERBUFFER_RED_SIZE
+                | GL_RENDERBUFFER_GREEN_SIZE
+                | GL_RENDERBUFFER_BLUE_SIZE
+                | GL_RENDERBUFFER_ALPHA_SIZE
+                | GL_RENDERBUFFER_DEPTH_SIZE
+                | GL_RENDERBUFFER_STENCIL_SIZE
+        ) || (pname == GL_RENDERBUFFER_SAMPLES && self.webgl2);
+        if !known {
+            self.errors.synthesize(GL_INVALID_ENUM);
+            return None;
+        }
         let value = current.renderbuffer_parameter(target, pname)?;
         let alias = matches!(
             self.bound_renderbuffer
@@ -247,7 +347,7 @@ impl Context {
         let Some(current) = current(&self.buffer, &mut self.errors) else {
             return false;
         };
-        if !is_framebuffer_target(target, self.webgl2) || !is_attachment(attachment, self.webgl2) {
+        if !is_framebuffer_target(target, self.webgl2) || !self.attachment_allowed(attachment) {
             self.errors.synthesize(GL_INVALID_ENUM);
             return false;
         }
@@ -330,8 +430,25 @@ impl Context {
         }
         let number = |v: i32| Some(Parameter::Number(f64::from(v)));
         if !self.default_bound(&current, target) {
-            if !is_attachment(attachment, self.webgl2) {
+            // The default framebuffer's buffer names are not attachments of
+            // a framebuffer object (OpenGL ES 3.0 §6.1.13).
+            if !self.attachment_allowed(attachment) || default_attachment(attachment).is_some() {
                 self.errors.synthesize(GL_INVALID_ENUM);
+                return None;
+            }
+            // On WebGL 2 an empty attachment point answers only OBJECT_TYPE and
+            // OBJECT_NAME (OpenGL ES 3.0 §6.1.13), whatever else pname is;
+            // ANGLE checks pname first.
+            if self.webgl2
+                && pname != GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE
+                && pname != GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME
+                && current.framebuffer_attachment_parameter(
+                    target,
+                    attachment,
+                    GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE,
+                ) == i32::try_from(GL_NONE).ok()
+            {
+                self.errors.synthesize(GL_INVALID_OPERATION);
                 return None;
             }
             return number(current.framebuffer_attachment_parameter(target, attachment, pname)?);
@@ -393,8 +510,15 @@ impl Context {
         let Some(current) = current(&self.buffer, &mut self.errors) else {
             return;
         };
+        let draw = |buffers: &[u32]| {
+            if self.webgl2 {
+                current.draw_buffers(buffers);
+            } else {
+                current.draw_buffers_ext(buffers);
+            }
+        };
         if !self.buffer.is_bound(&current, GL_DRAW_FRAMEBUFFER_BINDING) {
-            current.draw_buffers(buffers);
+            draw(buffers);
             return;
         }
         let [value] = buffers else {
@@ -402,7 +526,7 @@ impl Context {
             return;
         };
         match self.buffer.set_buffer(*value, false) {
-            Ok(mapped) => current.draw_buffers(&[mapped]),
+            Ok(mapped) => draw(&[mapped]),
             Err(code) => self.errors.synthesize(code),
         }
     }
@@ -481,7 +605,10 @@ impl Context {
         pname: u32,
     ) -> Option<Parameter> {
         let current = current(&self.buffer, &mut self.errors)?;
-        if target != GL_RENDERBUFFER || pname != GL_SAMPLES {
+        // OpenGL ES 3.0 Table 3.13 also counts unsized RGB and RGBA as
+        // color-renderable, though no renderbuffer takes them (deqp queries them).
+        let known = self.renderbuffer_format_allowed(format) || matches!(format, GL_RGB | GL_RGBA);
+        if target != GL_RENDERBUFFER || pname != GL_SAMPLES || !known {
             self.errors.synthesize(GL_INVALID_ENUM);
             return None;
         }

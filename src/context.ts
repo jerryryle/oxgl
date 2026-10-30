@@ -45,6 +45,7 @@ import {
   toUnsignedLongLong,
 } from './webidl.js';
 import { WEBGL1_CONSTANTS, WEBGL2_CONSTANTS } from './generated/webgl-constants.js';
+import { createExtension, type ExtensionMap } from './extensions.js';
 
 /** Backend for `createContext`; `OXGL_BACKEND` overrides it. */
 export type ContextBackend = 'auto' | 'gpu' | 'software';
@@ -127,7 +128,7 @@ function parameterValue(result: NativeParameter | null): unknown {
  * bound object is never collected and object-valued queries return the
  * object that was bound.
  */
-interface ContextState {
+export interface ContextState {
   readonly index: number;
   readonly version: number;
   readonly webgl2: boolean;
@@ -158,7 +159,10 @@ interface ContextState {
   renderbuffer: WebGLRenderbuffer | null;
   /** The default vertex array's state. */
   readonly defaultVao: VertexArrayState;
-  vertexArray: WebGLVertexArrayObject | null;
+  /** The bound vertex array: a `WebGLVertexArrayObject`, or on WebGL 1 a `WebGLVertexArrayObjectOES`. */
+  vertexArray: WebGLObject | null;
+  /** Enabled extensions' objects by canonical name. */
+  readonly extensions: Map<string, object>;
   transformFeedback: WebGLTransformFeedback | null;
   /** The bound transform feedback's indexed buffer bindings. */
   tfBuffers: (WebGLBuffer | null)[];
@@ -395,7 +399,7 @@ function releaseCollectedObject(held: readonly [number, number, number, number])
 
 const collectedObjects = new FinalizationRegistry<readonly [number, number, number, number]>(releaseCollectedObject);
 
-type ObjectClass<T extends WebGLObject> = abstract new (token: symbol, state: ObjectState) => T;
+export type ObjectClass<T extends WebGLObject> = abstract new (token: symbol, state: ObjectState) => T;
 
 /** Creates a native object and its JS wrapper; on a lost context, an invalid wrapper. */
 function createObject<T extends WebGLObject>(
@@ -424,7 +428,7 @@ function typeError(method: string, position: number, type: string): TypeError {
  * belongs to another context (`INVALID_OPERATION`), or it is deleted
  * (`deletedError`, or a silent stop when 0). Returns `null` for `null`.
  */
-function checkObject(
+export function checkObject(
   s: ContextState,
   value: unknown,
   Class: ObjectClass<WebGLObject>,
@@ -451,8 +455,61 @@ function checkObject(
   return state;
 }
 
+/**
+ * checkObject for a program, except that a deleted program still counts while
+ * it is current (OpenGL ES 2.0 §2.10.3).
+ */
+function currentOrCheckProgram(
+  s: ContextState,
+  program: unknown,
+  method: string,
+  nullable: boolean,
+  deletedError: number,
+): ObjectState | null | undefined {
+  if (s.program !== null && program === s.program && !s.destroyed) return objectState(s.program);
+  return checkObject(s, program, WebGLProgram, method, 1, nullable, deletedError);
+}
+
+// Vertex array calls, shared by WebGL 2 and OES_vertex_array_object.
+
+/** `createVertexArray` with the version's class. */
+export function createVertexArrayIn<T extends WebGLObject>(
+  s: ContextState,
+  Class: new (token: symbol, state: ObjectState) => T,
+): T {
+  return createObject(s, Class, 7, 0, { element: null, attribs: [] }) as T;
+}
+
+/** `deleteVertexArray`; the default vertex array is bound if it was. */
+export function deleteVertexArrayIn(s: ContextState, vertexArray: unknown, Class: ObjectClass<WebGLObject>, method: string): void {
+  const state = checkObject(s, vertexArray, Class, method, 1, true, 0);
+  if (!state || vertexArray === null) return;
+  state.deleted = true;
+  collectedObjects.unregister(vertexArray as WebGLObject);
+  if (s.vertexArray === vertexArray) {
+    s.vertexArray = null;
+    s.vao = s.defaultVao;
+  }
+  native.deleteObject(s.index, s.version, ...keyOf(state));
+}
+
+/** `isVertexArray`: true once bound. */
+export function isVertexArrayIn(s: ContextState, vertexArray: unknown, Class: ObjectClass<WebGLObject>, method: string): boolean {
+  const state = checkObject(s, vertexArray, Class, method, 1, true, 0);
+  return !!state && native.hasObject(s.index, s.version, ...keyOf(state));
+}
+
+/** `bindVertexArray`. */
+export function bindVertexArrayIn(s: ContextState, vertexArray: unknown, Class: ObjectClass<WebGLObject>, method: string): void {
+  const state = checkObject(s, vertexArray, Class, method, 1, true, GL.INVALID_OPERATION);
+  if (state === undefined) return;
+  if (!native.bindVertexArray(s.index, s.version, ...keyOf(state))) return;
+  s.vertexArray = vertexArray as WebGLObject | null;
+  s.vao = state === null ? s.defaultVao : (state as unknown as VertexArrayState);
+}
+
 /** The native `[index, version]` of an object state, `[0, 0]` for `null`. */
-function keyOf(state: ObjectState | null): readonly [number, number] {
+export function keyOf(state: ObjectState | null): readonly [number, number] {
   return state?.key ?? NULL_KEY;
 }
 const NULL_KEY = [0, 0] as const;
@@ -507,7 +564,10 @@ function boundObject(s: ContextState, pname: number): WebGLObject | null | undef
     case GL.TEXTURE_BINDING_CUBE_MAP:
       return unitOf(s).get(GL.TEXTURE_CUBE_MAP) ?? null;
   }
-  if (!s.webgl2) return undefined;
+  if (!s.webgl2) {
+    // VERTEX_ARRAY_BINDING_OES has VERTEX_ARRAY_BINDING's value.
+    return pname === GL.VERTEX_ARRAY_BINDING && s.extensions.has('OES_vertex_array_object') ? s.vertexArray : undefined;
+  }
   switch (pname) {
     case GL.TEXTURE_BINDING_3D:
       return unitOf(s).get(GL.TEXTURE_3D) ?? null;
@@ -668,6 +728,7 @@ abstract class ContextBase {
       renderbuffer: null,
       defaultVao: { element: null, attribs: [] },
       vertexArray: null,
+      extensions: new Map(),
       transformFeedback: null,
       tfBuffers: [],
       defaultTfBuffers: [],
@@ -954,16 +1015,32 @@ abstract class ContextBase {
     return new WebGLShaderPrecisionFormat(CONSTRUCTING, format.rangeMin, format.rangeMax, format.precision);
   }
 
-  /** WebGL 1.0 §5.14.14: no extension is supported yet; `null` when lost. */
+  /** WebGL 1.0 §5.14.14; `null` when lost. */
   getSupportedExtensions(): string[] | null {
-    return this.#s.destroyed || this.isContextLost() ? null : [];
+    const s = this.#s;
+    return s.destroyed ? null : native.getSupportedExtensions(s.index, s.version);
   }
 
-  /** WebGL 1.0 §5.14.14: no extension is supported yet, so always `null`. */
-  getExtension(name: string): null {
+  /**
+   * WebGL 1.0 §5.14.14: enables the extension and returns its object, the
+   * same one on every call; `null` for an unknown or unsupported name, or
+   * when lost. Names match ASCII case-insensitively.
+   */
+  getExtension<K extends keyof ExtensionMap>(name: K): ExtensionMap[K] | null;
+  getExtension(name: string): object | null;
+  getExtension(name: string): object | null {
     requireArguments('getExtension', 1, arguments.length);
-    toDOMString(name);
-    return null;
+    const text = toDOMString(name);
+    const s = this.#s;
+    if (s.destroyed) return null;
+    const canonical = native.enableExtension(s.index, s.version, text);
+    if (canonical === null) return null;
+    let extension = s.extensions.get(canonical);
+    if (extension === undefined) {
+      extension = createExtension(canonical, s);
+      s.extensions.set(canonical, extension);
+    }
+    return extension;
   }
 
   /** WebGL 1.0 §5.14.13. */
@@ -1208,7 +1285,9 @@ abstract class ContextBase {
     if (!state || program === null) return;
     state.deleted = true;
     collectedObjects.unregister(program);
-    native.deleteObject(s.index, s.version, ...keyOf(state));
+    // GL deletes the current program once it is replaced (OpenGL ES 2.0
+    // §2.10.3); useProgram does that.
+    if (s.program !== program) native.deleteObject(s.index, s.version, ...keyOf(state));
   }
 
   /** WebGL 1.0 §5.14.9. */
@@ -1223,7 +1302,7 @@ abstract class ContextBase {
   isProgram(program: WebGLProgram | null): boolean {
     requireArguments('isProgram', 1, arguments.length);
     const s = this.#s;
-    const state = checkObject(s, program, WebGLProgram, 'isProgram', 1, true, 0);
+    const state = currentOrCheckProgram(s, program, 'isProgram', true, 0);
     return !!state && native.hasObject(s.index, s.version, ...keyOf(state));
   }
 
@@ -1333,7 +1412,12 @@ abstract class ContextBase {
     const s = this.#s;
     const p = checkObject(s, program, WebGLProgram, 'useProgram', 1, true, GL.INVALID_VALUE);
     if (p === undefined) return;
-    if (native.useProgram(s.index, s.version, ...keyOf(p))) s.program = program;
+    const previous = s.program;
+    if (!native.useProgram(s.index, s.version, ...keyOf(p))) return;
+    s.program = program;
+    if (previous !== null && previous !== program && objectState(previous).deleted) {
+      native.deleteObject(s.index, s.version, ...keyOf(objectState(previous)));
+    }
   }
 
   /** WebGL 1.0 §5.14.9. */
@@ -1341,8 +1425,9 @@ abstract class ContextBase {
     requireArguments('getProgramParameter', 2, arguments.length);
     const s = this.#s;
     const name = toUnsignedLong(pname);
-    const p = checkObject(s, program, WebGLProgram, 'getProgramParameter', 1, false, GL.INVALID_VALUE);
+    const p = currentOrCheckProgram(s, program, 'getProgramParameter', false, GL.INVALID_VALUE);
     if (!p) return null;
+    if (p.deleted && name === GL.DELETE_STATUS) return true;
     return parameterValue(native.getProgramParameter(s.index, s.version, ...keyOf(p), name));
   }
 
@@ -2238,41 +2323,25 @@ abstract class WebGL2Members extends ContextBase {
 
   /** WebGL 2.0 §3.7.17. */
   createVertexArray(): WebGLVertexArrayObject {
-    return createObject(contextState(this), WebGLVertexArrayObject, 7, 0, { element: null, attribs: [] }) as WebGLVertexArrayObject;
+    return createVertexArrayIn(contextState(this), WebGLVertexArrayObject);
   }
 
   /** WebGL 2.0 §3.7.17; the default vertex array is bound if it was. */
   deleteVertexArray(vertexArray: WebGLVertexArrayObject | null): void {
     requireArguments('deleteVertexArray', 1, arguments.length);
-    const s = contextState(this);
-    const state = checkObject(s, vertexArray, WebGLVertexArrayObject, 'deleteVertexArray', 1, true, 0);
-    if (!state || vertexArray === null) return;
-    state.deleted = true;
-    collectedObjects.unregister(vertexArray);
-    if (s.vertexArray === vertexArray) {
-      s.vertexArray = null;
-      s.vao = s.defaultVao;
-    }
-    native.deleteObject(s.index, s.version, ...keyOf(state));
+    deleteVertexArrayIn(contextState(this), vertexArray, WebGLVertexArrayObject, 'deleteVertexArray');
   }
 
   /** WebGL 2.0 §3.7.17: true once bound. */
   isVertexArray(vertexArray: WebGLVertexArrayObject | null): boolean {
     requireArguments('isVertexArray', 1, arguments.length);
-    const s = contextState(this);
-    const state = checkObject(s, vertexArray, WebGLVertexArrayObject, 'isVertexArray', 1, true, 0);
-    return !!state && native.hasObject(s.index, s.version, ...keyOf(state));
+    return isVertexArrayIn(contextState(this), vertexArray, WebGLVertexArrayObject, 'isVertexArray');
   }
 
   /** WebGL 2.0 §3.7.17. */
   bindVertexArray(vertexArray: WebGLVertexArrayObject | null): void {
     requireArguments('bindVertexArray', 1, arguments.length);
-    const s = contextState(this);
-    const state = checkObject(s, vertexArray, WebGLVertexArrayObject, 'bindVertexArray', 1, true, GL.INVALID_OPERATION);
-    if (state === undefined) return;
-    if (!native.bindVertexArray(s.index, s.version, ...keyOf(state))) return;
-    s.vertexArray = vertexArray;
-    s.vao = state === null ? s.defaultVao : (state as unknown as VertexArrayState);
+    bindVertexArrayIn(contextState(this), vertexArray, WebGLVertexArrayObject, 'bindVertexArray');
   }
 
   /** WebGL 2.0 §3.7.9. */
@@ -2568,10 +2637,8 @@ abstract class WebGL2Members extends ContextBase {
     }
     const ready = turn > state.turn;
     if (p === GL.QUERY_RESULT_AVAILABLE && !ready) return false;
-    if (p === GL.QUERY_RESULT && !ready) return state.target === GL.TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN ? 0 : false;
-    const value = parameterValue(native.getQueryParameter(s.index, s.version, ...keyOf(state), p));
-    if (p === GL.QUERY_RESULT && state.target !== GL.TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN) return value !== 0 && value !== null;
-    return value;
+    if (p === GL.QUERY_RESULT && !ready) return 0;
+    return parameterValue(native.getQueryParameter(s.index, s.version, ...keyOf(state), p));
   }
 
   // --- Sync objects (WebGL 2.0 §3.7.14) ----------------------------------

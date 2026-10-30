@@ -22,12 +22,15 @@ export {
   WebGLSync,
   WebGLTransformFeedback,
   WebGLVertexArrayObject,
+  WebGLVertexArrayObjectOES,
   WebGLSampler,
   WebGLShader,
   WebGLShaderPrecisionFormat,
   WebGLTexture,
   WebGLUniformLocation,
 } from './objects.js';
+
+export type { ExtensionMap } from './extensions.js';
 
 /** Version of the JS ↔ native interface reported by the loaded addon. */
 export const nativeAbiVersion: number = native.nativeAbiVersion();

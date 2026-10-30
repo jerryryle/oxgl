@@ -326,6 +326,31 @@ impl Context {
     /// `getTexParameter`, with the JS type of WebGL 2.0 §3.7.6's table.
     pub fn get_tex_parameter(&mut self, target: u32, pname: u32) -> Option<Parameter> {
         let current = current(&self.buffer, &mut self.errors)?;
+        // ANGLE also answers pnames of GL extensions enabled for oxgl's own
+        // use, such as REQUIRED_TEXTURE_IMAGE_UNITS_OES.
+        let known = match pname {
+            GL_TEXTURE_MAG_FILTER
+            | GL_TEXTURE_MIN_FILTER
+            | GL_TEXTURE_WRAP_S
+            | GL_TEXTURE_WRAP_T => true,
+            GL_TEXTURE_BASE_LEVEL
+            | GL_TEXTURE_COMPARE_FUNC
+            | GL_TEXTURE_COMPARE_MODE
+            | GL_TEXTURE_IMMUTABLE_FORMAT
+            | GL_TEXTURE_IMMUTABLE_LEVELS
+            | GL_TEXTURE_MAX_LEVEL
+            | GL_TEXTURE_MAX_LOD
+            | GL_TEXTURE_MIN_LOD
+            | GL_TEXTURE_WRAP_R => self.webgl2,
+            GL_TEXTURE_MAX_ANISOTROPY_EXT => {
+                self.extensions.is_enabled("EXT_texture_filter_anisotropic")
+            }
+            _ => false,
+        };
+        if !known {
+            self.errors.synthesize(GL_INVALID_ENUM);
+            return None;
+        }
         let float = matches!(
             pname,
             GL_TEXTURE_MIN_LOD | GL_TEXTURE_MAX_LOD | GL_TEXTURE_MAX_ANISOTROPY_EXT

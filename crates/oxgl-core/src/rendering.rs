@@ -312,6 +312,13 @@ impl Context {
                 name: current.gen_renderbuffer(),
                 depth_stencil: false,
             },
+            ObjectType::VertexArray
+                if !self.webgl2 && self.extensions.is_enabled("OES_vertex_array_object") =>
+            {
+                Object::VertexArray {
+                    name: current.gen_vertex_array_oes(),
+                }
+            }
             ObjectType::VertexArray | ObjectType::TransformFeedback | ObjectType::Query
                 if !self.webgl2 =>
             {
@@ -368,6 +375,7 @@ impl Context {
                 }
                 current.delete_renderbuffer(name);
             }
+            Object::VertexArray { name } if !self.webgl2 => current.delete_vertex_array_oes(name),
             Object::VertexArray { name } => current.delete_vertex_array(name),
             Object::TransformFeedback { name } => current.delete_transform_feedback(name),
             Object::Query { name } => current.delete_query(name),
@@ -405,11 +413,15 @@ impl Context {
                 .context()
                 .make_current()
                 .is_ok_and(|current| current.is_renderbuffer(*name) != 0),
-            Some(Object::VertexArray { name }) => self
-                .buffer
-                .context()
-                .make_current()
-                .is_ok_and(|current| current.is_vertex_array(*name) != 0),
+            Some(Object::VertexArray { name }) => {
+                self.buffer.context().make_current().is_ok_and(|current| {
+                    if self.webgl2 {
+                        current.is_vertex_array(*name) != 0
+                    } else {
+                        current.is_vertex_array_oes(*name) != 0
+                    }
+                })
+            }
             Some(Object::TransformFeedback { name }) => self
                 .buffer
                 .context()
@@ -604,6 +616,13 @@ impl Context {
             GL_DELETE_STATUS | GL_COMPILE_STATUS => current
                 .shader_parameter(name, pname)
                 .map(|v| Scalar::Bool(v != 0)),
+            // Compiling and linking finish within the call, so oxgl
+            // emulates KHR_parallel_shader_compile, as Chromium does.
+            GL_COMPLETION_STATUS_KHR
+                if self.extensions.is_enabled("KHR_parallel_shader_compile") =>
+            {
+                Some(Scalar::Bool(true))
+            }
             _ => {
                 self.errors.synthesize(GL_INVALID_ENUM);
                 None
@@ -681,6 +700,13 @@ impl Context {
             GL_DELETE_STATUS | GL_LINK_STATUS | GL_VALIDATE_STATUS => current
                 .program_parameter(name, pname)
                 .map(|v| Scalar::Bool(v != 0)),
+            // Compiling and linking finish within the call, so oxgl
+            // emulates KHR_parallel_shader_compile, as Chromium does.
+            GL_COMPLETION_STATUS_KHR
+                if self.extensions.is_enabled("KHR_parallel_shader_compile") =>
+            {
+                Some(Scalar::Bool(true))
+            }
             GL_ATTACHED_SHADERS | GL_ACTIVE_ATTRIBUTES | GL_ACTIVE_UNIFORMS => {
                 current.program_parameter(name, pname).map(Scalar::Int)
             }
@@ -1042,6 +1068,7 @@ impl Context {
     ) -> Option<Parameter> {
         let current = current(&self.buffer, &mut self.errors)?;
         let webgl2 = self.webgl2;
+        let instanced = self.extensions.is_enabled("ANGLE_instanced_arrays");
         let read = |query| -> Option<Quad> {
             let quad = current.vertex_attrib(index, pname, query);
             (quad.len > 0).then_some(quad)
@@ -1072,9 +1099,9 @@ impl Context {
             | GL_VERTEX_ATTRIB_ARRAY_TYPE => Some(Parameter::Number(f64::from(
                 read(AttribQuery::Int)?.bits[0].cast_signed(),
             ))),
-            GL_VERTEX_ATTRIB_ARRAY_DIVISOR if webgl2 => Some(Parameter::Number(f64::from(
-                read(AttribQuery::Int)?.bits[0].cast_signed(),
-            ))),
+            GL_VERTEX_ATTRIB_ARRAY_DIVISOR if webgl2 || instanced => Some(Parameter::Number(
+                f64::from(read(AttribQuery::Int)?.bits[0].cast_signed()),
+            )),
             _ => {
                 self.errors.synthesize(GL_INVALID_ENUM);
                 None

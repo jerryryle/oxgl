@@ -72,10 +72,14 @@ test('deleted program still in use', () => {
   quad(gl, p);
   color(gl, p, [0, 0, 1, 1]);
   gl.deleteProgram(p);
-  assert.equal(gl.isProgram(p), false);
+  // GL deletes it once it is no longer current (deqp lifetime.delete_used).
+  assert.equal(gl.isProgram(p), true);
+  assert.equal(gl.getProgramParameter(p, gl.DELETE_STATUS), true);
   assert.equal(gl.getParameter(gl.CURRENT_PROGRAM), p);
   gl.drawArrays(gl.TRIANGLES, 0, 6);
   assert.ok(allPixels(readAll(gl), [0, 0, 255, 255]));
+  gl.useProgram(null);
+  assert.equal(gl.isProgram(p), false);
   assert.equal(gl.getError(), gl.NO_ERROR);
   gl.destroy();
 });

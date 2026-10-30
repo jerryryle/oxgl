@@ -60,9 +60,28 @@ name_calls! {
     gen_transform_feedback = glGenTransformFeedbacks,
         delete_transform_feedback = glDeleteTransformFeedbacks;
     gen_query = glGenQueries, delete_query = glDeleteQueries;
+    gen_vertex_array_oes = glGenVertexArraysOES, delete_vertex_array_oes = glDeleteVertexArraysOES;
 }
 
 value_calls! {
+    bind_vertex_array_oes = glBindVertexArrayOES(array: GLuint);
+    is_vertex_array_oes = glIsVertexArrayOES(array: GLuint) -> u8;
+    draw_arrays_instanced_angle = glDrawArraysInstancedANGLE(
+        mode: GLenum, first: GLint, count: GLsizei, instances: GLsizei);
+    vertex_attrib_divisor_angle = glVertexAttribDivisorANGLE(index: GLuint, divisor: GLuint);
+    enablei = glEnableiOES(target: GLenum, index: GLuint);
+    disablei = glDisableiOES(target: GLenum, index: GLuint);
+    blend_equationi = glBlendEquationiOES(buf: GLuint, mode: GLenum);
+    blend_equation_separatei = glBlendEquationSeparateiOES(buf: GLuint, rgb: GLenum, alpha: GLenum);
+    blend_funci = glBlendFunciOES(buf: GLuint, src: GLenum, dst: GLenum);
+    blend_func_separatei = glBlendFuncSeparateiOES(
+        buf: GLuint, src_rgb: GLenum, dst_rgb: GLenum, src_alpha: GLenum, dst_alpha: GLenum);
+    color_maski = glColorMaskiOES(buf: GLuint, r: u8, g: u8, b: u8, a: u8);
+    clip_control = glClipControlEXT(origin: GLenum, depth: GLenum);
+    polygon_offset_clamp = glPolygonOffsetClampEXT(factor: f32, units: f32, clamp: f32);
+    provoking_vertex = glProvokingVertexANGLE(mode: GLenum);
+    polygon_mode = glPolygonModeANGLE(face: GLenum, mode: GLenum);
+    max_shader_compiler_threads = glMaxShaderCompilerThreadsKHR(count: GLuint);
     bind_vertex_array = glBindVertexArray(array: GLuint);
     is_vertex_array = glIsVertexArray(array: GLuint) -> u8;
     draw_arrays_instanced = glDrawArraysInstanced(

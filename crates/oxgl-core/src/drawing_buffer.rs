@@ -308,7 +308,12 @@ impl DrawingBuffer {
     /// query (design: "getParameter describes the default framebuffer"):
     /// `Some(Ok(value))` for a value oxgl answers, `Some(Err(code))` for an
     /// error to synthesize, `None` when ANGLE answers.
-    pub(crate) fn parameter(&self, current: &Current<'_>, pname: u32) -> Option<Result<i32, u32>> {
+    pub(crate) fn parameter(
+        &self,
+        current: &Current<'_>,
+        pname: u32,
+        draw_buffers: bool,
+    ) -> Option<Result<i32, u32>> {
         use oxgl_sys::bindings::{
             GL_DRAW_BUFFER0, GL_IMPLEMENTATION_COLOR_READ_FORMAT,
             GL_IMPLEMENTATION_COLOR_READ_TYPE, GL_INVALID_ENUM, GL_READ_BUFFER,
@@ -333,12 +338,17 @@ impl DrawingBuffer {
             GL_READ_BUFFER if self.webgl2 && bound(GL_READ_FRAMEBUFFER_BINDING) => {
                 enum_value(self.read_buffer.get())
             }
-            GL_DRAW_BUFFER0 if self.webgl2 && bound(GL_DRAW_FRAMEBUFFER_BINDING) => {
+            GL_DRAW_BUFFER0 if draw_buffers && bound(GL_DRAW_FRAMEBUFFER_BINDING) => {
                 enum_value(self.draw_buffer.get())
             }
-            _ if self.webgl2 && pname > GL_DRAW_BUFFER0 && pname <= GL_DRAW_BUFFER0 + 15 => {
+            _ if draw_buffers && pname > GL_DRAW_BUFFER0 && pname <= GL_DRAW_BUFFER0 + 15 => {
                 let index = i64::from(pname - GL_DRAW_BUFFER0);
-                if index >= i64::from(self.limits.max_draw_buffers) {
+                let max = if self.webgl2 {
+                    self.limits.max_draw_buffers
+                } else {
+                    integers(current, GL_MAX_DRAW_BUFFERS).map_or(1, |[n, _]| n)
+                };
+                if index >= i64::from(max) {
                     // ANGLE reports INVALID_OPERATION here; WebGL 2.0
                     // §3.7.2 lists an unknown pname as INVALID_ENUM.
                     Some(Err(GL_INVALID_ENUM))
@@ -908,18 +918,28 @@ mod tests {
                     let current = buffer.context().make_current().unwrap();
                     let as_int = |v: u32| Some(Ok(i32::try_from(v).unwrap()));
                     let read_format =
-                        buffer.parameter(&current, GL_IMPLEMENTATION_COLOR_READ_FORMAT);
-                    let read_type = buffer.parameter(&current, GL_IMPLEMENTATION_COLOR_READ_TYPE);
+                        buffer.parameter(&current, GL_IMPLEMENTATION_COLOR_READ_FORMAT, true);
+                    let read_type =
+                        buffer.parameter(&current, GL_IMPLEMENTATION_COLOR_READ_TYPE, true);
                     // Antialiased: answered from the resolve buffer; else ANGLE answers.
                     assert_eq!(read_format.is_some(), antialias);
                     assert_eq!(read_type.is_some(), antialias);
                     assert_eq!(current.get_error(), GL_NO_ERROR);
-                    assert_eq!(buffer.parameter(&current, GL_DRAW_BUFFER0), as_int(GL_BACK));
-                    assert_eq!(buffer.parameter(&current, GL_READ_BUFFER), as_int(GL_BACK));
-                    assert_eq!(buffer.parameter(&current, GL_DRAW_BUFFER1), as_int(GL_NONE));
+                    assert_eq!(
+                        buffer.parameter(&current, GL_DRAW_BUFFER0, true),
+                        as_int(GL_BACK)
+                    );
+                    assert_eq!(
+                        buffer.parameter(&current, GL_READ_BUFFER, true),
+                        as_int(GL_BACK)
+                    );
+                    assert_eq!(
+                        buffer.parameter(&current, GL_DRAW_BUFFER1, true),
+                        as_int(GL_NONE)
+                    );
                     let max = u32::try_from(buffer.limits().max_draw_buffers).unwrap();
                     assert_eq!(
-                        buffer.parameter(&current, GL_DRAW_BUFFER0 + max),
+                        buffer.parameter(&current, GL_DRAW_BUFFER0 + max, true),
                         Some(Err(GL_INVALID_ENUM))
                     );
                     assert_eq!(buffer.attributes().antialias, antialias);

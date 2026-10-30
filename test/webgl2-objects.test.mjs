@@ -181,7 +181,7 @@ test('query result after a turn', async () => {
     available = gl.getQueryParameter(query, gl.QUERY_RESULT_AVAILABLE);
   }
   assert.equal(available, true);
-  assert.equal(gl.getQueryParameter(query, gl.QUERY_RESULT), true);
+  assert.equal(gl.getQueryParameter(query, gl.QUERY_RESULT), 1);
   assert.equal(gl.getError(), gl.NO_ERROR);
   gl.destroy();
 });

@@ -49,6 +49,130 @@ impl Current<'_> {
         };
     }
 
+    /// `glDrawElementsInstancedANGLE` (ES 2.0) with a buffer offset.
+    pub fn draw_elements_instanced_angle(
+        &self,
+        mode: GLenum,
+        count: GLsizei,
+        ty: GLenum,
+        offset: i64,
+        instances: GLsizei,
+    ) {
+        // SAFETY: as for `draw_elements_instanced`.
+        unsafe {
+            (self.fns().glDrawElementsInstancedANGLE)(
+                mode,
+                count,
+                ty,
+                offset as *const c_void,
+                instances,
+            );
+        };
+    }
+
+    /// `glDrawBuffersEXT` (ES 2.0, `GL_EXT_draw_buffers`).
+    pub fn draw_buffers_ext(&self, buffers: &[GLenum]) {
+        let Some(n) = len(buffers.len()) else { return };
+        // SAFETY: a context is current; the GL reads `n` enums, the slice's
+        // length.
+        unsafe { (self.fns().glDrawBuffersEXT)(n, buffers.as_ptr()) };
+    }
+
+    /// `glMultiDrawArrays[Instanced]ANGLE` over equal-length slices
+    /// (`instances` empty for the non-instanced form).
+    pub fn multi_draw_arrays(
+        &self,
+        mode: GLenum,
+        firsts: &[GLint],
+        counts: &[GLsizei],
+        instances: &[GLsizei],
+    ) {
+        if firsts.len() != counts.len()
+            || !(instances.is_empty() || instances.len() == counts.len())
+        {
+            return;
+        }
+        let Some(n) = len(counts.len()) else { return };
+        let gl = self.fns();
+        if instances.is_empty() {
+            // SAFETY: a context is current; the GL reads `n` values from each
+            // slice, all of length `n` (checked above).
+            unsafe { (gl.glMultiDrawArraysANGLE)(mode, firsts.as_ptr(), counts.as_ptr(), n) };
+        } else {
+            // SAFETY: as above, for three slices of length `n`.
+            unsafe {
+                (gl.glMultiDrawArraysInstancedANGLE)(
+                    mode,
+                    firsts.as_ptr(),
+                    counts.as_ptr(),
+                    instances.as_ptr(),
+                    n,
+                );
+            };
+        }
+    }
+
+    /// `glMultiDrawElements[Instanced]ANGLE` over equal-length slices of
+    /// counts and buffer offsets (`instances` empty for the non-instanced
+    /// form). Client arrays are disabled, so offsets index the bound
+    /// element array buffer and are never dereferenced as memory.
+    pub fn multi_draw_elements(
+        &self,
+        mode: GLenum,
+        counts: &[GLsizei],
+        ty: GLenum,
+        offsets: &[i64],
+        instances: &[GLsizei],
+    ) {
+        if offsets.len() != counts.len()
+            || !(instances.is_empty() || instances.len() == counts.len())
+        {
+            return;
+        }
+        let Some(n) = len(counts.len()) else { return };
+        let pointers: Vec<*const c_void> = offsets.iter().map(|&o| o as *const c_void).collect();
+        let gl = self.fns();
+        if instances.is_empty() {
+            // SAFETY: a context is current; the GL reads `n` counts and `n`
+            // offset pointers (never dereferenced, see above).
+            unsafe {
+                (gl.glMultiDrawElementsANGLE)(mode, counts.as_ptr(), ty, pointers.as_ptr(), n);
+            };
+        } else {
+            // SAFETY: as above, plus `n` instance counts.
+            unsafe {
+                (gl.glMultiDrawElementsInstancedANGLE)(
+                    mode,
+                    counts.as_ptr(),
+                    ty,
+                    pointers.as_ptr(),
+                    instances.as_ptr(),
+                    n,
+                );
+            };
+        }
+    }
+
+    /// `glGetTranslatedShaderSourceANGLE`, with a buffer sized from
+    /// `TRANSLATED_SHADER_SOURCE_LENGTH_ANGLE`.
+    #[must_use]
+    pub fn translated_shader_source(&self, shader: GLuint, max_length: usize) -> String {
+        let mut buffer = vec![0u8; max_length.max(1)];
+        let size = len(buffer.len()).unwrap_or(GLsizei::MAX);
+        let mut length = 0;
+        // SAFETY: a context is current; at most `size` bytes into `buffer`
+        // and one GLsizei.
+        unsafe {
+            (self.fns().glGetTranslatedShaderSourceANGLE)(
+                shader,
+                size,
+                &raw mut length,
+                buffer.as_mut_ptr().cast(),
+            );
+        };
+        text(&buffer, length)
+    }
+
     /// `glGetInteger64i_vRobustANGLE` for one value.
     #[must_use]
     pub fn integer64_indexed(&self, target: GLenum, index: GLuint) -> Option<GLint64> {
