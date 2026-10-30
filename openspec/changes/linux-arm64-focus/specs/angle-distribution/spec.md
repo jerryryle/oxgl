@@ -3,11 +3,15 @@
 ## MODIFIED Requirements
 
 ### Requirement: ANGLE revision is pinned in the repository
-The repository SHALL record a single pinned ANGLE source revision (commit hash and the Chromium release branch it was taken from), the build configuration for each supported platform, and the SHA-256 digest of each platform's ANGLE bundle. Changing any of these SHALL be a reviewable change to tracked files.
+The ANGLE build recipe SHALL live in its own repository (the recipe repository, `jerryryle/oxgl-angle`), separate from oxgl's. The recipe repository SHALL record a single pinned ANGLE source revision (commit hash and the Chromium release branch it was taken from), the bundle version, and the build configuration for each supported platform. oxgl's repository SHALL record, in its bundle manifest, the bundle version it uses and the URL and SHA-256 digest of each platform's bundle, with every URL pointing at that version's release in the recipe repository. Changing either SHALL be a reviewable change to tracked files in its repository.
 
 #### Scenario: Pin is inspectable
-- **WHEN** a reviewer reads the recipe pin and the bundle manifest
-- **THEN** the pin names the ANGLE commit and the Chromium branch, and the manifest names one bundle URL and SHA-256 digest for each of Linux x64, Linux arm64, macOS arm64, Windows x64, and Windows arm64
+- **WHEN** a reviewer reads the recipe repository's pin and oxgl's bundle manifest
+- **THEN** the pin names the ANGLE commit, the Chromium branch and the bundle version, and the manifest names that bundle version with one bundle URL and SHA-256 digest for each of Linux x64, Linux arm64, macOS arm64, Windows x64, and Windows arm64
+
+#### Scenario: Manifest URL outside the named release
+- **WHEN** a bundle URL in oxgl's bundle manifest does not point at the recipe repository's release for the manifest's bundle version
+- **THEN** oxgl's repository checks fail and name the platform and URL
 
 ### Requirement: Backends enabled per platform
 Every bundle SHALL include SwiftShader (via ANGLE's Vulkan backend). The Linux bundles (x64 and arm64) SHALL also enable ANGLE's Vulkan backend for hardware devices, the macOS bundle its Metal backend, and the Windows bundles (x64 and arm64) their D3D11 backend.

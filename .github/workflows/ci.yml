@@ -1,7 +1,8 @@
 # The checks every change must pass (openspec continuous-integration spec).
 # Branch protection requires only the aggregate `ci` job, so jobs can be added
-# or renamed without touching repository settings. CONTRIBUTING.md explains
-# how to reproduce each job locally.
+# or renamed without touching repository settings. The jobs that build or test
+# oxgl are skipped for changes that cannot affect them (see `changes`).
+# CONTRIBUTING.md explains how to reproduce each job locally.
 name: ci
 
 on:
@@ -32,6 +33,47 @@ env:
   ZIZMOR_VERSION: "1.31.1"
 
 jobs:
+  # Whether the jobs that build or test oxgl (check, node-range, asan,
+  # conformance, gpu) are needed. heavy is false only when every changed file
+  # is on the skip list below. The list may name only files that no build,
+  # lint or test step reads; anything else, including a new path, runs every
+  # job. When the changed files can't be determined (a new branch, or the
+  # diff fails), heavy is true.
+  changes:
+    runs-on: ubuntu-24.04
+    outputs:
+      heavy: ${{ steps.match.outputs.heavy }}
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+      - id: match
+        env:
+          EVENT: ${{ github.event_name }}
+          BASE: ${{ github.event.pull_request.base.sha }}
+          HEAD: ${{ github.event.pull_request.head.sha }}
+          BEFORE: ${{ github.event.before }}
+          SHA: ${{ github.sha }}
+        run: |
+          heavy=true range=
+          case "$EVENT" in
+            pull_request) range="$BASE...$HEAD" ;;
+            push) [[ "$BEFORE" =~ ^0+$ ]] || range="$BEFORE..$SHA" ;;
+          esac
+          # --no-renames lists both sides of a rename, so moving a file onto
+          # the skip list still counts the path it left.
+          if [ -n "$range" ] && files="$(git diff --no-renames --name-only "$range")" && [ -n "$files" ]; then
+            heavy=false
+            while IFS= read -r f; do
+              case "$f" in
+                *.md|openspec/*|.claude/*|LICENSE|.editorconfig|.github/dependabot.yml|.github/zizmor.yml|.github/actionlint.yaml) ;;
+                *) heavy=true; break ;;
+              esac
+            done <<< "$files"
+          fi
+          echo "heavy=$heavy" | tee -a "$GITHUB_OUTPUT"
+
   workflow-lint:
     runs-on: ubuntu-24.04
     steps:
@@ -53,6 +95,8 @@ jobs:
         run: zizmor --config .github/zizmor.yml .github/workflows
 
   check:
+    needs: changes
+    if: needs.changes.outputs.heavy == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -138,6 +182,8 @@ jobs:
   # version, so Linux alone covers it. The build tooling needs a newer Node
   # than the engines floor, so build on 24 and test on each version.
   node-range:
+    needs: changes
+    if: needs.changes.outputs.heavy == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -184,6 +230,8 @@ jobs:
   # Rust test suites under AddressSanitizer + LeakSanitizer. ANGLE is the
   # normal stripped bundle; see design.md for why suppressions start empty.
   asan:
+    needs: changes
+    if: needs.changes.outputs.heavy == 'true'
     runs-on: ubuntu-24.04-arm
     # PLATFORM-FOCUS: re-enable
     # runs-on: ubuntu-24.04
@@ -243,7 +291,8 @@ jobs:
   # Extension point: GPU coverage on a self-hosted runner, enabled by setting
   # the OXGL_GPU_RUNNER repository variable to 'true'. Not required by `ci`.
   gpu:
-    if: vars.OXGL_GPU_RUNNER == 'true'
+    needs: changes
+    if: vars.OXGL_GPU_RUNNER == 'true' && needs.changes.outputs.heavy == 'true'
     runs-on: [self-hosted, oxgl-gpu]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -254,11 +303,12 @@ jobs:
       - run: npm run build
       - run: npm test
 
-  # The one check branch protection requires.
   # Both Khronos conformance suites, judged against
   # conformance/expectations.txt (openspec conformance-testing). The suites
   # run in parallel; each uploads its report whether it passes or fails.
   conformance:
+    needs: changes
+    if: needs.changes.outputs.heavy == 'true'
     strategy:
       fail-fast: false
       matrix:
@@ -307,12 +357,21 @@ jobs:
           name: conformance-results-${{ matrix.suite }}
           path: conformance-results.json
 
+  # The one check branch protection requires. The jobs that build or test oxgl
+  # may be skipped only when `changes` found them unneeded; any other skip (an
+  # upstream failure, a broken `if:`) fails the check.
   ci:
     if: always()
-    needs: [workflow-lint, check, repo-checks, node-range, asan, conformance]
+    needs: [changes, workflow-lint, check, repo-checks, node-range, asan, conformance]
     runs-on: ubuntu-24.04
     steps:
-      - name: Require every job to succeed
+      - name: Require every needed job to succeed
         env:
           RESULTS: ${{ toJSON(needs) }}
-        run: echo "$RESULTS" | jq -e 'all(.[]; .result == "success")'
+        run: |
+          echo "$RESULTS" | jq -e '
+            (.changes.outputs.heavy == "false") as $skippable
+            | all(to_entries[];
+                .value.result == "success"
+                or (.value.result == "skipped" and $skippable
+                    and (.key | IN("check", "node-range", "asan", "conformance"))))'

@@ -83,10 +83,8 @@ fn run() -> Result<()> {
     println!("cargo::rerun-if-env-changed=OXGL_ANGLE_SYMBOLS");
     let manifest_dir = PathBuf::from(var("CARGO_MANIFEST_DIR")?);
     let angle_dir = manifest_dir.join("../../angle");
-    let pin_path = angle_dir.join("pin.toml");
     let bundles_path = angle_dir.join("bundles.toml");
     let deny_path = manifest_dir.join("../../deny.toml");
-    println!("cargo::rerun-if-changed={}", pin_path.display());
     println!("cargo::rerun-if-changed={}", bundles_path.display());
     println!("cargo::rerun-if-changed={}", deny_path.display());
 
@@ -114,19 +112,10 @@ fn run() -> Result<()> {
         dir
     } else {
         let bundles = read_toml(&bundles_path)?;
-        let pin = read_toml(&pin_path)?;
-        let pinned = version(&pin);
-        if pinned != version(&bundles) {
-            println!(
-                "cargo::warning=angle/pin.toml is at {pinned} but angle/bundles.toml pins {} \
-                 bundles; building against the pinned bundles",
-                version(&bundles)
-            );
-        }
         let (url, sha256) = pinned_archive(&bundles, platform.key, "").ok_or_else(|| {
             format!(
-                "no published ANGLE bundle is pinned for {}; build one with angle/build.sh \
-                 and set OXGL_ANGLE_DIR to the extracted bundle",
+                "no published ANGLE bundle is pinned for {}; build one with the \
+                 jerryryle/oxgl-angle recipe and set OXGL_ANGLE_DIR to the extracted bundle",
                 platform.key
             )
         })?;
@@ -225,13 +214,6 @@ fn read_toml(path: &Path) -> Result<toml::Table> {
         fs::read_to_string(path).map_err(|e| format!("cannot read {}: {e}", path.display()))?;
     text.parse()
         .map_err(|e| format!("cannot parse {}: {e}", path.display()))
-}
-
-fn version(table: &toml::Table) -> &str {
-    table
-        .get("bundle_version")
-        .and_then(toml::Value::as_str)
-        .unwrap_or("no bundle_version")
 }
 
 /// The `{prefix}url` and `{prefix}sha256` of `[platform.<key>]`, if both are set.
@@ -395,7 +377,7 @@ fn check_licenses(bundle: &Path, deny_path: &Path) -> Result<()> {
         let (Some(path), Some(license)) = (path, license) else {
             return Err(format!("{} has a malformed component", info_path.display()));
         };
-        // Same split as angle/scripts/bundle.py's license_parts (commas, and AND
+        // Same split as oxgl-angle's angle/scripts/bundle.py license_parts (commas, and AND
         // with any surrounding whitespace); whitespace runs are collapsed first
         // so `MIT  AND  BSD-3-Clause` splits as it does there.
         let normalized = license.split_whitespace().collect::<Vec<_>>().join(" ");
