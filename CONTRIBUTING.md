@@ -29,7 +29,17 @@ Branch protection on `main` should require the single `ci` check (Settings →
 Branches → branch protection rule for `main` → Require status checks → `ci`).
 Jobs can then be added or renamed without changing that setting.
 
-ANGLE is never built here: every job uses the pinned bundle from
+`workflow-lint` and `repo-checks` run on every change. The jobs that build or
+test oxgl (`check`, `node-range`, `asan`, `conformance`, `gpu`) are skipped
+when every changed file is on the skip list in `ci.yml`'s `changes` job:
+Markdown, `openspec/`, `.claude/`, `LICENSE`, `.editorconfig` and the
+workflow linters' config. `ci` passes those skips and fails any other. Add a
+path to the list only if no build, lint or test step reads it; anything not
+listed, including a new directory, runs every job.
+
+ANGLE is never built here: its recipe and bundle releases live in
+[jerryryle/oxgl-angle](https://github.com/jerryryle/oxgl-angle) (see
+`angle/README.md`). Every job uses the pinned bundle from
 `angle/bundles.toml`, cached by the manifest's hash. `oxgl-sys/build.rs`
 verifies the digest when it downloads the bundle; a restored cache entry is
 used as-is.
