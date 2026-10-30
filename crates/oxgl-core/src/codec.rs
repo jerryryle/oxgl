@@ -699,6 +699,21 @@ mod tests {
         assert_eq!(rows.start, 40 + 8);
         assert_eq!(rows.required(), Some(48 + 80 + 16));
         assert_eq!(unpack.rows(usize::MAX, 2, 4), None);
+        // Rows shorter than the skipped and selected pixels overlap.
+        let short = Unpack {
+            alignment: 1,
+            row_length: 4,
+            skip_pixels: 1,
+            skip_rows: 0,
+        };
+        assert_eq!(short.rows(4, 1, 4), None);
+        let skipped_only = Unpack {
+            alignment: 1,
+            row_length: 0,
+            skip_pixels: 1,
+            skip_rows: 0,
+        };
+        assert_eq!(skipped_only.rows(4, 1, 4), None);
     }
 
     #[test]

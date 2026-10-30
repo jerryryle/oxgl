@@ -298,14 +298,16 @@ function installShim(window, state) {
       });
     };
   }
-  // jsdom does no layout, so an element's client size is 0; an unstyled
-  // canvas's is its width and height, which pages read as the CSS size.
+  // jsdom does no layout, so an element's client size is 0. A canvas's is
+  // its inline CSS size in pixels when it has one, else its width and
+  // height, which is what an unstyled canvas shows.
   for (const [client, size] of [['clientWidth', 'width'], ['clientHeight', 'height']]) {
     Object.defineProperty(window.HTMLCanvasElement.prototype, client, {
       configurable: true,
       enumerable: true,
       get() {
-        return this[size];
+        const css = /^(\d+(?:\.\d+)?)px$/.exec(this.style[size]);
+        return css ? Math.floor(Number(css[1])) : this[size];
       },
     });
   }

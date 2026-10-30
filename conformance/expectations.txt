@@ -4,7 +4,6 @@
 
 webgl1 conformance/canvas/buffer-offscreen-test.html FAIL # remainder of buffer should be cleared
 webgl1 conformance/canvas/buffer-preserve-test.html FAIL # remainder of buffer should be cleared
-webgl1 conformance/canvas/canvas-test.html TIMEOUT # no new result within the time limit
 webgl1 conformance/context/context-attribute-preserve-drawing-buffer.html FAIL # Did not render ok with preserveDrawingBuffer false.
 webgl1 conformance/context/context-release-with-workers.html TIMEOUT # no new result within the time limit
 webgl1 conformance/context/premultiplyalpha-test.html FAIL # should draw with 255,192,128,1
@@ -28,7 +27,6 @@ webgl1 conformance/typedarrays/array-large-array-tests.html FAIL # Construction 
 webgl1 conformance/uniforms/uniform-default-values.html FAIL # should be green
 webgl2 conformance/canvas/buffer-offscreen-test.html FAIL # remainder of buffer should be cleared
 webgl2 conformance/canvas/buffer-preserve-test.html FAIL # remainder of buffer should be cleared
-webgl2 conformance/canvas/canvas-test.html TIMEOUT # no new result within the time limit
 webgl2 conformance/context/context-attribute-preserve-drawing-buffer.html FAIL # Did not render ok with preserveDrawingBuffer false.
 webgl2 conformance/context/context-release-with-workers.html TIMEOUT # no new result within the time limit
 webgl2 conformance/context/premultiplyalpha-test.html FAIL # should draw with 255,192,128,1
