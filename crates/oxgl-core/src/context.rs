@@ -22,28 +22,44 @@ new_key_type! {
     pub struct ObjectKey;
 }
 
-/// A WebGL object owned by a context. Later capabilities add variants
-/// (buffers, textures, …).
-#[allow(
-    clippy::empty_enums,
-    reason = "no object types exist yet; the slotmap is their extension point"
-)]
-#[derive(Debug)]
-pub enum Object {}
+/// A WebGL object owned by a context, holding its GL name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Object {
+    /// A buffer and the kind of target it was first bound to.
+    Buffer {
+        /// GL name.
+        name: u32,
+        /// WebGL's buffer target class (WebGL 1.0 §6.1).
+        kind: crate::rendering::BufferKind,
+    },
+    /// A shader.
+    Shader {
+        /// GL name.
+        name: u32,
+    },
+    /// A program.
+    Program {
+        /// GL name.
+        name: u32,
+    },
+}
 
 /// A live WebGL context.
 #[derive(Debug)]
 pub struct Context {
-    buffer: DrawingBuffer,
-    errors: ErrorState,
-    objects: SlotMap<ObjectKey, Object>,
-    unpack: UnpackState,
-    webgl2: bool,
+    pub(crate) buffer: DrawingBuffer,
+    pub(crate) errors: ErrorState,
+    pub(crate) objects: SlotMap<ObjectKey, Object>,
+    pub(crate) unpack: UnpackState,
+    pub(crate) webgl2: bool,
 }
 
 /// Makes `buffer`'s context current, setting the lost flag if that fails: a
 /// context EGL can no longer make current is unusable.
-fn current<'a>(buffer: &'a DrawingBuffer, errors: &mut ErrorState) -> Option<Current<'a>> {
+pub(crate) fn current<'a>(
+    buffer: &'a DrawingBuffer,
+    errors: &mut ErrorState,
+) -> Option<Current<'a>> {
     if errors.is_lost() {
         return None;
     }
@@ -77,7 +93,7 @@ fn pack_layout(current: &Current<'_>, webgl2: bool) -> pixels::PackLayout {
 }
 
 /// Sets the lost flag if the GL reports a graphics reset.
-fn check_reset(current: &Current<'_>, errors: &mut ErrorState) {
+pub(crate) fn check_reset(current: &Current<'_>, errors: &mut ErrorState) {
     if current.graphics_reset_status() != GL_NO_ERROR {
         errors.mark_lost();
     }

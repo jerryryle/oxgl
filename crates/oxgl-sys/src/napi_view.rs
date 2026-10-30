@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use napi::bindgen_prelude::{JsValue, Unknown};
 use napi::sys;
 
-use crate::view::{PixelDestination, ViewKind};
+use crate::view::{ByteSource, PixelDestination, ViewKind};
 
 /// A typed array or `DataView` destination, valid for the current call only.
 #[derive(Debug)]
@@ -158,16 +158,17 @@ impl PixelDestination for WriteTarget<'_> {
         }
     }
 
-    fn copy_from(&self, buffer: &[u8]) {
+    fn copy_from_at(&self, offset: usize, buffer: &[u8]) {
         let mut index = 0;
         while index < buffer.len() {
+            let at = offset.saturating_add(index);
             let chunk = buffer
                 .get(index..index + WORD)
                 .and_then(|bytes| <[u8; WORD]>::try_from(bytes).ok());
-            if let (Some(word), Some(bytes)) = (self.word(index), chunk) {
+            if let (Some(word), Some(bytes)) = (self.word(at), chunk) {
                 word.store(usize::from_ne_bytes(bytes), Ordering::Relaxed);
                 index += WORD;
-            } else if let (Some(byte), Some(&value)) = (self.byte(index), buffer.get(index)) {
+            } else if let (Some(byte), Some(&value)) = (self.byte(at), buffer.get(index)) {
                 byte.store(value, Ordering::Relaxed);
                 index += 1;
             } else {
@@ -325,7 +326,7 @@ impl<'a> ReadSource<'a> {
     }
 
     /// Runs `f` on the bytes `range` of the source (clamped to its length).
-    pub fn with_bytes<R>(&self, range: std::ops::Range<usize>, f: impl FnOnce(&[u8]) -> R) -> R {
+    pub fn read<R>(&self, range: std::ops::Range<usize>, f: impl FnOnce(&[u8]) -> R) -> R {
         let end = range.end.min(self.len);
         let start = range.start.min(end);
         if start == end {
@@ -375,6 +376,20 @@ impl ReadSource<'_> {
                 index += 1;
             }
         }
+    }
+}
+
+impl ByteSource for ReadSource<'_> {
+    fn kind(&self) -> ViewKind {
+        self.kind
+    }
+
+    fn byte_len(&self) -> usize {
+        self.len
+    }
+
+    fn with_bytes(&self, range: std::ops::Range<usize>, f: &mut dyn FnMut(&[u8])) {
+        self.read(range, f);
     }
 }
 

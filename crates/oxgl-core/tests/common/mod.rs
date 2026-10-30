@@ -93,10 +93,11 @@ impl PixelDestination for Memory {
         buffer[..n].copy_from_slice(&bytes[..n]);
     }
 
-    fn copy_from(&self, buffer: &[u8]) {
+    fn copy_from_at(&self, offset: usize, buffer: &[u8]) {
         let mut bytes = self.bytes.borrow_mut();
-        let n = buffer.len().min(bytes.len());
-        bytes[..n].copy_from_slice(&buffer[..n]);
+        let start = offset.min(bytes.len());
+        let n = buffer.len().min(bytes.len() - start);
+        bytes[start..start + n].copy_from_slice(&buffer[..n]);
     }
 }
 

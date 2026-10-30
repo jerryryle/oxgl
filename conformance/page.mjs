@@ -185,25 +185,55 @@ function loadOxgl(window) {
 
 let contextBody;
 
+/** The globals the JS layer defines in a page, beside `createContext`. */
+const INTERFACES = [
+  'WebGLRenderingContext',
+  'WebGL2RenderingContext',
+  'WebGLShaderPrecisionFormat',
+  'WebGLObject',
+  'WebGLBuffer',
+  'WebGLProgram',
+  'WebGLShader',
+  'WebGLUniformLocation',
+  'WebGLActiveInfo',
+];
+
 /**
- * dist/context.js as a function body returning its exports; computed once per
- * process. The generated constants module it imports is inlined on the import's
- * line, joined into one line so stack traces keep context.js line numbers.
+ * dist/context.js and the local modules it imports, as one function body
+ * returning its exports; computed once per process. Modules are inlined in
+ * dependency order with their `import` statements removed and `export`
+ * keywords stripped, so names must be unique across modules. Import
+ * statements leave their lines behind and the generated constants collapse
+ * to one line, so a stack trace's line numbers are those of the concatenated
+ * body. `./native.js` is the function's `native` parameter.
  */
 function contextSource() {
-  const constants = readFileSync(CONSTANTS_URL, 'utf8')
-    // The generated module holds no strings, so every `//` starts a comment.
-    .replace(/\/\/.*$/gm, '')
-    .replace(/^export const /gm, 'const ')
-    .replace(/\s*\n\s*/g, ' ');
-  const body = readFileSync(CONTEXT_URL, 'utf8')
-    .replace("import { native } from './native.js';", '')
-    .replace(/^import \{[^}]*\} from '\.\/generated\/webgl-constants\.js';$/m, constants)
-    .replace(/^export (class|function|const) /gm, '$1 ');
-  if (/^\s*(import|export)\b/m.test(body)) {
-    throw new Error('dist/context.js has imports or exports the conformance runner does not handle');
-  }
-  return `${body}\nreturn { createContext, WebGLRenderingContext, WebGL2RenderingContext, WebGLShaderPrecisionFormat };`;
+  const seen = new Set();
+  const parts = [];
+  const inline = (url) => {
+    if (seen.has(url.href)) return;
+    seen.add(url.href);
+    const source = readFileSync(url, 'utf8');
+    const imports = [...source.matchAll(/^import (?:type )?\{[^}]*\} from '(\.[^']+)';$/gms)].map((m) => m[1]);
+    for (const path of imports) {
+      if (path === './native.js' || path === './load-native.js') continue;
+      inline(new URL(path, url));
+    }
+    let body = source
+      .replace(/^import (?:type )?\{[^}]*\} from '[^']+';$/gms, (statement) => statement.replace(/[^\n]/g, ''))
+      .replace(/^export (class|function|const|let) /gm, '$1 ')
+      .replace(/^export \{[^}]*\}(?: from '[^']+')?;$/gms, '');
+    if (url.href === CONSTANTS_URL.href) {
+      // The generated module holds no strings, so every `//` starts a comment.
+      body = body.replace(/\/\/.*$/gm, '').replace(/\s*\n\s*/g, ' ');
+    }
+    if (/^\s*(import|export)\b/m.test(body)) {
+      throw new Error(`${url.pathname} has imports or exports the conformance runner does not handle`);
+    }
+    parts.push(body);
+  };
+  inline(CONTEXT_URL);
+  return `${parts.join('\n')}\nreturn { createContext, ${INTERFACES.join(', ')} };`;
 }
 
 /**
@@ -222,7 +252,8 @@ function release(state, ref) {
 
 /** Installs the canvas shim, the context class globals, ImageData, message delivery, Closure's loader hook and failing media. */
 function installShim(window, state) {
-  const { createContext, WebGLRenderingContext, WebGL2RenderingContext, WebGLShaderPrecisionFormat } = loadOxgl(window);
+  const oxgl = loadOxgl(window);
+  const { createContext } = oxgl;
   const contexts = new WeakMap();
   // jsdom closes a frame's window when the frame navigates; its contexts go
   // with it, as a browser releases them with the document. Contexts are held
@@ -269,9 +300,7 @@ function installShim(window, state) {
     return gl;
   };
   forwardResizes(window, contexts);
-  window.WebGLRenderingContext = WebGLRenderingContext;
-  window.WebGL2RenderingContext = WebGL2RenderingContext;
-  window.WebGLShaderPrecisionFormat = WebGLShaderPrecisionFormat;
+  for (const name of INTERFACES) window[name] = oxgl[name];
   window.ImageData = canvasPackage().ImageData;
   if (state.root !== undefined) window.CLOSURE_IMPORT_SCRIPT = closureImport(window, state.root);
   deliverMessages(window);

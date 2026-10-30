@@ -46,5 +46,49 @@ pub trait PixelDestination {
     fn copy_to(&self, buffer: &mut [u8]);
     /// Copies `buffer` over the first `buffer.len()` bytes of the view
     /// (fewer if the view is shorter).
-    fn copy_from(&self, buffer: &[u8]);
+    fn copy_from(&self, buffer: &[u8]) {
+        self.copy_from_at(0, buffer);
+    }
+    /// Copies `buffer` into the view starting at byte `offset` (fewer bytes
+    /// if the view is shorter).
+    fn copy_from_at(&self, offset: usize, buffer: &[u8]);
+}
+
+/// Memory a call reads from: an `ArrayBuffer` or a view of one, accessed
+/// only for the duration of [`ByteSource::with_bytes`].
+pub trait ByteSource {
+    /// Element type of the view (`Uint8` for a bare buffer).
+    fn kind(&self) -> ViewKind;
+    /// Length in bytes.
+    fn byte_len(&self) -> usize;
+    /// Calls `f` with the bytes in `range`, clamped to the source.
+    fn with_bytes(&self, range: std::ops::Range<usize>, f: &mut dyn FnMut(&[u8]));
+}
+
+impl ViewKind {
+    /// Bytes per element (1 for `DataView` and unrecognized views).
+    #[must_use]
+    pub fn element_size(self) -> usize {
+        match self {
+            Self::Int16 | Self::Uint16 => 2,
+            Self::Int32 | Self::Uint32 | Self::Float32 => 4,
+            Self::Float64 | Self::BigInt64 | Self::BigUint64 => 8,
+            Self::Int8 | Self::Uint8 | Self::Uint8Clamped | Self::DataView | Self::Other => 1,
+        }
+    }
+}
+
+impl ByteSource for [u8] {
+    fn kind(&self) -> ViewKind {
+        ViewKind::Uint8
+    }
+
+    fn byte_len(&self) -> usize {
+        self.len()
+    }
+
+    fn with_bytes(&self, range: std::ops::Range<usize>, f: &mut dyn FnMut(&[u8])) {
+        let end = range.end.min(self.len());
+        f(self.get(range.start.min(end)..end).unwrap_or(&[]));
+    }
 }

@@ -12,6 +12,8 @@
 // Each export's only error is a Node-API failure, thrown to JS by napi-rs.
 #![allow(clippy::missing_errors_doc)]
 
+pub mod rendering;
+
 use std::path::PathBuf;
 
 use napi::bindgen_prelude::{Env, Unknown};
@@ -30,14 +32,14 @@ use oxgl_sys::{ReadPixels, StateCall};
 #[napi]
 #[must_use]
 pub fn native_abi_version() -> u32 {
-    4
+    5
 }
 
 /// The environment's runtime, created by [`init`]. Node-API instance data is
 /// per environment (main thread or worker), and its finalizer, which runs at
 /// environment teardown on that environment's thread, drops the runtime and
 /// so destroys every context still live.
-fn runtime(env: Env) -> napi::Result<&'static mut Runtime> {
+pub(crate) fn runtime(env: Env) -> napi::Result<&'static mut Runtime> {
     env.get_instance_data::<Runtime>()?
         .ok_or_else(|| napi::Error::from_reason("oxgl: native runtime is not initialized"))
 }
@@ -187,7 +189,7 @@ pub fn create_context(
     })
 }
 
-fn key(index: u32, version: u32) -> ContextKey {
+pub(crate) fn key(index: u32, version: u32) -> ContextKey {
     key_from_parts([index, version])
 }
 
@@ -285,7 +287,7 @@ pub fn read_pixels(
 }
 
 /// Runs `f` on the context, if it is still live.
-fn with_context(
+pub(crate) fn with_context(
     env: Env,
     index: u32,
     version: u32,
@@ -424,7 +426,7 @@ pub struct ParameterValue {
     pub text: Option<String>,
 }
 
-fn parameter_value(parameter: Parameter) -> Option<ParameterValue> {
+pub(crate) fn parameter_value(parameter: Parameter) -> Option<ParameterValue> {
     let (kind, numbers, text) = match parameter {
         Parameter::Null => return None,
         Parameter::Number(n) => ("number", vec![n], None),

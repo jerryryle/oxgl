@@ -52,6 +52,44 @@ export interface NativeBinding {
     attributes: NativeAttributes,
   ): NativeCreated;
   getContextAttributes(index: number, version: number): NativeAttributes | null;
+  synthesizeError(index: number, version: number, code: number): void;
+  createObject(index: number, version: number, kind: number, shaderType: number): [number, number] | null;
+  deleteObject(index: number, version: number, oi: number, ov: number): void;
+  releaseObject(index: number, version: number, oi: number, ov: number): void;
+  liveObjects(index: number, version: number): number;
+  hasObject(index: number, version: number, oi: number, ov: number): boolean;
+  bindBuffer(index: number, version: number, target: number, oi: number, ov: number): boolean;
+  bufferDataSize(index: number, version: number, target: number, size: number, usage: number): void;
+  bufferData(index: number, version: number, target: number, source: ArrayBufferView, usage: number, offset: number, length: number): void;
+  bufferSubData(index: number, version: number, target: number, dstOffset: number, source: ArrayBufferView, offset: number, length: number): void;
+  copyBufferSubData(index: number, version: number, readTarget: number, writeTarget: number, readOffset: number, writeOffset: number, size: number): void;
+  getBufferSubData(index: number, version: number, target: number, srcOffset: number, destination: ArrayBufferView, offset: number, length: number): void;
+  getBufferParameter(index: number, version: number, target: number, pname: number): number | null;
+  shaderSource(index: number, version: number, oi: number, ov: number, source: string): void;
+  compileShader(index: number, version: number, oi: number, ov: number): void;
+  getShaderParameter(index: number, version: number, oi: number, ov: number, pname: number): NativeParameter | null;
+  getShaderInfoLog(index: number, version: number, oi: number, ov: number): string | null;
+  attachShader(index: number, version: number, pi: number, pv: number, si: number, sv: number, attach: boolean): void;
+  linkProgram(index: number, version: number, oi: number, ov: number): void;
+  validateProgram(index: number, version: number, oi: number, ov: number): void;
+  useProgram(index: number, version: number, oi: number, ov: number): boolean;
+  getProgramParameter(index: number, version: number, oi: number, ov: number, pname: number): NativeParameter | null;
+  getProgramInfoLog(index: number, version: number, oi: number, ov: number): string | null;
+  bindAttribLocation(index: number, version: number, oi: number, ov: number, location: number, name: string): void;
+  getLocation(index: number, version: number, oi: number, ov: number, name: string, kind: number): number;
+  getActiveInfo(index: number, version: number, oi: number, ov: number, position: number, uniform: boolean): { size: number; ty: number; name: string } | null;
+  uniformValues(index: number, version: number, location: number, kind: number, n: number, x: number, y: number, z: number, w: number): void;
+  uniformVector(index: number, version: number, location: number, kind: number, n: number, source: ArrayBufferView, offset: number, length: number): void;
+  uniformMatrix(index: number, version: number, location: number, columns: number, rows: number, transpose: boolean, source: Float32Array, offset: number, length: number): void;
+  getUniform(index: number, version: number, oi: number, ov: number, location: number): NativeParameter | null;
+  vertexAttribArray(index: number, version: number, attrib: number, enable: boolean): void;
+  vertexAttribPointer(index: number, version: number, attrib: number, size: number, type: number, normalized: number, stride: number, offset: number): boolean;
+  vertexAttrib(index: number, version: number, attrib: number, kind: number, x: number, y: number, z: number, w: number): void;
+  getVertexAttrib(index: number, version: number, attrib: number, pname: number, kind: number): NativeParameter | null;
+  getVertexAttribOffset(index: number, version: number, attrib: number, pname: number): number;
+  drawArrays(index: number, version: number, mode: number, first: number, count: number): void;
+  drawElements(index: number, version: number, mode: number, count: number, type: number, offset: number): void;
+  drawRangeElements(index: number, version: number, mode: number, start: number, end: number, count: number, type: number, offset: number): void;
   resize(index: number, version: number, width: number, height: number): { width: number; height: number };
   destroy(index: number, version: number): void;
   release(index: number, version: number): void;
@@ -113,7 +151,7 @@ export interface NativeBinding {
 }
 
 /** Version of the JS ↔ native interface this package was built for. */
-export const NATIVE_ABI_VERSION = 4;
+export const NATIVE_ABI_VERSION = 5;
 
 function nativeMissing(detail: string, cause?: unknown): Error {
   const error = new Error(

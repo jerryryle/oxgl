@@ -39,11 +39,11 @@ After `delete*`, an object SHALL report `false` from its `is*` method, deleting 
 - **THEN** the draw renders with that program and `getParameter(CURRENT_PROGRAM)` still returns it
 
 ### Requirement: Objects of a lost context
-On a lost or destroyed context, `create*` SHALL return `null`, `is*` SHALL return `false`, and every other object method SHALL do nothing and return its IDL default (WebGL 1.0 §5.15.2). Objects created before the loss SHALL stay invalid.
+On a lost or destroyed context, `create*` SHALL return a new object that is already invalid, `is*` SHALL return `false`, and every other object method SHALL do nothing and return its IDL default (WebGL 1.0 §5.15.2). Objects created before the loss SHALL stay invalid.
 
 #### Scenario: After destroy
-- **WHEN** a context is destroyed and `createBuffer()` and `isBuffer(old)` are called
-- **THEN** they return `null` and `false`
+- **WHEN** a context is destroyed and `createBuffer()`, `isBuffer` of the new buffer and `isBuffer(old)` are called
+- **THEN** `createBuffer()` returns a `WebGLBuffer`, both `isBuffer` calls return `false`, and `getError()` reports no error after `CONTEXT_LOST_WEBGL` (cf. Khronos `conformance/context/context-lost.html`)
 
 ### Requirement: Unreferenced objects are released
 An object that is neither referenced from JS nor bound or attached in its context SHALL be deleted after garbage collection, on its context's thread, without an explicit `delete*` call. An object that is bound or attached SHALL stay alive while it is.
