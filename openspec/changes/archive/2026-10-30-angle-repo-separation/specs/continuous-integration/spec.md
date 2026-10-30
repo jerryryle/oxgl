@@ -3,7 +3,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Triggers
-CI SHALL run on every pull request targeting `main` and on every push to `main`, and SHALL cancel superseded runs for the same pull request. The jobs that build or test oxgl (the Rust and Node checks, the Node version range, the AddressSanitizer job, the conformance jobs and the optional GPU job) SHALL be skipped when every file the change touches is on the repository's list of paths that cannot affect them, and SHALL run otherwise. The list SHALL name only files no build, test or lint step reads: Markdown documentation, OpenSpec artifacts, agent configuration, the license text, editor configuration, and the configuration of the workflow linters. Host-independent checks (workflow lint and the repository checks, including the license check) SHALL run on every change. When the changed files cannot be determined, every job SHALL run.
+CI SHALL run on every pull request targeting `main` and every push to `main`, and SHALL cancel superseded runs for the same pull request. The jobs that build or test oxgl SHALL be skipped when every changed file is on the repository's skip list, which SHALL name only files no build, test or lint step reads, and SHALL run otherwise, including when the changed files cannot be determined. Workflow lint and the repository checks SHALL run on every change.
 
 #### Scenario: Pull request opened
 - **WHEN** a pull request targeting `main` is opened or updated
@@ -11,7 +11,11 @@ CI SHALL run on every pull request targeting `main` and on every push to `main`,
 
 #### Scenario: Documentation-only change
 - **WHEN** a pull request changes only `README.md` and files under `openspec/`
-- **THEN** workflow lint and the repository checks run, the jobs that build or test oxgl are skipped, and the `ci` check passes
+- **THEN** workflow lint and the repository checks run, the jobs that build or test oxgl (the Rust and Node checks, the Node version range, AddressSanitizer, conformance and the optional GPU job) are skipped, and the `ci` check passes
+
+#### Scenario: Skip list holds only unread files
+- **WHEN** a reviewer reads the skip list
+- **THEN** it names only Markdown documentation, OpenSpec artifacts, agent configuration, the license text, editor configuration and the workflow linters' configuration
 
 #### Scenario: Code change runs everything
 - **WHEN** a pull request changes `README.md` and one file under `crates/`

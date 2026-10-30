@@ -3,7 +3,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: ANGLE revision is pinned in the repository
-The ANGLE build recipe SHALL live in its own repository (the recipe repository, `jerryryle/oxgl-angle`), separate from oxgl's. The recipe repository SHALL record a single pinned ANGLE source revision (commit hash and the Chromium release branch it was taken from), the bundle version, and the build configuration for each supported platform. oxgl's repository SHALL record, in its bundle manifest, the bundle version it uses and the URL and SHA-256 digest of each platform's bundle, with every URL pointing at that version's release in the recipe repository. Changing either SHALL be a reviewable change to tracked files in its repository.
+The ANGLE build recipe SHALL live in its own repository, `jerryryle/oxgl-angle` (the recipe repository), which SHALL record the pinned ANGLE revision (commit and Chromium branch), the bundle version and each platform's build configuration. oxgl's bundle manifest SHALL record the bundle version it uses and each platform's bundle URL and SHA-256 digest, every URL in that version's recipe-repository release. Changing either SHALL be a reviewable change to tracked files.
 
 #### Scenario: Pin is inspectable
 - **WHEN** a reviewer reads the recipe repository's pin and oxgl's bundle manifest
@@ -14,7 +14,7 @@ The ANGLE build recipe SHALL live in its own repository (the recipe repository, 
 - **THEN** oxgl's repository checks fail and name the platform and URL
 
 ### Requirement: ANGLE is built only when its recipe changes
-ANGLE SHALL be built from source only by the recipe repository's build workflow. No workflow in oxgl's repository SHALL build ANGLE. The build workflow SHALL run for every pull request to the recipe repository and report one aggregate check that branch protection can require. It SHALL build and smoke-test bundles only when the pull request changes the build recipe (the pinned revision, build configuration, build scripts, license data and the bundle smoke test) or the build workflow itself, and the aggregate check SHALL pass without building otherwise. A change to the build workflow alone SHALL NOT require a new bundle version. A job the aggregate check depends on SHALL count as passing when skipped only if the pull request did not need it (the version check when no recipe file changed, the build and smoke tests when neither the recipe nor the workflow changed). Any other skip SHALL fail the aggregate check.
+ANGLE SHALL be built from source only by the recipe repository's build workflow, never by a workflow in oxgl's repository. That workflow SHALL run for every pull request and report one aggregate check for branch protection. It SHALL build and smoke-test bundles only when the pull request changes the build recipe or the workflow itself, and a workflow-only change SHALL NOT require a new bundle version. The aggregate check SHALL fail when a job the change needed was skipped.
 
 #### Scenario: Recording digests does not rebuild
 - **WHEN** an oxgl pull request changes only the bundle manifest
@@ -25,7 +25,7 @@ ANGLE SHALL be built from source only by the recipe repository's build workflow.
 - **THEN** no ANGLE build runs, and the native build uses the pinned prebuilt bundle
 
 #### Scenario: Recipe change builds and blocks
-- **WHEN** a pull request to the recipe repository changes the build recipe
+- **WHEN** a pull request to the recipe repository changes the build recipe (the pinned revision, build configuration, build scripts, license data or the bundle smoke test)
 - **THEN** every platform bundle is built and smoke-tested, oxgl's CI does not run, and the aggregate check passes only if every build and smoke test passed
 
 #### Scenario: Workflow-only change
@@ -59,7 +59,7 @@ The recipe repository SHALL contain a scripted recipe that, given the pin manife
 - **THEN** it produces a bundle with the same file list and build configuration as the published one
 
 ### Requirement: Bundle licenses are on the project allowlist
-Every component in a platform bundle SHALL carry a license on the project's license allowlist (see the licensing capability), recorded per component in build-info. The recipe repository SHALL keep its own copy of that allowlist. The build recipe SHALL fail if any linked component's license is missing from the bundle's license directory or is not on that copy. oxgl's allowlist is authoritative: oxgl's native build SHALL re-check the pinned bundle's recorded component licenses against it, so a bundle built under a wider or older copy cannot pass.
+Every component in a platform bundle SHALL carry a license on the project's allowlist (see the licensing capability), recorded per component in build-info. The build recipe SHALL fail if a linked component's license is missing from the bundle or not on the recipe repository's copy of the allowlist. oxgl's allowlist is authoritative: oxgl's native build SHALL re-check the pinned bundle's recorded licenses against it, so a bundle built under a wider or older copy cannot pass.
 
 #### Scenario: Disallowed component license
 - **WHEN** a pin bump pulls in a linked third-party component whose license is not on the recipe repository's allowlist
