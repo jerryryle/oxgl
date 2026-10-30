@@ -125,6 +125,7 @@ entry_points! {
     eglChooseConfig: PFNEGLCHOOSECONFIGPROC,
     eglCreateContext: PFNEGLCREATECONTEXTPROC,
     eglMakeCurrent: PFNEGLMAKECURRENTPROC,
+    eglGetCurrentContext: PFNEGLGETCURRENTCONTEXTPROC,
     eglDestroyContext: PFNEGLDESTROYCONTEXTPROC,
     eglGetError: PFNEGLGETERRORPROC,
     glActiveTexture: PFNGLACTIVETEXTUREPROC,

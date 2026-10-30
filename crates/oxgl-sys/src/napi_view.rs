@@ -332,16 +332,8 @@ impl<'a> ReadSource<'a> {
             return f(&[]);
         }
         if self.shared {
-            let copy: Vec<u8> = (start..end)
-                .map(|index| {
-                    let byte = self.data.wrapping_add(index).cast_mut();
-                    // SAFETY: `index < len`, inside the view's memory, which
-                    // stays allocated for this call (a SharedArrayBuffer is
-                    // never detached and a growable one never moves). Other
-                    // threads may write it, so it is read atomically.
-                    unsafe { AtomicU8::from_ptr(byte) }.load(Ordering::Relaxed)
-                })
-                .collect();
+            let mut copy = vec![0u8; end - start];
+            self.copy_shared(start, &mut copy);
             return f(&copy);
         }
         // SAFETY: `start..end` lies inside the view's memory (`end <= len`).
@@ -351,6 +343,38 @@ impl<'a> ReadSource<'a> {
         let bytes =
             unsafe { std::slice::from_raw_parts(self.data.wrapping_add(start), end - start) };
         f(bytes)
+    }
+}
+
+impl ReadSource<'_> {
+    /// Copies `out.len()` bytes from `start` (inside the view) with relaxed
+    /// atomic loads, word-sized where aligned, as `WriteTarget` writes.
+    fn copy_shared(&self, start: usize, out: &mut [u8]) {
+        let mut index = 0;
+        while index < out.len() {
+            let at = self.data.wrapping_add(start + index).cast_mut();
+            let word_fits = start + index + WORD <= self.len && index + WORD <= out.len();
+            if word_fits && at.align_offset(WORD) == 0 {
+                #[allow(clippy::cast_ptr_alignment, reason = "alignment checked above")]
+                let word = at.cast::<usize>();
+                // SAFETY: the word lies inside the view's live memory
+                // (`start + index + WORD <= len`) and is aligned (checked);
+                // other threads may write it, so it is read atomically.
+                let value = unsafe { AtomicUsize::from_ptr(word) }.load(Ordering::Relaxed);
+                if let Some(bytes) = out.get_mut(index..index + WORD) {
+                    bytes.copy_from_slice(&value.to_ne_bytes());
+                }
+                index += WORD;
+            } else {
+                // SAFETY: `start + index < len` (the caller clamps the range
+                // to the view), inside its live memory; read atomically.
+                let value = unsafe { AtomicU8::from_ptr(at) }.load(Ordering::Relaxed);
+                if let Some(byte) = out.get_mut(index) {
+                    *byte = value;
+                }
+                index += 1;
+            }
+        }
     }
 }
 

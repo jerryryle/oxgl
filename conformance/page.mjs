@@ -250,6 +250,10 @@ function installShim(window, state) {
       return context ?? null;
     }
     if (canvases2d.has(this)) return null;
+    // WebIDL converts the attributes dictionary before anything else.
+    if (attributes !== undefined && attributes !== null && typeof attributes !== 'object' && typeof attributes !== 'function') {
+      throw new window.TypeError("Failed to execute 'getContext': The provided value is not of type 'WebGLContextAttributes'.");
+    }
     let gl;
     try {
       gl = createContext({ width: this.width, height: this.height, webgl2: version === 2, canvas: this, attributes });

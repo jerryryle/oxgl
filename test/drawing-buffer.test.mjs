@@ -197,8 +197,19 @@ test('failIfMajorPerformanceCaveat: software refused', () => {
   });
 });
 
-test('failIfMajorPerformanceCaveat: auto behaves as gpu', { skip: !software && 'needs a host without a GPU' }, () => {
+test('failIfMajorPerformanceCaveat: auto behaves as gpu', { skip: !software && 'needs a host without a GPU' }, (t) => {
   withBackendEnv(undefined, () => {
+    let gpu = null;
+    try {
+      gpu = createContext({ width: 1, height: 1, backend: 'gpu' });
+    } catch {
+      // No GPU: the case under test.
+    }
+    if (gpu !== null) {
+      gpu.destroy();
+      t.skip('this host has a GPU');
+      return;
+    }
     assert.throws(
       () => createContext({ width: 4, height: 4, attributes: { failIfMajorPerformanceCaveat: true } }),
       (error) => error.code === 'OXGL_GPU_UNAVAILABLE',

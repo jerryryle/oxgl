@@ -289,9 +289,12 @@ impl GlContext {
                 (fns.eglMakeCurrent)(self.display.raw, ptr::null_mut(), ptr::null_mut(), self.raw)
             };
             if ok == EGL_FALSE.cast_unsigned() {
-                // EGL may have released the previous context; query again.
-                CURRENT.set(ptr::null_mut());
-                return Err(egl_error(&self.display.angle, "eglMakeCurrent"));
+                let error = egl_error(&self.display.angle, "eglMakeCurrent");
+                // The previous context usually stays current, but not after
+                // every error; ask EGL which one is.
+                // SAFETY: no preconditions.
+                CURRENT.set(unsafe { (fns.eglGetCurrentContext)() });
+                return Err(error);
             }
             CURRENT.set(self.raw);
         }

@@ -15,6 +15,12 @@ canvas.setAttribute("height", "30");
 if (gl.drawingBufferHeight === 30) testPassed("attribute resize"); else testFailed("height " + gl.drawingBufferHeight);
 canvas.removeAttribute("width");
 if (gl.drawingBufferWidth === 300) testPassed("attribute removal resize"); else testFailed("width " + gl.drawingBufferWidth);
+try {
+  document.createElement("canvas").getContext("webgl", 5);
+  testFailed("no TypeError for non-object attributes");
+} catch (e) {
+  if (e instanceof TypeError) testPassed("TypeError for non-object attributes"); else testFailed("threw " + e);
+}
 finishTest();
 </script>
 </body></html>
