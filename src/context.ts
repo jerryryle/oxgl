@@ -2404,13 +2404,19 @@ abstract class WebGL2Members extends ContextBase {
     const s = contextState(this);
     const state = checkObject(s, transformFeedback, WebGLTransformFeedback, 'deleteTransformFeedback', 1, true, 0);
     if (!state || transformFeedback === null) return;
-    state.deleted = true;
-    collectedObjects.unregister(transformFeedback);
-    native.deleteObject(s.index, s.version, ...keyOf(state));
-    if (s.transformFeedback === transformFeedback && !native.isContextLost(s.index, s.version)) {
+    if (s.transformFeedback === transformFeedback) {
+      // An active transform feedback cannot be deleted (OpenGL ES 3.0 §2.15.1).
+      const active = native.getParameter(s.index, s.version, GL.TRANSFORM_FEEDBACK_ACTIVE);
+      if (active !== null && active.numbers[0] !== 0) {
+        native.synthesizeError(s.index, s.version, GL.INVALID_OPERATION);
+        return;
+      }
       s.transformFeedback = null;
       s.tfBuffers = s.defaultTfBuffers;
     }
+    state.deleted = true;
+    collectedObjects.unregister(transformFeedback);
+    native.deleteObject(s.index, s.version, ...keyOf(state));
   }
 
   /** WebGL 2.0 §3.7.15: true once bound. */
@@ -2526,6 +2532,9 @@ abstract class WebGL2Members extends ContextBase {
     const s = contextState(this);
     const t = toUnsignedLong(target);
     if (s.destroyed || !native.endQuery(s.index, s.version, t)) return;
+    // Submit the work, as a browser does at the end of each frame, so the
+    // result can be ready by the next turn.
+    native.flush(s.index, s.version);
     const query = s.queries.get(t);
     s.queries.delete(t);
     if (query !== undefined) (objectState(query) as PendingState).turn = nextTurn();
@@ -2576,6 +2585,7 @@ abstract class WebGL2Members extends ContextBase {
     if (s.destroyed) return null;
     const key = native.fenceSync(s.index, s.version, c, f);
     if (key === null) return null;
+    native.flush(s.index, s.version);
     const state = { owner: s, key: [key[0], key[1]] as const, deleted: false, turn: nextTurn(), target: 0 };
     const sync = new WebGLSync(CONSTRUCTING, state);
     collectedObjects.register(sync, Object.freeze([s.index, s.version, key[0], key[1]] as const), sync);

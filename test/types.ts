@@ -14,6 +14,10 @@ import {
   type WebGLRenderbuffer,
   type WebGLObject,
   type WebGLProgram,
+  type WebGLQuery,
+  type WebGLSync,
+  type WebGLTransformFeedback,
+  type WebGLVertexArrayObject,
   type WebGLSampler,
   type WebGLShader,
   type WebGLTexture,
@@ -145,3 +149,13 @@ glr.blitFramebuffer(0, 0, 1, 1, 0, 0, 1, 1, glr.COLOR_BUFFER_BIT, glr.NEAREST);
 glr.readPixels(0, 0, 1, 1, glr.RGBA, glr.UNSIGNED_BYTE, 0);
 // @ts-expect-error -- a renderbuffer is not a framebuffer
 glr.bindFramebuffer(glr.FRAMEBUFFER, renderbuffer);
+
+// webgl2-objects.
+const vao: WebGLVertexArrayObject = glr.createVertexArray();
+glr.bindVertexArray(vao);
+glr.drawArraysInstanced(glr.TRIANGLES, 0, 3, 2);
+const query: WebGLQuery = glr.createQuery();
+glr.beginQuery(glr.ANY_SAMPLES_PASSED, query);
+const sync: WebGLSync | null = glr.fenceSync(glr.SYNC_GPU_COMMANDS_COMPLETE, 0);
+const feedback: WebGLTransformFeedback = glr.createTransformFeedback();
+export { sync, feedback };
