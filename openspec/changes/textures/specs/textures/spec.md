@@ -1,5 +1,9 @@
 # Spec Delta
 
+## Purpose
+
+Covers texture and sampler objects, texture uploads from views, pixel unpack buffers and `TexImageSource` values, the WebGL unpack parameters, copies, immutable storage and the compressed-texture entry points (WebGL 1.0 §5.14.8, WebGL 2.0 §3.7.6, §3.7.13).
+
 ## ADDED Requirements
 
 ### Requirement: Texture objects
