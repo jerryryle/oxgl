@@ -7,4 +7,8 @@
 
 ## 2. Conformance results
 
-- [ ] 2.1 On Linux arm64 (Docker), run both suites with `--update` and record counts.
+- [x] 2.1 On Linux arm64 (Docker), run both suites with `--update` and record counts.
+
+## Results
+
+Linux arm64 (Docker), software backend: WebGL 1 914 of 971 pages pass, WebGL 2 2796 of 2865 (from 908 and 2768). Node tests for each requirement are in `test/webgl-semantics.test.mjs`.
