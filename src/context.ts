@@ -368,7 +368,8 @@ function upload(
   position: number,
   sourceOnly: boolean,
 ): void {
-  const ranged = srcOffset !== undefined;
+  // WebGL 1 has no srcOffset; WebIDL ignores extra arguments.
+  const ranged = s.webgl2 && srcOffset !== undefined;
   if (sourceOnly) {
     const pixels = imagePixels(data, method, position);
     if (s.destroyed) return;

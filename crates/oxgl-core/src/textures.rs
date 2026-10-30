@@ -215,6 +215,15 @@ fn rgba8_pixels(
     unpack: crate::state::UnpackState,
 ) -> Result<Vec<u8>, Option<u32>> {
     let codec = Codec::new(args.format, args.ty).ok_or(None)?;
+    // WebGL 2's table of formats from DOM sources has integer formats only
+    // with UNSIGNED_BYTE (WebGL 2.0 §3.7.6): no RGB10_A2UI.
+    let integer = matches!(
+        args.format,
+        GL_RGBA_INTEGER | GL_RGB_INTEGER | GL_RG_INTEGER | GL_RED_INTEGER
+    );
+    if integer && args.ty != GL_UNSIGNED_BYTE {
+        return Err(Some(GL_INVALID_ENUM));
+    }
     let (Some(w), Some(h), Some(d)) = (
         usize_of(args.width),
         usize_of(args.height),
