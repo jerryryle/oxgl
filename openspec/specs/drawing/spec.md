@@ -38,3 +38,10 @@ Covers WebGL operations that write to the drawing buffer. This change introduces
 #### Scenario: Combined mask
 - **WHEN** `clear(COLOR_BUFFER_BIT | DEPTH_BUFFER_BIT | STENCIL_BUFFER_BIT)` is called on a buffer without stencil
 - **THEN** the color is cleared and `getError()` returns `NO_ERROR`
+
+### Requirement: flush and finish
+`flush()` and `finish()` SHALL behave as WebGL 1.0 §5.14.11 specifies: `finish()` SHALL return only after every earlier command has completed, and neither SHALL generate an error. On a lost context both SHALL do nothing.
+
+#### Scenario: Finish after clear
+- **WHEN** `clear(COLOR_BUFFER_BIT)`, then `flush()` and `finish()` are called
+- **THEN** both return `undefined`, `getError()` returns `NO_ERROR`, and a following `readPixels` sees the cleared color
