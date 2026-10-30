@@ -3,6 +3,8 @@
 import {
   createContext,
   type ContextOptions,
+  HeadlessCanvas,
+  type WebGLContextAttributes,
   WebGL2RenderingContext,
   WebGLRenderingContext,
   WebGLShaderPrecisionFormat,
@@ -73,3 +75,22 @@ declare const precision: WebGLShaderPrecisionFormat;
 expectType<Equal<typeof precision.rangeMin, number>>();
 // @ts-expect-error -- the attributes are read-only
 precision.precision = 1;
+
+// drawing-buffer: attributes, canvas, resize.
+const withAttributes = createContext({
+  width: 0,
+  height: 4,
+  attributes: { alpha: false, powerPreference: 'low-power' },
+  canvas: {},
+});
+expectType<Equal<ReturnType<typeof withAttributes.getContextAttributes>, WebGLContextAttributes | null>>();
+expectType<Equal<typeof withAttributes.canvas, object>>();
+withAttributes.resize(8, 8);
+declare const headless: HeadlessCanvas;
+expectType<Equal<typeof headless.width, number>>();
+const asTarget: EventTarget = headless;
+export { asTarget };
+// @ts-expect-error -- unknown power preference
+createContext({ width: 1, height: 1, attributes: { powerPreference: 'fast' } });
+// @ts-expect-error -- HeadlessCanvas is not constructible from user code
+new HeadlessCanvas();

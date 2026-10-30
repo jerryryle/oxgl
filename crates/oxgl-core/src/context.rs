@@ -1,19 +1,17 @@
 //! A WebGL context: its drawing buffer, error state, and objects.
 
 use oxgl_sys::bindings::{
-    GL_COLOR_BUFFER_BIT, GL_DEPTH_BUFFER_BIT, GL_FRAGMENT_SHADER, GL_GUILTY_CONTEXT_RESET_EXT,
-    GL_HIGH_INT, GL_INNOCENT_CONTEXT_RESET_EXT, GL_INVALID_ENUM, GL_INVALID_OPERATION,
-    GL_INVALID_VALUE, GL_LOW_FLOAT, GL_MAX_RENDERBUFFER_SIZE, GL_MAX_VIEWPORT_DIMS, GL_NO_ERROR,
+    GL_FRAGMENT_SHADER, GL_GUILTY_CONTEXT_RESET_EXT, GL_HIGH_INT, GL_INNOCENT_CONTEXT_RESET_EXT,
+    GL_INVALID_ENUM, GL_INVALID_OPERATION, GL_INVALID_VALUE, GL_LOW_FLOAT, GL_NO_ERROR,
     GL_PACK_ALIGNMENT, GL_PACK_ROW_LENGTH, GL_PACK_SKIP_PIXELS, GL_PACK_SKIP_ROWS,
-    GL_SHADING_LANGUAGE_VERSION, GL_STENCIL_BUFFER_BIT, GL_VERSION, GL_VERTEX_SHADER,
+    GL_SHADING_LANGUAGE_VERSION, GL_VERSION, GL_VERTEX_SHADER,
 };
 use oxgl_sys::{
-    ClientVersion, Current, Display, GlContext, PixelDestination, PrecisionFormat, ReadPixels,
-    StateCall, ValueType, Values,
+    Current, PixelDestination, PrecisionFormat, ReadPixels, StateCall, ValueType, Values,
 };
 use slotmap::{SlotMap, new_key_type};
 
-use crate::backend::ContextRequest;
+pub use crate::drawing_buffer::{Attributes, DrawingBuffer, clamp_size};
 use crate::error::ErrorState;
 use crate::parameters::{self, Kind, Parameter};
 use crate::pixels;
@@ -33,105 +31,6 @@ new_key_type! {
 #[derive(Debug)]
 pub enum Object {}
 
-/// The drawing buffer: an EGL pbuffer with its context (WebGL 1.0 §2.2). The
-/// pbuffer is an internal choice; a framebuffer object can replace it without
-/// changing this type's interface.
-#[derive(Debug)]
-pub struct DrawingBuffer {
-    context: GlContext,
-    width: i32,
-    height: i32,
-}
-
-impl DrawingBuffer {
-    /// Creates a context on `display` with a buffer of the requested size, or
-    /// smaller with the same aspect ratio when that exceeds the
-    /// implementation's limits.
-    ///
-    /// # Errors
-    ///
-    /// The failing EGL call, for example when the display cannot create an
-    /// OpenGL ES 3.0 context.
-    pub fn new(display: &Display, request: &ContextRequest) -> Result<Self, String> {
-        let version = if request.webgl2 {
-            ClientVersion::Es3
-        } else {
-            ClientVersion::Es2
-        };
-        let mut context = display.create_context(version).map_err(|e| e.to_string())?;
-        let (renderbuffer, viewport) = {
-            let current = context.make_current().map_err(|e| e.to_string())?;
-            (
-                integers(&current, GL_MAX_RENDERBUFFER_SIZE),
-                integers(&current, GL_MAX_VIEWPORT_DIMS),
-            )
-        };
-        let limits = renderbuffer
-            .zip(viewport)
-            .zip(context.max_pbuffer_size())
-            .map(
-                |(([renderbuffer, _], [viewport_width, viewport_height]), (pw, ph))| {
-                    (
-                        pw.min(renderbuffer).min(viewport_width),
-                        ph.min(renderbuffer).min(viewport_height),
-                    )
-                },
-            );
-        let Some((max_width, max_height)) = limits.filter(|&(w, h)| w > 0 && h > 0) else {
-            return Err("cannot query the drawing buffer size limits".into());
-        };
-        let (width, height) = clamp_size(request.width, request.height, max_width, max_height);
-        context
-            .attach_pbuffer(width, height)
-            .map_err(|e| e.to_string())?;
-        // A new pbuffer's contents are undefined; the drawing buffer starts
-        // transparent black (WebGL 1.0 §2.2). The context is fresh, so the
-        // clear values are still their defaults (0,0,0,0, depth 1, stencil 0).
-        // The context was first made current without a surface, which left
-        // its viewport and scissor box at 0×0; both start at the drawing
-        // buffer's size (WebGL 1.0 §5.14.4).
-        {
-            let current = context.make_current().map_err(|e| e.to_string())?;
-            current.apply(StateCall::Viewport(0, 0, width, height));
-            current.apply(StateCall::Scissor(0, 0, width, height));
-            current.clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-        }
-        Ok(Self {
-            context,
-            width,
-            height,
-        })
-    }
-
-    /// Actual width in pixels.
-    #[must_use]
-    pub fn width(&self) -> i32 {
-        self.width
-    }
-
-    /// Actual height in pixels.
-    #[must_use]
-    pub fn height(&self) -> i32 {
-        self.height
-    }
-}
-
-/// Scales `width`×`height` down to fit `max_width`×`max_height`, preserving
-/// the aspect ratio (WebGL 1.0 §2.2). Results are at least 1.
-#[must_use]
-pub fn clamp_size(width: f64, height: f64, max_width: i32, max_height: i32) -> (i32, i32) {
-    let scale = (f64::from(max_width) / width)
-        .min(f64::from(max_height) / height)
-        .min(1.0);
-    let fit = |value: f64, max: i32| {
-        // In 1..=max by construction (and `as` saturates regardless).
-        #[allow(clippy::cast_possible_truncation, reason = "bounded above")]
-        let pixels = (value * scale).floor().max(1.0) as i32;
-        pixels.min(max.max(1))
-    };
-    (fit(width, max_width), fit(height, max_height))
-}
-
 /// A live WebGL context.
 #[derive(Debug)]
 pub struct Context {
@@ -149,18 +48,10 @@ fn current<'a>(buffer: &'a DrawingBuffer, errors: &mut ErrorState) -> Option<Cur
         return None;
     }
     buffer
-        .context
+        .context()
         .make_current()
         .inspect_err(|_| errors.mark_lost())
         .ok()
-}
-
-/// The first two integer values of `pname`; `None` if the query failed.
-fn integers(current: &Current<'_>, pname: u32) -> Option<[i32; 2]> {
-    match current.get_values(pname, ValueType::Integer)? {
-        Values::Integers([a, b, ..]) => Some([a, b]),
-        _ => None,
-    }
 }
 
 /// The current pack parameters, read from the GL so ANGLE stays their only
@@ -265,6 +156,14 @@ impl Context {
             self.errors.synthesize(GL_INVALID_ENUM);
             return None;
         };
+        match self.buffer.parameter(&current, pname) {
+            Some(Ok(value)) => return Some(Parameter::Number(f64::from(value))),
+            Some(Err(code)) => {
+                self.errors.synthesize(code);
+                return None;
+            }
+            None => {}
+        }
         Some(match entry.kind {
             Kind::Object => Parameter::Null,
             Kind::CompressedFormats => Parameter::Uint32(Vec::new()),
@@ -379,10 +278,32 @@ impl Context {
         };
         let mut staging = vec![0; required];
         destination.copy_to(&mut staging);
-        if current.read_pixels(args, &mut staging) > 0 {
+        let resolved = self.buffer.begin_read(&current);
+        let read = current.read_pixels(args, &mut staging);
+        if resolved {
+            self.buffer.end_read(&current);
+        }
+        if read > 0 {
             destination.copy_from(&staging);
         }
         check_reset(&current, &mut self.errors);
+    }
+
+    /// `getContextAttributes` (WebGL 1.0 §5.14.2); `None` when lost.
+    #[must_use]
+    pub fn attributes(&self) -> Option<Attributes> {
+        (!self.errors.is_lost()).then(|| self.buffer.attributes())
+    }
+
+    /// Non-standard `resize`: reallocates the drawing buffer (WebGL 1.0
+    /// §2.2). Marks the context lost if not even 1×1 can be allocated.
+    pub fn resize(&mut self, width: f64, height: f64) {
+        if self.errors.is_lost() {
+            return;
+        }
+        if !self.buffer.resize(width, height, &mut self.errors) {
+            self.errors.mark_lost();
+        }
     }
 
     /// Simulates a device loss through `GL_CHROMIUM_lose_context`, as
@@ -393,30 +314,5 @@ impl Context {
             current.request_extension(c"GL_CHROMIUM_lose_context");
             current.lose_context(GL_GUILTY_CONTEXT_RESET_EXT, GL_INNOCENT_CONTEXT_RESET_EXT);
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn sizes_within_limits_are_kept() {
-        assert_eq!(clamp_size(300.0, 150.0, 4096, 4096), (300, 150));
-        assert_eq!(clamp_size(4096.0, 1.0, 4096, 4096), (4096, 1));
-    }
-
-    #[test]
-    fn oversized_requests_keep_the_aspect_ratio() {
-        assert_eq!(clamp_size(8192.0, 4096.0, 4096, 4096), (4096, 2048));
-        assert_eq!(clamp_size(1000.0, 30000.0, 16384, 8192), (273, 8192));
-        let (w, h) = clamp_size(1e12, 3e11, 16384, 16384);
-        assert_eq!(w, 16384);
-        assert!((f64::from(w) / f64::from(h) - 1e12 / 3e11).abs() * f64::from(h) <= 1.0);
-    }
-
-    #[test]
-    fn extreme_ratios_keep_one_pixel() {
-        assert_eq!(clamp_size(1e9, 1.0, 16384, 16384), (16384, 1));
     }
 }

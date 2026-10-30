@@ -53,6 +53,7 @@ pub fn software(runtime: &mut Runtime, width: f64, height: f64, webgl2: bool) ->
                 width,
                 height,
                 webgl2,
+                attributes: oxgl_core::Attributes::DEFAULT,
             },
         )
         .unwrap()

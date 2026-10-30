@@ -18,7 +18,8 @@ use napi::bindgen_prelude::{Env, Unknown};
 use napi_derive::napi;
 use oxgl_core::parameters::Parameter;
 use oxgl_core::{
-    ContextKey, ContextRequest, CoreError, RequestedBackend, Runtime, key_from_parts, key_to_parts,
+    Attributes, ContextKey, ContextRequest, CoreError, RequestedBackend, Runtime, key_from_parts,
+    key_to_parts,
 };
 use oxgl_sys::bindings::GL_NO_ERROR;
 use oxgl_sys::napi_view::WriteTarget;
@@ -29,7 +30,7 @@ use oxgl_sys::{ReadPixels, StateCall};
 #[napi]
 #[must_use]
 pub fn native_abi_version() -> u32 {
-    3
+    4
 }
 
 /// The environment's runtime, created by [`init`]. Node-API instance data is
@@ -74,6 +75,61 @@ pub struct Created {
     pub error_message: Option<String>,
 }
 
+/// `WebGLContextAttributes`, converted per `WebIDL` in TS.
+#[napi(object)]
+#[allow(
+    clippy::struct_excessive_bools,
+    reason = "mirrors the WebIDL dictionary"
+)]
+pub struct ContextAttributes {
+    /// `alpha`.
+    pub alpha: bool,
+    /// `depth`.
+    pub depth: bool,
+    /// `stencil`.
+    pub stencil: bool,
+    /// `antialias`.
+    pub antialias: bool,
+    /// `premultipliedAlpha`.
+    pub premultiplied_alpha: bool,
+    /// `preserveDrawingBuffer`.
+    pub preserve_drawing_buffer: bool,
+    /// `powerPreference`: 0 `default`, 1 `low-power`, 2 `high-performance`.
+    pub power_preference: u8,
+    /// `failIfMajorPerformanceCaveat`.
+    pub fail_if_major_performance_caveat: bool,
+}
+
+impl From<&ContextAttributes> for Attributes {
+    fn from(a: &ContextAttributes) -> Self {
+        Self {
+            alpha: a.alpha,
+            depth: a.depth,
+            stencil: a.stencil,
+            antialias: a.antialias,
+            premultiplied_alpha: a.premultiplied_alpha,
+            preserve_drawing_buffer: a.preserve_drawing_buffer,
+            power_preference: a.power_preference,
+            fail_if_major_performance_caveat: a.fail_if_major_performance_caveat,
+        }
+    }
+}
+
+impl From<Attributes> for ContextAttributes {
+    fn from(a: Attributes) -> Self {
+        Self {
+            alpha: a.alpha,
+            depth: a.depth,
+            stencil: a.stencil,
+            antialias: a.antialias,
+            premultiplied_alpha: a.premultiplied_alpha,
+            preserve_drawing_buffer: a.preserve_drawing_buffer,
+            power_preference: a.power_preference,
+            fail_if_major_performance_caveat: a.fail_if_major_performance_caveat,
+        }
+    }
+}
+
 /// Creates a context. `backend` is `auto`, `gpu`, or `software`, already
 /// resolved against `OXGL_BACKEND` and validated in TS.
 #[napi]
@@ -87,6 +143,7 @@ pub fn create_context(
     width: f64,
     height: f64,
     webgl2: bool,
+    attributes: ContextAttributes,
 ) -> napi::Result<Created> {
     let requested = match backend.as_str() {
         "gpu" => RequestedBackend::Gpu,
@@ -98,6 +155,7 @@ pub fn create_context(
         width,
         height,
         webgl2,
+        attributes: Attributes::from(&attributes),
     };
     let created = runtime.create_context(requested, &request).and_then(|key| {
         let buffer = runtime
@@ -440,4 +498,47 @@ pub fn is_context_lost(env: Env, index: u32, version: u32) -> napi::Result<bool>
     Ok(runtime(env)?
         .context(key(index, version))
         .is_none_or(oxgl_core::Context::is_context_lost))
+}
+
+/// `getContextAttributes`; `null` for a lost or destroyed context.
+#[napi]
+pub fn get_context_attributes(
+    env: Env,
+    index: u32,
+    version: u32,
+) -> napi::Result<Option<ContextAttributes>> {
+    Ok(runtime(env)?
+        .context(key(index, version))
+        .and_then(|context| context.attributes())
+        .map(ContextAttributes::from))
+}
+
+/// The drawing buffer's size after [`resize`].
+#[napi(object)]
+pub struct Size {
+    /// Width in pixels; 0 when lost.
+    pub width: i32,
+    /// Height in pixels; 0 when lost.
+    pub height: i32,
+}
+
+/// Non-standard `resize`: reallocates the drawing buffer and returns its
+/// actual size (`0×0` when the context is lost or destroyed).
+#[napi]
+pub fn resize(env: Env, index: u32, version: u32, width: f64, height: f64) -> napi::Result<Size> {
+    let mut size = Size {
+        width: 0,
+        height: 0,
+    };
+    with_context(env, index, version, |context| {
+        context.resize(width, height);
+        if !context.is_lost() {
+            let buffer = context.drawing_buffer();
+            size = Size {
+                width: buffer.width(),
+                height: buffer.height(),
+            };
+        }
+    })?;
+    Ok(size)
 }

@@ -241,6 +241,7 @@ function installShim(window, state) {
   const canvases2d = new WeakSet();
   window.HTMLCanvasElement.prototype.getContext = function getContext(type, ...rest) {
     const version = WEBGL_TYPES[String(type)];
+    const [attributes] = rest;
     const existing = contexts.get(this);
     if (existing) return existing.version === version ? existing.gl : null;
     if (version === undefined) {
@@ -251,7 +252,7 @@ function installShim(window, state) {
     if (canvases2d.has(this)) return null;
     let gl;
     try {
-      gl = createContext({ width: this.width, height: this.height, webgl2: version === 2 });
+      gl = createContext({ width: this.width, height: this.height, webgl2: version === 2, canvas: this, attributes });
     } catch (error) {
       // A browser's getContext returns null when creation fails.
       state.contextErrors.push(String(error?.message ?? error));
@@ -263,6 +264,7 @@ function installShim(window, state) {
     own.add(ref);
     return gl;
   };
+  forwardResizes(window, contexts);
   window.WebGLRenderingContext = WebGLRenderingContext;
   window.WebGL2RenderingContext = WebGL2RenderingContext;
   window.WebGLShaderPrecisionFormat = WebGLShaderPrecisionFormat;
@@ -270,6 +272,48 @@ function installShim(window, state) {
   if (state.root !== undefined) window.CLOSURE_IMPORT_SCRIPT = closureImport(window, state.root);
   deliverMessages(window);
   failMedia(window);
+}
+
+/**
+ * Resizes a canvas's oxgl drawing buffer synchronously whenever its `width`
+ * or `height` changes, through the property or the content attribute, as a
+ * browser does (WebGL 1.0 §2.2). jsdom's property setters write the attribute
+ * internally, so both paths are wrapped.
+ */
+function forwardResizes(window, contexts) {
+  const resize = (canvas) => {
+    const entry = contexts.get(canvas);
+    entry?.gl.resize(canvas.width, canvas.height);
+  };
+  const proto = window.HTMLCanvasElement.prototype;
+  for (const name of ['width', 'height']) {
+    const descriptor = Object.getOwnPropertyDescriptor(proto, name);
+    if (!descriptor?.set) throw new Error(`jsdom's HTMLCanvasElement has no ${name} accessor; update the resize shim`);
+    Object.defineProperty(proto, name, {
+      ...descriptor,
+      set(value) {
+        descriptor.set.call(this, value);
+        resize(this);
+      },
+    });
+  }
+  const isSize = (element, name) =>
+    element instanceof window.HTMLCanvasElement && ['width', 'height'].includes(String(name).toLowerCase());
+  const element = window.Element.prototype;
+  for (const method of ['setAttribute', 'removeAttribute', 'toggleAttribute']) {
+    const original = element[method];
+    element[method] = function (name, ...rest) {
+      const result = original.call(this, name, ...rest);
+      if (isSize(this, name)) resize(this);
+      return result;
+    };
+  }
+  const setAttributeNS = element.setAttributeNS;
+  element.setAttributeNS = function (namespace, name, ...rest) {
+    const result = setAttributeNS.call(this, namespace, name, ...rest);
+    if (namespace === null && isSize(this, name)) resize(this);
+    return result;
+  };
 }
 
 /** The `canvas` package, which jsdom uses for 2D contexts and images. */

@@ -39,7 +39,6 @@ webgl1 conformance/canvas/draw-static-webgl-to-multiple-canvas-test.html FAIL # 
 webgl1 conformance/canvas/draw-webgl-to-canvas-test.html FAIL # TypeError: Cannot read properties of null (reading 'drawImage')
 webgl1 conformance/canvas/drawingbuffer-hd-dpi-test.html FAIL # TypeError: gl.createProgram is not a function
 webgl1 conformance/canvas/drawingbuffer-static-canvas-test.html FAIL # TypeError: gl.createProgram is not a function
-webgl1 conformance/canvas/drawingbuffer-test.html FAIL # TypeError: Cannot read properties of undefined (reading 'width')
 webgl1 conformance/canvas/framebuffer-bindings-affected-by-to-data-url.html FAIL # TypeError: gl.createProgram is not a function
 webgl1 conformance/canvas/framebuffer-bindings-unaffected-on-resize.html FAIL # TypeError: gl.createFramebuffer is not a function
 webgl1 conformance/canvas/rapid-resizing.html FAIL # TypeError: gl.createProgram is not a function
@@ -49,7 +48,7 @@ webgl1 conformance/canvas/to-data-url-after-composite.html FAIL # TypeError: Can
 webgl1 conformance/canvas/to-data-url-test.html FAIL # TypeError: Cannot read properties of undefined (reading 'toDataURL')
 webgl1 conformance/canvas/viewport-unchanged-upon-resize.html FAIL # TypeError: gl.createProgram is not a function
 webgl1 conformance/canvas/webgl-to-2d-canvas.html FAIL # TypeError: Cannot read properties of null (reading 'canvas')
-webgl1 conformance/context/context-attribute-preserve-drawing-buffer-antialias.html FAIL # TypeError: gl.getContextAttributes is not a function
+webgl1 conformance/context/context-attribute-preserve-drawing-buffer-antialias.html TIMEOUT # no new result within the time limit
 webgl1 conformance/context/context-attribute-preserve-drawing-buffer.html FAIL # TypeError: Cannot read properties of null (reading 'drawImage')
 webgl1 conformance/context/context-attributes-alpha-depth-stencil-antialias.html FAIL # TypeError: Cannot read properties of undefined (reading 'width')
 webgl1 conformance/context/context-creation-and-destruction.html FAIL # TypeError: gl.createTexture is not a function
@@ -59,13 +58,11 @@ webgl1 conformance/context/context-lost.html FAIL # TypeError: gl.createBuffer i
 webgl1 conformance/context/context-no-alpha-fbo-with-alpha.html FAIL # TypeError: Cannot read properties of undefined (reading 'width')
 webgl1 conformance/context/context-release-upon-reload.html TIMEOUT # no new result within the time limit
 webgl1 conformance/context/context-release-with-workers.html TIMEOUT # no new result within the time limit
-webgl1 conformance/context/context-size-change.html FAIL # pixel[0] == 0 should be true. Was false.
 webgl1 conformance/context/context-type-test.html FAIL # WebGLRenderingContext should only have Object in it's prototype chain
 webgl1 conformance/context/deleted-object-behavior.html FAIL # TypeError: gl.createFramebuffer is not a function
 webgl1 conformance/context/incorrect-context-object-behaviour.html FAIL # TypeError: contextA.createBuffer is not a function
 webgl1 conformance/context/methods.html FAIL # Property either does not exist or is not a function: getContextAttributes
 webgl1 conformance/context/premultiplyalpha-test.html FAIL # TypeError: gl.getContextAttributes is not a function
-webgl1 conformance/context/zero-sized-canvas.html FAIL # TypeError: Cannot read properties of null (reading 'getParameter')
 webgl1 conformance/extensions/angle-instanced-arrays.html FAIL # TypeError: gl.getVertexAttrib is not a function
 webgl1 conformance/extensions/ext-color-buffer-half-float.html FAIL # TypeError: gl.createProgram is not a function
 webgl1 conformance/extensions/ext-frag-depth.html FAIL # TypeError: gl.createShader is not a function
@@ -426,7 +423,6 @@ webgl1 conformance/misc/type-conversion-test.html FAIL # TypeError: gl.createPro
 webgl1 conformance/misc/uninitialized-test.html FAIL # TypeError: gl.createTexture is not a function
 webgl1 conformance/misc/webgl-specific-stencil-settings.html FAIL # TypeError: gl.createFramebuffer is not a function
 webgl1 conformance/misc/webgl-specific.html FAIL # TypeError: gl.createProgram is not a function
-webgl1 conformance/more/conformance/getContext.html FAIL # testGetWebGL
 webgl1 conformance/more/conformance/methods.html FAIL # testOES20Methods
 webgl1 conformance/more/conformance/quickCheckAPI-A.html FAIL # testValidArgs
 webgl1 conformance/more/conformance/quickCheckAPI-B1.html FAIL # testValidArgs
@@ -659,7 +655,6 @@ webgl1 conformance/rendering/framebuffer-texture-switch.html FAIL # TypeError: g
 webgl1 conformance/rendering/gl-clear.html FAIL # TypeError: gl.createProgram is not a function
 webgl1 conformance/rendering/gl-drawarrays.html FAIL # TypeError: gl.createProgram is not a function
 webgl1 conformance/rendering/gl-drawelements.html FAIL # TypeError: gl.createProgram is not a function
-webgl1 conformance/rendering/gl-scissor-canvas-dimensions.html FAIL # TypeError: Cannot read properties of undefined (reading 'width')
 webgl1 conformance/rendering/gl-scissor-fbo-test.html FAIL # TypeError: gl.createTexture is not a function
 webgl1 conformance/rendering/gl-scissor-test.html FAIL # TypeError: Cannot read properties of undefined (reading 'width')
 webgl1 conformance/rendering/gl-viewport-test.html FAIL # TypeError: gl.createProgram is not a function
@@ -676,10 +671,8 @@ webgl1 conformance/rendering/point-size.html FAIL # TypeError: gl.createBuffer i
 webgl1 conformance/rendering/point-specific-shader-variables.html FAIL # TypeError: gl.createProgram is not a function
 webgl1 conformance/rendering/point-with-gl-pointcoord-in-fragment-shader.html FAIL # TypeError: gl.createShader is not a function
 webgl1 conformance/rendering/polygon-offset.html FAIL # TypeError: gl.createProgram is not a function
-webgl1 conformance/rendering/preservedrawingbuffer-leak.html FAIL # TypeError: Cannot read properties of undefined (reading 'addEventListener')
 webgl1 conformance/rendering/rendering-sampling-feedback-loop.html FAIL # TypeError: gl.createProgram is not a function
 webgl1 conformance/rendering/rendering-stencil-large-viewport.html FAIL # TypeError: gl.createProgram is not a function
-webgl1 conformance/rendering/scissor-rect-repeated-rendering.html FAIL # TypeError: Cannot read properties of undefined (reading 'width')
 webgl1 conformance/rendering/simple.html FAIL # TypeError: gl.createProgram is not a function
 webgl1 conformance/rendering/texture-switch-performance.html FAIL # TypeError: gl.createProgram is not a function
 webgl1 conformance/rendering/triangle.html FAIL # TypeError: gl.createProgram is not a function
@@ -863,7 +856,6 @@ webgl2 conformance/canvas/draw-static-webgl-to-multiple-canvas-test.html FAIL # 
 webgl2 conformance/canvas/draw-webgl-to-canvas-test.html FAIL # TypeError: Cannot read properties of null (reading 'drawImage')
 webgl2 conformance/canvas/drawingbuffer-hd-dpi-test.html FAIL # TypeError: gl.createProgram is not a function
 webgl2 conformance/canvas/drawingbuffer-static-canvas-test.html FAIL # TypeError: gl.createProgram is not a function
-webgl2 conformance/canvas/drawingbuffer-test.html FAIL # TypeError: Cannot read properties of undefined (reading 'width')
 webgl2 conformance/canvas/framebuffer-bindings-affected-by-to-data-url.html FAIL # TypeError: gl.createProgram is not a function
 webgl2 conformance/canvas/framebuffer-bindings-unaffected-on-resize.html FAIL # TypeError: gl.createFramebuffer is not a function
 webgl2 conformance/canvas/rapid-resizing.html FAIL # TypeError: gl.createProgram is not a function
@@ -873,7 +865,7 @@ webgl2 conformance/canvas/to-data-url-after-composite.html FAIL # TypeError: Can
 webgl2 conformance/canvas/to-data-url-test.html FAIL # TypeError: Cannot read properties of undefined (reading 'toDataURL')
 webgl2 conformance/canvas/viewport-unchanged-upon-resize.html FAIL # TypeError: gl.createProgram is not a function
 webgl2 conformance/canvas/webgl-to-2d-canvas.html FAIL # TypeError: Cannot read properties of null (reading 'canvas')
-webgl2 conformance/context/context-attribute-preserve-drawing-buffer-antialias.html FAIL # TypeError: gl.getContextAttributes is not a function
+webgl2 conformance/context/context-attribute-preserve-drawing-buffer-antialias.html TIMEOUT # no new result within the time limit
 webgl2 conformance/context/context-attribute-preserve-drawing-buffer.html FAIL # TypeError: Cannot read properties of null (reading 'drawImage')
 webgl2 conformance/context/context-attributes-alpha-depth-stencil-antialias.html FAIL # TypeError: Cannot read properties of undefined (reading 'width')
 webgl2 conformance/context/context-creation-and-destruction.html FAIL # TypeError: gl.createTexture is not a function
@@ -883,11 +875,9 @@ webgl2 conformance/context/context-lost.html FAIL # TypeError: gl.createBuffer i
 webgl2 conformance/context/context-no-alpha-fbo-with-alpha.html FAIL # TypeError: Cannot read properties of undefined (reading 'width')
 webgl2 conformance/context/context-release-upon-reload.html TIMEOUT # no new result within the time limit
 webgl2 conformance/context/context-release-with-workers.html TIMEOUT # no new result within the time limit
-webgl2 conformance/context/context-size-change.html FAIL # pixel[0] == 0 should be true. Was false.
 webgl2 conformance/context/deleted-object-behavior.html FAIL # TypeError: gl.createFramebuffer is not a function
 webgl2 conformance/context/incorrect-context-object-behaviour.html FAIL # TypeError: contextA.createBuffer is not a function
 webgl2 conformance/context/premultiplyalpha-test.html FAIL # TypeError: gl.getContextAttributes is not a function
-webgl2 conformance/context/zero-sized-canvas.html FAIL # TypeError: Cannot read properties of null (reading 'getParameter')
 webgl2 conformance/extensions/ext-color-buffer-half-float.html FAIL # TypeError: Cannot assign to read only property 'R16F' of object '#<WebGL2RenderingContext>'
 webgl2 conformance/extensions/ext-texture-compression-bptc.html FAIL # TypeError: gl.createTexture is not a function
 webgl2 conformance/extensions/ext-texture-compression-rgtc.html FAIL # TypeError: gl.createTexture is not a function
@@ -1231,7 +1221,6 @@ webgl2 conformance/misc/type-conversion-test.html FAIL # TypeError: gl.createPro
 webgl2 conformance/misc/uninitialized-test.html FAIL # TypeError: gl.createTexture is not a function
 webgl2 conformance/misc/webgl-specific-stencil-settings.html FAIL # TypeError: gl.createFramebuffer is not a function
 webgl2 conformance/misc/webgl-specific.html FAIL # TypeError: gl.createProgram is not a function
-webgl2 conformance/more/conformance/getContext.html FAIL # testGetWebGL
 webgl2 conformance/more/conformance/methods.html FAIL # testOES20Methods
 webgl2 conformance/more/conformance/quickCheckAPI-A.html FAIL # testValidArgs
 webgl2 conformance/more/conformance/quickCheckAPI-B1.html FAIL # testValidArgs
@@ -1461,7 +1450,6 @@ webgl2 conformance/rendering/framebuffer-texture-switch.html FAIL # TypeError: g
 webgl2 conformance/rendering/gl-clear.html FAIL # TypeError: gl.createProgram is not a function
 webgl2 conformance/rendering/gl-drawarrays.html FAIL # TypeError: gl.createProgram is not a function
 webgl2 conformance/rendering/gl-drawelements.html FAIL # TypeError: gl.createProgram is not a function
-webgl2 conformance/rendering/gl-scissor-canvas-dimensions.html FAIL # TypeError: Cannot read properties of undefined (reading 'width')
 webgl2 conformance/rendering/gl-scissor-fbo-test.html FAIL # TypeError: gl.createTexture is not a function
 webgl2 conformance/rendering/gl-scissor-test.html FAIL # TypeError: Cannot read properties of undefined (reading 'width')
 webgl2 conformance/rendering/gl-viewport-test.html FAIL # TypeError: gl.createProgram is not a function
@@ -1478,10 +1466,8 @@ webgl2 conformance/rendering/point-size.html FAIL # TypeError: gl.createBuffer i
 webgl2 conformance/rendering/point-specific-shader-variables.html FAIL # TypeError: gl.createProgram is not a function
 webgl2 conformance/rendering/point-with-gl-pointcoord-in-fragment-shader.html FAIL # TypeError: gl.createShader is not a function
 webgl2 conformance/rendering/polygon-offset.html FAIL # TypeError: gl.createProgram is not a function
-webgl2 conformance/rendering/preservedrawingbuffer-leak.html FAIL # TypeError: Cannot read properties of undefined (reading 'addEventListener')
 webgl2 conformance/rendering/rendering-sampling-feedback-loop.html FAIL # TypeError: gl.createProgram is not a function
 webgl2 conformance/rendering/rendering-stencil-large-viewport.html FAIL # TypeError: gl.createProgram is not a function
-webgl2 conformance/rendering/scissor-rect-repeated-rendering.html FAIL # TypeError: Cannot read properties of undefined (reading 'width')
 webgl2 conformance/rendering/simple.html FAIL # TypeError: gl.createProgram is not a function
 webgl2 conformance/rendering/texture-switch-performance.html FAIL # TypeError: gl.createProgram is not a function
 webgl2 conformance/rendering/triangle.html FAIL # TypeError: gl.createProgram is not a function
@@ -1650,7 +1636,6 @@ webgl2 conformance2/buffers/uniform-buffers-second-compile.html FAIL # TypeError
 webgl2 conformance2/buffers/uniform-buffers-state-restoration.html FAIL # TypeError: gl.createBuffer is not a function
 webgl2 conformance2/buffers/uniform-buffers.html FAIL # TypeError: gl.createBuffer is not a function
 webgl2 conformance2/canvas/to-data-url-with-pack-params.html FAIL # TypeError: gl.createBuffer is not a function
-webgl2 conformance2/context/context-attributes-depth-stencil-antialias-obeyed.html FAIL # TypeError: gl.getContextAttributes is not a function
 webgl2 conformance2/context/context-resize-changes-buffer-binding-bug.html FAIL # TypeError: gl.createTexture is not a function
 webgl2 conformance2/context/context-sharing-texture2darray-texture3d-data-bug.html FAIL # TypeError: gl.createProgram is not a function
 webgl2 conformance2/context/incorrect-context-object-behaviour.html FAIL # TypeError: contextA.createBuffer is not a function

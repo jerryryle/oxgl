@@ -24,6 +24,19 @@ export interface NativePrecision {
   precision: number;
 }
 
+/** `WebGLContextAttributes` as the native layer takes and returns them. */
+export interface NativeAttributes {
+  alpha: boolean;
+  depth: boolean;
+  stencil: boolean;
+  antialias: boolean;
+  premultipliedAlpha: boolean;
+  preserveDrawingBuffer: boolean;
+  /** 0 `default`, 1 `low-power`, 2 `high-performance`. */
+  powerPreference: number;
+  failIfMajorPerformanceCaveat: boolean;
+}
+
 /**
  * Native interface exported by the oxgl addon. Arguments are already converted
  * per WebIDL; contexts are identified by their key's `index` and `version`.
@@ -31,7 +44,15 @@ export interface NativePrecision {
 export interface NativeBinding {
   nativeAbiVersion(): number;
   init(libDir: string): void;
-  createContext(backend: string, width: number, height: number, webgl2: boolean): NativeCreated;
+  createContext(
+    backend: string,
+    width: number,
+    height: number,
+    webgl2: boolean,
+    attributes: NativeAttributes,
+  ): NativeCreated;
+  getContextAttributes(index: number, version: number): NativeAttributes | null;
+  resize(index: number, version: number, width: number, height: number): { width: number; height: number };
   destroy(index: number, version: number): void;
   release(index: number, version: number): void;
   liveContexts(): number;
@@ -92,7 +113,7 @@ export interface NativeBinding {
 }
 
 /** Version of the JS ↔ native interface this package was built for. */
-export const NATIVE_ABI_VERSION = 3;
+export const NATIVE_ABI_VERSION = 4;
 
 function nativeMissing(detail: string, cause?: unknown): Error {
   const error = new Error(

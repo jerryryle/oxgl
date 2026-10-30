@@ -102,8 +102,8 @@ test('non-object options throw TypeError', () => {
   }
 });
 
-test('non-positive or fractional sizes throw RangeError', () => {
-  for (const size of [0, -1, 1.5, NaN, Infinity]) {
+test('negative, fractional or too-large sizes throw RangeError', () => {
+  for (const size of [-1, 1.5, NaN, Infinity, 2147483648]) {
     assert.throws(() => createContext({ width: size, height: 10 }), RangeError, String(size));
     assert.throws(() => createContext({ width: 10, height: size }), RangeError, String(size));
   }

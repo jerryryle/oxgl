@@ -19,10 +19,12 @@ pub mod bindings {
     include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 }
 
+mod calls;
 mod egl;
 mod loader;
 #[cfg(feature = "node")]
 pub mod napi_view;
+mod pointers;
 mod state;
 #[cfg(feature = "test-support")]
 pub mod test_support;
@@ -30,8 +32,10 @@ mod view;
 
 pub use egl::{
     ClientVersion, Current, Display, DisplayKind, EglError, GlContext, ReadPixels, live_contexts,
-    live_surfaces,
 };
 pub use loader::{Angle, LoadError, LoadErrorKind};
+pub use pointers::{
+    ActiveInfo, AttribQuery, Quad, UniformData, UniformMatrix, UniformOut, UniformVector,
+};
 pub use state::{PrecisionFormat, StateCall, ValueType, Values};
 pub use view::{PixelDestination, ViewKind};

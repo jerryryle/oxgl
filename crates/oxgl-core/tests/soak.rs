@@ -6,14 +6,14 @@ mod common;
 use common::{Memory, on_gl_thread, rgba, runtime, software};
 use oxgl_sys::ViewKind;
 use oxgl_sys::bindings::GL_COLOR_BUFFER_BIT;
-use oxgl_sys::{live_contexts, live_surfaces};
+use oxgl_sys::live_contexts;
 
 const CYCLES: usize = 1000;
 
 #[test]
 fn contexts_and_surfaces_return_to_zero() {
     on_gl_thread(move || {
-        let before = (live_contexts(), live_surfaces());
+        let before = live_contexts();
         let mut rt = runtime();
         let pixel = Memory::new(ViewKind::Uint8, 4, 0);
         for cycle in 0..CYCLES {
@@ -28,7 +28,7 @@ fn contexts_and_surfaces_return_to_zero() {
             } else {
                 rt.destroy(key);
             }
-            assert_eq!((live_contexts(), live_surfaces()), before, "cycle {cycle}");
+            assert_eq!(live_contexts(), before, "cycle {cycle}");
         }
         assert_eq!(pixel.bytes(), [0, 255, 0, 255]);
         assert_eq!(rt.live_contexts(), 0);

@@ -3,24 +3,48 @@
 // WebIDL argument conversion happens here, before native code runs, so native
 // code never re-enters JS (conversions can call user `valueOf`). This file is
 // the seam a WebIDL generator will own (src/generated/).
-import type { NativeParameter } from './load-native.js';
+import type { NativeAttributes, NativeParameter } from './load-native.js';
 import { native } from './native.js';
 import { WEBGL1_CONSTANTS, WEBGL2_CONSTANTS } from './generated/webgl-constants.js';
 
 /** Backend for `createContext`; `OXGL_BACKEND` overrides it. */
 export type ContextBackend = 'auto' | 'gpu' | 'software';
 
+/** `WebGLPowerPreference` (WebGL 1.0 §5.2). */
+export type WebGLPowerPreference = 'default' | 'low-power' | 'high-performance';
+
+/** `WebGLContextAttributes` (WebGL 1.0 §5.2). */
+export interface WebGLContextAttributes {
+  alpha?: boolean;
+  depth?: boolean;
+  stencil?: boolean;
+  antialias?: boolean;
+  premultipliedAlpha?: boolean;
+  preserveDrawingBuffer?: boolean;
+  powerPreference?: WebGLPowerPreference;
+  failIfMajorPerformanceCaveat?: boolean;
+  desynchronized?: boolean;
+}
+
 /** Options for {@link createContext}. */
 export interface ContextOptions {
-  /** Drawing buffer width in pixels (a positive integer). */
+  /** Drawing buffer width in pixels (a non-negative integer; 0 gives 1). */
   width: number;
-  /** Drawing buffer height in pixels (a positive integer). */
+  /** Drawing buffer height in pixels (a non-negative integer; 0 gives 1). */
   height: number;
   /** `'auto'` (default): GPU, else SwiftShader. `'gpu'`: GPU only. `'software'`: SwiftShader. */
   backend?: ContextBackend;
   /** Create a WebGL 2 context. */
   webgl2?: boolean;
+  /** The object `gl.canvas` returns; a {@link HeadlessCanvas} when absent. */
+  canvas?: object;
+  /** Context creation attributes, as for `canvas.getContext`. */
+  attributes?: WebGLContextAttributes | null;
 }
+
+const POWER_PREFERENCES: readonly string[] = ['default', 'low-power', 'high-performance'];
+/** The largest canvas dimension HTML allows (`unsigned long` limited to 2^31 − 1). */
+const MAX_DIMENSION = 2147483647;
 
 const BACKENDS: readonly string[] = ['auto', 'gpu', 'software'];
 
@@ -122,6 +146,65 @@ function requireArguments(name: string, required: number, given: number): void {
   }
 }
 
+/** Resizes a context's drawing buffer; assigned by `ContextBase`'s static block. */
+let resizeDrawingBuffer: (gl: ContextBase, width: number, height: number) => void;
+/** Stores a canvas's size; assigned by `HeadlessCanvas`'s static block. */
+let storeCanvasSize: (canvas: HeadlessCanvas, width: number, height: number) => void;
+
+/** HTML's reflection of a canvas dimension: `unsigned long`, with values above 2^31 − 1 replaced by the default. */
+function canvasDimension(value: unknown, fallback: number): number {
+  const converted = toUnsignedLong(value);
+  return converted > MAX_DIMENSION ? fallback : converted;
+}
+
+/**
+ * The canvas of a context created without one: an `EventTarget` whose
+ * `width` and `height` resize the drawing buffer, like an HTML canvas.
+ */
+export class HeadlessCanvas extends EventTarget {
+  #context: ContextBase;
+  #width: number;
+  #height: number;
+
+  static {
+    storeCanvasSize = (canvas, width, height) => {
+      canvas.#width = width;
+      canvas.#height = height;
+    };
+  }
+
+  /** @internal Created by `createContext`. */
+  constructor(token: symbol, context: ContextBase, width: number, height: number) {
+    if (token !== CONSTRUCTING) {
+      throw new TypeError('Illegal constructor');
+    }
+    super();
+    this.#context = context;
+    this.#width = width;
+    this.#height = height;
+  }
+
+  /** Width in CSS pixels; setting it resizes the drawing buffer. */
+  get width(): number {
+    return this.#width;
+  }
+
+  set width(value: number) {
+    this.#width = canvasDimension(value, 300);
+    resizeDrawingBuffer(this.#context, this.#width, this.#height);
+  }
+
+  /** Height in CSS pixels; setting it resizes the drawing buffer. */
+  get height(): number {
+    return this.#height;
+  }
+
+  set height(value: number) {
+    this.#height = canvasDimension(value, 150);
+    resizeDrawingBuffer(this.#context, this.#width, this.#height);
+  }
+}
+
 /**
  * Members shared by WebGL 1 and WebGL 2 (the `WebGLRenderingContextBase`
  * mixin). Not exported: as in browsers, the two context classes are unrelated.
@@ -134,9 +217,25 @@ abstract class ContextBase {
   #height: number;
   #destroyed = false;
   #lostReported = false;
+  #canvas: object;
+
+  static {
+    resizeDrawingBuffer = (gl, width, height) => {
+      gl.#resizeTo(width, height);
+    };
+  }
 
   /** @internal Use {@link createContext}. */
-  constructor(token: symbol, index: number, version: number, width: number, height: number) {
+  constructor(
+    token: symbol,
+    index: number,
+    version: number,
+    width: number,
+    height: number,
+    canvas: object | undefined,
+    requestedWidth: number,
+    requestedHeight: number,
+  ) {
     if (token !== CONSTRUCTING) {
       throw new TypeError('Illegal constructor');
     }
@@ -144,7 +243,54 @@ abstract class ContextBase {
     this.#version = version;
     this.#width = width;
     this.#height = height;
+    this.#canvas = canvas ?? new HeadlessCanvas(CONSTRUCTING, this, requestedWidth, requestedHeight);
     collected.register(this, Object.freeze([index, version] as const), this);
+  }
+
+  /** The canvas this context draws for (WebGL 1.0 §5.14.1). */
+  get canvas(): object {
+    return this.#canvas;
+  }
+
+  /** Reallocates the drawing buffer; a no-op when lost. Never touches the canvas. */
+  #resizeTo(width: number, height: number): void {
+    if (this.#destroyed) return;
+    // 0×0 when the resize lost the context, as a lost context reports.
+    const size = native.resize(this.#index, this.#version, width, height);
+    this.#width = size.width;
+    this.#height = size.height;
+  }
+
+  /**
+   * Non-standard: reallocates the drawing buffer at `width`×`height`
+   * (clamped to the implementation's limits), with cleared contents. Other
+   * state, including the viewport, is kept. A no-op on a lost context.
+   */
+  resize(width: number, height: number): void {
+    requireArguments('resize', 2, arguments.length);
+    const w = validateSize('width', width, 'resize');
+    const h = validateSize('height', height, 'resize');
+    if (this.isContextLost()) return;
+    if (this.#canvas instanceof HeadlessCanvas) storeCanvasSize(this.#canvas, w, h);
+    this.#resizeTo(w, h);
+  }
+
+  /** WebGL 1.0 §5.14.2; a new object per call, `null` when lost. */
+  getContextAttributes(): WebGLContextAttributes | null {
+    if (this.#destroyed) return null;
+    const attributes = native.getContextAttributes(this.#index, this.#version);
+    if (attributes === null) return null;
+    return {
+      alpha: attributes.alpha,
+      antialias: attributes.antialias,
+      depth: attributes.depth,
+      desynchronized: false,
+      failIfMajorPerformanceCaveat: attributes.failIfMajorPerformanceCaveat,
+      powerPreference: POWER_PREFERENCES[attributes.powerPreference] as WebGLPowerPreference,
+      premultipliedAlpha: attributes.premultipliedAlpha,
+      preserveDrawingBuffer: attributes.preserveDrawingBuffer,
+      stencil: attributes.stencil,
+    };
   }
 
   /** Width of the drawing buffer in pixels (WebGL 1.0 §5.14.1). */
@@ -527,14 +673,56 @@ function resolveBackend(option: ContextBackend): ContextBackend {
   return override as ContextBackend;
 }
 
-function validateSize(name: string, value: unknown): number {
+function validateSize(name: string, value: unknown, method = 'createContext'): number {
   if (typeof value !== 'number') {
-    throw new TypeError(`oxgl: createContext: '${name}' must be a number`);
+    throw new TypeError(`oxgl: ${method}: '${name}' must be a number`);
   }
-  if (!Number.isInteger(value) || value <= 0) {
-    throw new RangeError(`oxgl: createContext: '${name}' must be a positive integer, got ${String(value)}`);
+  if (!Number.isInteger(value) || value < 0 || value > MAX_DIMENSION) {
+    throw new RangeError(
+      `oxgl: ${method}: '${name}' must be an integer from 0 to ${String(MAX_DIMENSION)}, got ${String(value)}`,
+    );
   }
   return value;
+}
+
+/** Converts `attributes` as a WebIDL `WebGLContextAttributes` dictionary, members in IDL order. */
+function convertAttributes(value: unknown): NativeAttributes {
+  if (value === undefined || value === null) value = {};
+  if (typeof value !== 'object' && typeof value !== 'function') {
+    throw new TypeError("oxgl: createContext: 'attributes' must be an object");
+  }
+  const dict = value as Record<string, unknown>;
+  const bool = (name: string, fallback: boolean): boolean => {
+    const member = dict[name];
+    return member === undefined ? fallback : toBoolean(member);
+  };
+  const alpha = bool('alpha', true);
+  const antialias = bool('antialias', true);
+  const depth = bool('depth', true);
+  bool('desynchronized', false);
+  const failIfMajorPerformanceCaveat = bool('failIfMajorPerformanceCaveat', false);
+  const rawPower = dict.powerPreference;
+  const power = rawPower === undefined ? 'default' : toDOMString(rawPower);
+  const powerPreference = POWER_PREFERENCES.indexOf(power);
+  if (powerPreference < 0) {
+    throw new TypeError(
+      `oxgl: createContext: 'powerPreference' must be one of 'default', 'low-power', 'high-performance', got ${power}`,
+    );
+  }
+  const premultipliedAlpha = bool('premultipliedAlpha', true);
+  const preserveDrawingBuffer = bool('preserveDrawingBuffer', false);
+  const stencil = bool('stencil', false);
+  bool('xrCompatible', false);
+  return {
+    alpha,
+    depth,
+    stencil,
+    antialias,
+    premultipliedAlpha,
+    preserveDrawingBuffer,
+    powerPreference,
+    failIfMajorPerformanceCaveat,
+  };
 }
 
 /**
@@ -550,9 +738,14 @@ export function createContext(options: unknown): WebGLRenderingContext | WebGL2R
     throw new TypeError('oxgl: createContext: options must be an object');
   }
   // Each member is read once, as WebIDL dictionary conversion does.
-  const { width: rawWidth, height: rawHeight, backend = 'auto', webgl2 = false } = options as Partial<
-    Record<keyof ContextOptions, unknown>
-  >;
+  const {
+    width: rawWidth,
+    height: rawHeight,
+    backend = 'auto',
+    webgl2 = false,
+    canvas,
+    attributes: rawAttributes,
+  } = options as Partial<Record<keyof ContextOptions, unknown>>;
   if (typeof rawWidth !== 'number' || typeof rawHeight !== 'number') {
     throw new TypeError("oxgl: createContext: 'width' and 'height' must be numbers");
   }
@@ -566,10 +759,34 @@ export function createContext(options: unknown): WebGLRenderingContext | WebGL2R
   if (typeof webgl2 !== 'boolean') {
     throw new TypeError("oxgl: createContext: 'webgl2' must be a boolean");
   }
-  const created = native.createContext(resolveBackend(backend as ContextBackend), width, height, webgl2);
+  if (canvas !== undefined && (typeof canvas !== 'object' || canvas === null) && typeof canvas !== 'function') {
+    throw new TypeError("oxgl: createContext: 'canvas' must be an object");
+  }
+  const attributes = convertAttributes(rawAttributes);
+  let resolved = resolveBackend(backend as ContextBackend);
+  if (attributes.failIfMajorPerformanceCaveat) {
+    // SwiftShader is a major performance caveat (WebGL 1.0 §5.2.1).
+    if (resolved === 'software') {
+      throw codedError(
+        'OXGL_CONTEXT_CREATION_FAILED',
+        'oxgl: failIfMajorPerformanceCaveat is set and the software backend was requested',
+      );
+    }
+    resolved = 'gpu';
+  }
+  const created = native.createContext(resolved, width, height, webgl2, attributes);
   if (created.errorCode !== undefined) {
     throw codedError(created.errorCode, created.errorMessage ?? created.errorCode);
   }
   const Class = webgl2 ? WebGL2RenderingContext : WebGLRenderingContext;
-  return new Class(CONSTRUCTING, created.index, created.version, created.width, created.height);
+  return new Class(
+    CONSTRUCTING,
+    created.index,
+    created.version,
+    created.width,
+    created.height,
+    canvas,
+    width,
+    height,
+  );
 }

@@ -48,12 +48,44 @@ console.log(pixels.subarray(0, 4)); // Uint8Array(4) [ 0, 255, 0, 255 ]
 gl.destroy();
 ```
 
-`createContext({ width, height, backend, webgl2 })` returns a
-`WebGLRenderingContext`, or a `WebGL2RenderingContext` when `webgl2` is `true`.
-No window system, display server, or canvas is needed. `width` and `height` must
-be positive integers; a size beyond the implementation's limits gives a smaller
-drawing buffer with the same aspect ratio, so check `drawingBufferWidth` and
-`drawingBufferHeight`.
+`createContext({ width, height, backend, webgl2, attributes, canvas })` returns
+a `WebGLRenderingContext`, or a `WebGL2RenderingContext` when `webgl2` is
+`true`. No window system, display server, or canvas is needed. `width` and
+`height` must be integers from 0 to 2147483647 (0 gives 1); a size beyond the
+implementation's limits gives a smaller drawing buffer with the same aspect
+ratio, so check `drawingBufferWidth` and `drawingBufferHeight`.
+
+`attributes` takes the `WebGLContextAttributes` a browser's `getContext`
+takes (`alpha`, `depth`, `stencil`, `antialias`, `premultipliedAlpha`,
+`preserveDrawingBuffer`, `powerPreference`, `failIfMajorPerformanceCaveat`),
+with the same defaults; `getContextAttributes()` reports what was allocated.
+As in browsers, `antialias` defaults to `true`, which gives a 4-sample buffer
+plus a resolve buffer, about nine times the memory of a single-sampled RGBA8
+buffer; pass `antialias: false` when you don't need it. A headless buffer is
+never presented, so its contents persist whatever `preserveDrawingBuffer` is.
+`failIfMajorPerformanceCaveat: true` refuses the software backend: with
+`'auto'` it behaves as `'gpu'`, and with `'software'` it throws
+`OXGL_CONTEXT_CREATION_FAILED`.
+
+### Canvas and resizing
+
+`gl.canvas` is the `canvas` option's object, or a `HeadlessCanvas` (an
+`EventTarget` with `width` and `height`) when none was given. Setting
+`gl.canvas.width` or `height` resizes the drawing buffer, as with an HTML
+canvas. `gl.resize(width, height)` (not part of WebGL) does the same for any
+context, also updating a `HeadlessCanvas`. A resize clears the buffer and
+keeps all other state, including the viewport.
+
+Libraries that take a canvas and a context, such as three.js, can use both:
+
+```js
+import * as THREE from 'three';
+import { createContext } from 'oxgl';
+
+const gl = createContext({ width: 256, height: 256, webgl2: true });
+const renderer = new THREE.WebGLRenderer({ canvas: gl.canvas, context: gl });
+renderer.setSize(256, 256, false); // false: a HeadlessCanvas has no style
+```
 
 ### Backends
 
@@ -90,7 +122,7 @@ Invalid options throw a `TypeError` or `RangeError`. Other failures throw an
 |---|---|
 | `OXGL_GPU_UNAVAILABLE` | `backend: 'gpu'` (option or `OXGL_BACKEND`) could not create a context |
 | `OXGL_INVALID_BACKEND` | `OXGL_BACKEND` has a value other than `auto`, `gpu`, `software`, or empty |
-| `OXGL_CONTEXT_CREATION_FAILED` | no backend could create the context, for example WebGL 2 on a backend without OpenGL ES 3.0 |
+| `OXGL_CONTEXT_CREATION_FAILED` | no backend could create the context, for example WebGL 2 on a backend without OpenGL ES 3.0, or `failIfMajorPerformanceCaveat` with the software backend |
 | `OXGL_NATIVE_MISSING` | the native addon or its ANGLE libraries are missing or failed to load |
 
 WebGL errors are reported through `getError()`, as in a browser.

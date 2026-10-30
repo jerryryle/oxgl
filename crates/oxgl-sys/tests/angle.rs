@@ -10,8 +10,11 @@
 use std::path::Path;
 
 use oxgl_sys::bindings::{
-    GL_COLOR_BUFFER_BIT, GL_INVALID_OPERATION, GL_MAX_RENDERBUFFER_SIZE, GL_MAX_VIEWPORT_DIMS,
-    GL_NO_ERROR, GL_RENDERER, GL_RGBA, GL_UNSIGNED_BYTE,
+    GL_COLOR_ATTACHMENT0, GL_COLOR_BUFFER_BIT, GL_DEPTH_ATTACHMENT, GL_DEPTH_COMPONENT24,
+    GL_DEPTH_STENCIL_ATTACHMENT, GL_DEPTH24_STENCIL8, GL_FRAMEBUFFER, GL_FRAMEBUFFER_COMPLETE,
+    GL_INVALID_OPERATION, GL_MAX_RENDERBUFFER_SIZE, GL_MAX_VIEWPORT_DIMS, GL_NO_ERROR,
+    GL_RENDERBUFFER, GL_RENDERER, GL_RGB8, GL_RGBA, GL_RGBA8, GL_STENCIL_ATTACHMENT,
+    GL_STENCIL_INDEX8, GL_UNSIGNED_BYTE,
 };
 use oxgl_sys::test_support::bundle_dir;
 use oxgl_sys::{
@@ -63,7 +66,7 @@ fn swiftshader_clear_and_bounded_read() {
 fn swiftshader_clear_and_bounded_read_body() {
     let angle = Angle::load(&bundle_dir()).unwrap();
     let display = Display::open(&angle, DisplayKind::SwiftShader).unwrap();
-    let mut context = display.create_context(ClientVersion::Es2).unwrap();
+    let context = display.create_context(ClientVersion::Es2).unwrap();
     {
         let current = context.make_current().unwrap();
         let Some(Values::Integers([max_rb, ..])) =
@@ -78,8 +81,18 @@ fn swiftshader_clear_and_bounded_read_body() {
         };
         assert!(max_rb > 0 && vw > 0 && vh > 0);
     }
-    context.attach_pbuffer(4, 4).unwrap();
     let current = context.make_current().unwrap();
+    current.request_extension(c"GL_OES_rgb8_rgba8");
+    let framebuffer = current.gen_framebuffer();
+    let color = current.gen_renderbuffer();
+    current.bind_framebuffer(GL_FRAMEBUFFER, framebuffer);
+    current.bind_renderbuffer(GL_RENDERBUFFER, color);
+    current.renderbuffer_storage(GL_RENDERBUFFER, GL_RGBA8, 4, 4);
+    current.framebuffer_renderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, color);
+    assert_eq!(
+        current.check_framebuffer_status(GL_FRAMEBUFFER),
+        GL_FRAMEBUFFER_COMPLETE
+    );
     let renderer = current.get_string(GL_RENDERER).unwrap();
     assert!(renderer.contains("SwiftShader"), "{renderer}");
     current.clear_color(0.0, 1.0, 0.0, 1.0);
@@ -110,4 +123,90 @@ fn swiftshader_clear_and_bounded_read_body() {
     };
     let n = current.read_pixels(partial, &mut outside);
     eprintln!("partial read length {n}: {outside:?}");
+}
+
+#[test]
+fn drawing_buffer_attachment_combinations_are_complete() {
+    on_lasting_thread(drawing_buffer_attachment_combinations_body);
+}
+
+/// Every attachment combination of the drawing-buffer design's table, single-
+/// sampled and with 4 samples, on ES2 (with the requested ANGLE extensions)
+/// and ES3 `SwiftShader`.
+fn drawing_buffer_attachment_combinations_body() {
+    let angle = Angle::load(&bundle_dir()).unwrap();
+    let display = Display::open(&angle, DisplayKind::SwiftShader).unwrap();
+    for version in [ClientVersion::Es2, ClientVersion::Es3] {
+        let context = display.create_context(version).unwrap();
+        let current = context.make_current().unwrap();
+        if version == ClientVersion::Es2 {
+            current.request_extension(c"GL_OES_rgb8_rgba8");
+            current.request_extension(c"GL_ANGLE_framebuffer_multisample");
+            current.request_extension(c"GL_ANGLE_framebuffer_blit");
+        }
+        for color_format in [GL_RGBA8, GL_RGB8] {
+            for depth_stencil in [
+                None,
+                Some((GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL_ATTACHMENT)),
+                Some((GL_DEPTH_COMPONENT24, GL_DEPTH_ATTACHMENT)),
+                Some((GL_STENCIL_INDEX8, GL_STENCIL_ATTACHMENT)),
+            ] {
+                for samples in [0, 4] {
+                    let framebuffer = current.gen_framebuffer();
+                    current.bind_framebuffer(GL_FRAMEBUFFER, framebuffer);
+                    let storage = |format| {
+                        let renderbuffer = current.gen_renderbuffer();
+                        current.bind_renderbuffer(GL_RENDERBUFFER, renderbuffer);
+                        match (samples, version) {
+                            (0, _) => current.renderbuffer_storage(GL_RENDERBUFFER, format, 8, 8),
+                            (_, ClientVersion::Es2) => current
+                                .renderbuffer_storage_multisample_angle(
+                                    GL_RENDERBUFFER,
+                                    samples,
+                                    format,
+                                    8,
+                                    8,
+                                ),
+                            (_, ClientVersion::Es3) => current.renderbuffer_storage_multisample(
+                                GL_RENDERBUFFER,
+                                samples,
+                                format,
+                                8,
+                                8,
+                            ),
+                        }
+                        renderbuffer
+                    };
+                    let color = storage(color_format);
+                    current.framebuffer_renderbuffer(
+                        GL_FRAMEBUFFER,
+                        GL_COLOR_ATTACHMENT0,
+                        GL_RENDERBUFFER,
+                        color,
+                    );
+                    let other = depth_stencil.map(|(format, attachment)| {
+                        let renderbuffer = storage(format);
+                        current.framebuffer_renderbuffer(
+                            GL_FRAMEBUFFER,
+                            attachment,
+                            GL_RENDERBUFFER,
+                            renderbuffer,
+                        );
+                        renderbuffer
+                    });
+                    assert_eq!(
+                        current.check_framebuffer_status(GL_FRAMEBUFFER),
+                        GL_FRAMEBUFFER_COMPLETE,
+                        "{version:?} {color_format:#x} {depth_stencil:?} {samples} samples"
+                    );
+                    assert_eq!(current.get_error(), GL_NO_ERROR);
+                    current.delete_framebuffer(framebuffer);
+                    current.delete_renderbuffer(color);
+                    if let Some(renderbuffer) = other {
+                        current.delete_renderbuffer(renderbuffer);
+                    }
+                }
+            }
+        }
+    }
 }

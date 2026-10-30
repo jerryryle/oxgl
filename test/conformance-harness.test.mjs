@@ -367,7 +367,8 @@ test('page runner: outcomes, early errors, media, canvas shim, crashes, timeouts
         'image-2d.html',
         'video.html',
         'messages.html',
-        'zero-canvas.html',
+        'rejected.html',
+        'canvas-owner.html',
         'realm.html',
         'rejection.html',
         'destroy-throws.html',
@@ -435,9 +436,15 @@ test('page runner: outcomes, early errors, media, canvas shim, crashes, timeouts
   assert.ok(pageOf(report, 'webgl1', 'video.html').durationMs < PROMPT_MS);
   // Zero-timeout helper, message from a frame, mismatched target origin.
   assert.equal(outcome('webgl1', 'messages.html'), 'PASS', pageOf(report, 'webgl1', 'messages.html').message);
-  // Creation rejected by oxgl: getContext returns null and the message is recorded.
-  assert.equal(outcome('webgl1', 'zero-canvas.html'), 'PASS');
-  assert.match(pageOf(report, 'webgl1', 'zero-canvas.html').contextErrors[0], /width/);
+  // Creation rejected by oxgl: getContext returns null and the message is
+  // recorded. Software rendering is always a major performance caveat; a GPU
+  // host may create the context.
+  if (process.env.OXGL_BACKEND === 'software') {
+    assert.equal(outcome('webgl1', 'rejected.html'), 'PASS', pageOf(report, 'webgl1', 'rejected.html').message);
+    assert.match(pageOf(report, 'webgl1', 'rejected.html').contextErrors[0], /failIfMajorPerformanceCaveat/);
+  }
+  // Context belongs to its canvas; resizes through property and attribute.
+  assert.equal(outcome('webgl1', 'canvas-owner.html'), 'PASS', pageOf(report, 'webgl1', 'canvas-owner.html').message);
   // An unhandled rejection is ignored, as in a browser.
   assert.equal(outcome('webgl1', 'rejection.html'), 'PASS', pageOf(report, 'webgl1', 'rejection.html').message);
   // A throwing destroy() keeps the outcome and is recorded.

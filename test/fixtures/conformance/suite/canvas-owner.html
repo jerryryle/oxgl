@@ -1,0 +1,20 @@
+<!DOCTYPE html>
+<html><head><script src="harness.js"></script></head><body>
+<canvas id="c" width="0" height="0"></canvas>
+<script>
+var canvas = document.createElement("canvas");
+var gl = canvas.getContext("webgl", { alpha: false });
+if (gl.canvas === canvas) testPassed("gl.canvas is the element"); else testFailed("gl.canvas differs");
+if (gl.getContextAttributes().alpha === false) testPassed("alpha false"); else testFailed("alpha not false");
+var zero = document.getElementById("c").getContext("webgl");
+if (zero && zero.drawingBufferWidth === 1 && zero.drawingBufferHeight === 1) testPassed("0x0 canvas gives a 1x1 buffer");
+else testFailed("0x0 canvas: " + (zero && zero.drawingBufferWidth));
+canvas.width = 20;
+if (gl.drawingBufferWidth === 20) testPassed("property resize"); else testFailed("width " + gl.drawingBufferWidth);
+canvas.setAttribute("height", "30");
+if (gl.drawingBufferHeight === 30) testPassed("attribute resize"); else testFailed("height " + gl.drawingBufferHeight);
+canvas.removeAttribute("width");
+if (gl.drawingBufferWidth === 300) testPassed("attribute removal resize"); else testFailed("width " + gl.drawingBufferWidth);
+finishTest();
+</script>
+</body></html>

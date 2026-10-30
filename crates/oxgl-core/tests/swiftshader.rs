@@ -11,23 +11,20 @@ use oxgl_sys::bindings::{
     GL_COLOR_BUFFER_BIT, GL_DEPTH_BUFFER_BIT, GL_INVALID_ENUM, GL_INVALID_OPERATION,
     GL_INVALID_VALUE, GL_NO_ERROR, GL_STENCIL_BUFFER_BIT, GL_VIEWPORT,
 };
-use oxgl_sys::{ReadPixels, live_contexts, live_surfaces};
+use oxgl_sys::{ReadPixels, live_contexts};
 
 #[test]
 fn create_and_destroy_release_everything() {
     on_gl_thread(move || {
         let mut rt = runtime();
-        let before = (live_contexts(), live_surfaces());
+        let before = live_contexts();
         let key = software(&mut rt, 64.0, 32.0, false);
         let buffer = rt.context(key).unwrap().drawing_buffer();
         assert_eq!((buffer.width(), buffer.height()), (64, 32));
-        assert_eq!(
-            (live_contexts(), live_surfaces()),
-            (before.0 + 1, before.1 + 1)
-        );
+        assert_eq!(live_contexts(), before + 1);
         rt.destroy(key);
         rt.destroy(key);
-        assert_eq!((live_contexts(), live_surfaces()), before);
+        assert_eq!(live_contexts(), before);
         assert_eq!(rt.live_contexts(), 0);
     });
 }
@@ -51,13 +48,13 @@ fn stale_key_resolves_to_nothing() {
 #[test]
 fn destroy_all_releases_everything() {
     on_gl_thread(move || {
-        let before = (live_contexts(), live_surfaces());
+        let before = live_contexts();
         let mut rt = runtime();
         for _ in 0..3 {
             software(&mut rt, 8.0, 8.0, false);
         }
         rt.destroy_all();
-        assert_eq!((live_contexts(), live_surfaces()), before);
+        assert_eq!(live_contexts(), before);
     });
 }
 
@@ -324,7 +321,7 @@ fn device_loss_is_reported_by_is_context_lost() {
 #[test]
 fn creation_failure_allocates_nothing() {
     on_gl_thread(move || {
-        let before = (live_contexts(), live_surfaces());
+        let before = live_contexts();
         let mut rt = oxgl_core::Runtime::new(std::env::temp_dir().join("oxgl-no-such-bundle"));
         let error = rt
             .create_context(
@@ -333,6 +330,7 @@ fn creation_failure_allocates_nothing() {
                     width: 1.0,
                     height: 1.0,
                     webgl2: false,
+                    attributes: oxgl_core::Attributes::DEFAULT,
                 },
             )
             .err();
@@ -342,6 +340,6 @@ fn creation_failure_allocates_nothing() {
             assert_eq!(error.code(), "OXGL_NATIVE_MISSING");
         }
         drop(rt);
-        assert_eq!((live_contexts(), live_surfaces()), before);
+        assert_eq!(live_contexts(), before);
     });
 }

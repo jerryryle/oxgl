@@ -118,11 +118,13 @@ On WebGL 2, while the drawing buffer is bound, `getParameter(DRAW_BUFFER0)` and 
 - **THEN** it returns `null` and `getError()` returns `INVALID_ENUM`
 
 ### Requirement: Implementation read format of the drawing buffer
-`getParameter(IMPLEMENTATION_COLOR_READ_FORMAT)` and `getParameter(IMPLEMENTATION_COLOR_READ_TYPE)` SHALL describe the drawing buffer's single-sample color format, `RGBA`/`UNSIGNED_BYTE` or `RGB`/`UNSIGNED_BYTE`, whether or not it is antialiased, without generating an error.
+`getParameter(IMPLEMENTATION_COLOR_READ_FORMAT)` and `getParameter(IMPLEMENTATION_COLOR_READ_TYPE)` SHALL describe a format and type that `readPixels` accepts from the drawing buffer, as ANGLE reports them for its single-sample color buffer, whether or not it is antialiased, without generating an error (WebGL 1.0 §5.14.12).
+
+Accepted trade-off: for an `alpha: false` buffer ANGLE accepts only `RGBA` reads, so the pair is `RGBA`/`UNSIGNED_BYTE` rather than `RGB`.
 
 #### Scenario: Antialiased context
 - **WHEN** an antialiased context with `alpha: false` reads both parameters and then `getError()`
-- **THEN** they are `RGB` and `UNSIGNED_BYTE`, `getError()` returns `NO_ERROR`, and `readPixels` with that pair succeeds
+- **THEN** `getError()` returns `NO_ERROR`, and `readPixels` with that pair succeeds
 
 ### Requirement: Requests that cannot be met
 `depth`, `stencil` and `antialias` set to `true` SHALL be requests that the context MAY be unable to meet (WebGL 1.0 §2.2). When a buffer cannot be allocated, the context SHALL be created without it, and `getContextAttributes()` SHALL report it absent.
