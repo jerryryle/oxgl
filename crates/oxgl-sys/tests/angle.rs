@@ -319,3 +319,78 @@ fn requestable_extensions_are_listed() {
         }
     });
 }
+
+/// The draw rate of ANGLE on `SwiftShader` without oxgl's layers, for
+/// comparison with `npm run bench`'s "drawArrays (1 small triangle)":
+/// `cargo test -p oxgl-sys --test angle --release raw_draw_rate -- --ignored --nocapture`.
+#[test]
+#[ignore = "a benchmark, run on demand"]
+fn raw_draw_rate() {
+    on_lasting_thread(|| {
+        use oxgl_sys::bindings::{
+            GL_ARRAY_BUFFER, GL_FLOAT, GL_FRAGMENT_SHADER, GL_STATIC_DRAW, GL_TRIANGLES,
+            GL_VERTEX_SHADER,
+        };
+        let angle = Angle::load(&bundle_dir()).unwrap();
+        let display = Display::open(&angle, DisplayKind::SwiftShader).unwrap();
+        let context = display.create_context(ClientVersion::Es3).unwrap();
+        let current = context.make_current().unwrap();
+        let framebuffer = current.gen_framebuffer();
+        let color = current.gen_renderbuffer();
+        current.bind_framebuffer(GL_FRAMEBUFFER, framebuffer);
+        current.bind_renderbuffer(GL_RENDERBUFFER, color);
+        current.renderbuffer_storage(GL_RENDERBUFFER, GL_RGBA8, 256, 256);
+        current.framebuffer_renderbuffer(
+            GL_FRAMEBUFFER,
+            GL_COLOR_ATTACHMENT0,
+            GL_RENDERBUFFER,
+            color,
+        );
+        current.apply(oxgl_sys::StateCall::Viewport(0, 0, 256, 256));
+        let compile = |kind, source| {
+            let shader = current.create_shader(kind);
+            current.shader_source(shader, source);
+            current.compile_shader(shader);
+            shader
+        };
+        let program = current.create_program();
+        current.attach_shader(
+            program,
+            compile(
+                GL_VERTEX_SHADER,
+                "attribute vec2 a; void main() { gl_Position = vec4(a * 0.01, 0.0, 1.0); }",
+            ),
+        );
+        current.attach_shader(
+            program,
+            compile(
+                GL_FRAGMENT_SHADER,
+                "precision mediump float; void main() { gl_FragColor = vec4(1.0); }",
+            ),
+        );
+        current.link_program(program);
+        current.use_program(program);
+        let buffer = current.gen_buffer();
+        current.bind_buffer(GL_ARRAY_BUFFER, buffer);
+        let vertices: Vec<u8> = [0f32, 0.0, 1.0, 0.0, 0.0, 1.0]
+            .iter()
+            .flat_map(|v| v.to_ne_bytes())
+            .collect();
+        current.buffer_data(GL_ARRAY_BUFFER, &vertices, GL_STATIC_DRAW);
+        current.enable_vertex_attrib_array(0);
+        current.vertex_attrib_pointer(0, 2, GL_FLOAT, false, 0, 0);
+        let run = |draws: u32| {
+            let start = std::time::Instant::now();
+            for i in 0..draws {
+                current.draw_arrays(GL_TRIANGLES, 0, 3);
+                if i % 100 == 99 {
+                    current.apply(oxgl_sys::StateCall::Finish);
+                }
+            }
+            current.apply(oxgl_sys::StateCall::Finish);
+            f64::from(draws) / start.elapsed().as_secs_f64()
+        };
+        run(20_000);
+        eprintln!("raw ANGLE drawArrays: {:.1} draws/s", run(100_000));
+    });
+}

@@ -149,6 +149,27 @@ Invalid options throw a `TypeError` or `RangeError`. Other failures throw an
 
 WebGL errors are reported through `getError()`, as in a browser.
 
+## Performance
+
+`npm run bench` measures per-call overhead, draws, transfers and two three.js
+scenes. On Linux arm64 in Docker (16 cores, software backend, 2 s per case):
+
+| Case | Result |
+|---|---|
+| `enable` (a state call: WebIDL conversion and the native call) | 11.6 M calls/s |
+| `uniform4f` | 7.3 M calls/s |
+| `drawArrays`, one small triangle | 53 k draws/s |
+| `bufferSubData`, 1 MiB | 32 GB/s |
+| `texSubImage2D`, 512×512 RGBA8 | 26 GB/s |
+| `readPixels`, 256×256 RGBA8 | 3.3 GB/s |
+| three.js, 1000 lit meshes | 52 frames/s |
+| three.js, one 128×64-segment lit sphere | 1230 frames/s |
+
+Draws cost the same as calling ANGLE directly (51.9 k draws/s in
+`cargo test -p oxgl-sys --test angle --release raw_draw_rate -- --ignored`):
+the time is SwiftShader's, and a GPU backend draws much faster. oxgl adds
+about 100 ns per call.
+
 ## Prerequisites
 
 - [rustup](https://rustup.rs). The pinned toolchain in `rust-toolchain.toml` is
