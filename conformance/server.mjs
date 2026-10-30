@@ -58,6 +58,10 @@ export async function startServer(root) {
     // A read failing after the stat fails this request, not the run.
     else createReadStream(file).on('error', () => res.destroy()).pipe(res);
   });
+  // A page can run synchronously for longer than the default 5 s keep-alive
+  // timeout; the server then closes the page's idle connection, and the
+  // next resource request (js-test-post.js, say) is reset as it reuses it.
+  server.keepAliveTimeout = 0;
   await new Promise((done, fail) => {
     server.once('error', fail);
     server.listen(0, '127.0.0.1', done);

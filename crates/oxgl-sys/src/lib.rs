@@ -19,19 +19,29 @@ pub mod bindings {
     include!(concat!(env!("OUT_DIR"), "/bindings.rs"));
 }
 
+mod calls;
 mod egl;
+mod framebuffers;
 mod loader;
 #[cfg(feature = "node")]
 pub mod napi_view;
+mod pointers;
 mod state;
 #[cfg(feature = "test-support")]
 pub mod test_support;
+mod textures;
 mod view;
+mod webgl2;
 
 pub use egl::{
     ClientVersion, Current, Display, DisplayKind, EglError, GlContext, ReadPixels, live_contexts,
-    live_surfaces,
 };
+pub use framebuffers::ClearValues;
 pub use loader::{Angle, LoadError, LoadErrorKind};
+pub use pointers::{
+    ActiveInfo, AttribQuery, Quad, UniformData, UniformMatrix, UniformOut, UniformVector,
+};
 pub use state::{PrecisionFormat, StateCall, ValueType, Values};
-pub use view::{PixelDestination, ViewKind};
+pub use textures::{CompressedData, TexImage, Upload, UploadData};
+pub use view::{ByteSource, PixelDestination, ViewKind};
+pub use webgl2::SyncHandle;

@@ -1,0 +1,8 @@
+<!DOCTYPE html>
+<html><head><script src="harness.js"></script></head><body>
+<script>
+var gl = document.createElement("canvas").getContext("webgl", { failIfMajorPerformanceCaveat: true });
+if (gl === null) testPassed("null when creation is rejected"); else testFailed("context despite the caveat");
+finishTest();
+</script>
+</body></html>

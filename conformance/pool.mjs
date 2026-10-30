@@ -1,15 +1,25 @@
 // Runs pages through a fixed pool of child processes, one fresh process per
 // page, and classifies each page from how its process ended.
 import { fork } from 'node:child_process';
-import { availableParallelism } from 'node:os';
+import { availableParallelism, totalmem } from 'node:os';
 import { fileURLToPath } from 'node:url';
 
 import { SUITES } from './lists.mjs';
 
 export const PAGE_SCRIPT = fileURLToPath(new URL('page.mjs', import.meta.url));
 
-/** One page per CPU: pages are mostly single-threaded startup (conformance-all-cores). */
-export const defaultJobs = () => Math.max(1, availableParallelism());
+/** Memory one page may need: shader-heavy pages peak near 500 MiB on SwiftShader. */
+const PAGE_MEMORY = 1024 ** 3;
+
+/**
+ * One page per CPU, as pages are mostly single-threaded startup
+ * (conformance-all-cores), but no more than memory holds: a swapping
+ * machine stalls pages past their time limit.
+ */
+export function defaultJobs() {
+  const memory = Math.min(totalmem(), process.constrainedMemory() || Infinity);
+  return Math.max(1, Math.min(availableParallelism(), Math.floor(memory / PAGE_MEMORY)));
+}
 
 /** The URL a suite's page loads from: `webglVersion` selects the context version, as in the official harness. */
 export function pageURL(origin, suite, path) {

@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html><head><script src="harness.js"></script></head><body>
+<script>
+var img = new Image();
+img.onload = function () {
+  if (img.width === 2 && img.height === 1) testPassed("natural size"); else testFailed("size " + img.width + "x" + img.height);
+  var ctx = document.createElement("canvas").getContext("2d");
+  ctx.drawImage(img, 0, 0);
+  var px = Array.prototype.slice.call(ctx.getImageData(0, 0, 2, 1).data);
+  if (px.join() === "255,0,0,255,0,0,255,255") testPassed("decoded"); else testFailed("pixels " + px);
+  finishTest();
+};
+img.onerror = function () { testFailed("image failed to load"); finishTest(); };
+img.src = "red-blue.png";
+</script>
+</body></html>

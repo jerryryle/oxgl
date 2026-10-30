@@ -83,6 +83,8 @@ pub fn type_info(ty: u32, webgl2: bool) -> Option<TypeInfo> {
             Some(info(2, true, &[Uint16]))
         }
         GL_FLOAT => Some(info(4, false, &[Float32])),
+        // OES_texture_half_float's type; ANGLE checks that it is enabled.
+        crate::codec::HALF_FLOAT_OES if !webgl2 => Some(info(2, false, &[Uint16])),
         _ if !webgl2 => None,
         GL_BYTE => Some(info(1, false, &[Int8])),
         GL_SHORT => Some(info(2, false, &[Int16])),

@@ -211,6 +211,26 @@ impl Current<'_> {
         (length > 0).then_some(values)
     }
 
+    /// `glGetIntegervRobustANGLE` for a list of up to `count` values.
+    #[must_use]
+    pub fn integers(&self, pname: GLenum, count: usize) -> Vec<i32> {
+        let mut data = vec![0; count];
+        let Ok(size) = GLsizei::try_from(count) else {
+            return Vec::new();
+        };
+        if count == 0 {
+            return data;
+        }
+        let mut length: GLsizei = 0;
+        // SAFETY: a context is current; ANGLE writes at most `size` GLints
+        // (the vector's length) and one GLsizei.
+        unsafe {
+            (self.fns().glGetIntegervRobustANGLE)(pname, size, &raw mut length, data.as_mut_ptr());
+        };
+        data.truncate(usize::try_from(length).unwrap_or(0));
+        data
+    }
+
     /// `glGetShaderPrecisionFormat`. The entry point reports no failure, so
     /// callers pass only valid enums.
     #[must_use]

@@ -7,7 +7,7 @@ use std::sync::{Mutex, PoisonError};
 use oxgl_sys::bindings::GL_RENDERER;
 use oxgl_sys::{Angle, ClientVersion, Display, DisplayKind};
 
-use crate::context::DrawingBuffer;
+use crate::drawing_buffer::DrawingBuffer;
 use crate::error::CoreError;
 
 /// The backend a caller asked for, after the `OXGL_BACKEND` override.
@@ -39,6 +39,8 @@ pub struct ContextRequest {
     pub height: f64,
     /// WebGL 2 (OpenGL ES 3.0) instead of WebGL 1.
     pub webgl2: bool,
+    /// The requested context attributes.
+    pub attributes: crate::drawing_buffer::Attributes,
 }
 
 /// Renderer names of CPU implementations, which never count as a GPU.
@@ -329,6 +331,7 @@ mod tests {
         width: 4.0,
         height: 4.0,
         webgl2: false,
+        attributes: crate::drawing_buffer::Attributes::DEFAULT,
     };
 
     fn no_gpu() -> FakeProbe {

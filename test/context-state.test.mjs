@@ -329,3 +329,25 @@ test('queries after destroy', () => {
   assert.equal(gl.getError(), gl.CONTEXT_LOST_WEBGL);
   assert.equal(gl.getError(), gl.NO_ERROR);
 });
+
+test('buffer and program bindings return the bound objects', () => {
+  for (const webgl2 of [false, true]) {
+    const gl = createContext({ width: 1, height: 1, webgl2 });
+    const buffer = gl.createBuffer();
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffer);
+    assert.equal(gl.getParameter(gl.ELEMENT_ARRAY_BUFFER_BINDING), buffer);
+    const array = gl.createBuffer();
+    gl.bindBuffer(gl.ARRAY_BUFFER, array);
+    gl.deleteBuffer(array);
+    assert.equal(gl.getParameter(gl.ARRAY_BUFFER_BINDING), null);
+    if (webgl2) {
+      const uniform = gl.createBuffer();
+      gl.bindBuffer(gl.UNIFORM_BUFFER, uniform);
+      assert.equal(gl.getParameter(gl.UNIFORM_BUFFER_BINDING), uniform);
+      assert.equal(gl.getParameter(gl.COPY_READ_BUFFER_BINDING), null);
+    }
+    assert.equal(gl.getParameter(gl.CURRENT_PROGRAM), null);
+    assert.equal(gl.getError(), gl.NO_ERROR);
+    gl.destroy();
+  }
+});

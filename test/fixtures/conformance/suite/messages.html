@@ -1,0 +1,36 @@
+<!DOCTYPE html>
+<html><head><script src="harness.js"></script></head><body>
+<script>
+// Copies setZeroTimeout from js/webgl-test-utils.js.
+var timeouts = [];
+var messageName = "zero-timeout-message";
+function setZeroTimeout(fn) { timeouts.push(fn); window.postMessage(messageName, "*"); }
+window.addEventListener("message", function (event) {
+  if (event.source == window && event.data == messageName) {
+    event.stopPropagation();
+    if (timeouts.length > 0) timeouts.shift()();
+  }
+}, true);
+var crossOrigin = 0, ready = 0;
+window.addEventListener("message", function (event) {
+  if (event.data === "other-origin") crossOrigin += 1;
+  if (event.data !== "Ready") return;
+  ready += 1;
+  // Let any duplicate delivery arrive before checking the count.
+  if (ready === 1) setTimeout(check, 100);
+});
+function check() {
+  if (ready === 1) testPassed("frame message once"); else testFailed("frame messages: " + ready);
+  if (crossOrigin === 0) testPassed("mismatched origin dropped"); else testFailed("mismatched origin delivered");
+  finishTest();
+}
+window.postMessage("other-origin", "http://example.invalid");
+window.postMessage("other-origin", { targetOrigin: "http://example.invalid" });
+setZeroTimeout(function () {
+  testPassed("zero-timeout callback ran");
+  var frame = document.createElement("iframe");
+  frame.src = "message-frame.html";
+  document.body.appendChild(frame);
+});
+</script>
+</body></html>

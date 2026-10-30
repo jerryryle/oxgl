@@ -6,6 +6,11 @@ export function liveContexts() {
   return native.liveContexts();
 }
 
+/** Number of live WebGL objects across this thread's contexts. */
+export function liveObjects() {
+  return native.liveObjects();
+}
+
 /** Reads the whole drawing buffer as RGBA/UNSIGNED_BYTE. */
 export function readAll(gl) {
   const pixels = new Uint8Array(gl.drawingBufferWidth * gl.drawingBufferHeight * 4);

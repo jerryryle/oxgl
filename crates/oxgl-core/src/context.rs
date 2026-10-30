@@ -1,19 +1,18 @@
 //! A WebGL context: its drawing buffer, error state, and objects.
 
 use oxgl_sys::bindings::{
-    GL_COLOR_BUFFER_BIT, GL_DEPTH_BUFFER_BIT, GL_FRAGMENT_SHADER, GL_GUILTY_CONTEXT_RESET_EXT,
-    GL_HIGH_INT, GL_INNOCENT_CONTEXT_RESET_EXT, GL_INVALID_ENUM, GL_INVALID_OPERATION,
-    GL_INVALID_VALUE, GL_LOW_FLOAT, GL_MAX_RENDERBUFFER_SIZE, GL_MAX_VIEWPORT_DIMS, GL_NO_ERROR,
-    GL_PACK_ALIGNMENT, GL_PACK_ROW_LENGTH, GL_PACK_SKIP_PIXELS, GL_PACK_SKIP_ROWS,
-    GL_SHADING_LANGUAGE_VERSION, GL_STENCIL_BUFFER_BIT, GL_VERSION, GL_VERTEX_SHADER,
+    GL_FRAGMENT_SHADER, GL_GUILTY_CONTEXT_RESET_EXT, GL_HIGH_INT, GL_INNOCENT_CONTEXT_RESET_EXT,
+    GL_INVALID_ENUM, GL_INVALID_OPERATION, GL_INVALID_VALUE, GL_LOW_FLOAT, GL_NO_ERROR,
+    GL_NUM_COMPRESSED_TEXTURE_FORMATS, GL_PACK_ALIGNMENT, GL_PACK_ROW_LENGTH, GL_PACK_SKIP_PIXELS,
+    GL_PACK_SKIP_ROWS, GL_PRIMITIVE_RESTART_FIXED_INDEX, GL_RENDERER, GL_SHADING_LANGUAGE_VERSION,
+    GL_VENDOR, GL_VERSION, GL_VERTEX_SHADER,
 };
 use oxgl_sys::{
-    ClientVersion, Current, Display, GlContext, PixelDestination, PrecisionFormat, ReadPixels,
-    StateCall, ValueType, Values,
+    Current, PixelDestination, PrecisionFormat, ReadPixels, StateCall, ValueType, Values,
 };
 use slotmap::{SlotMap, new_key_type};
 
-use crate::backend::ContextRequest;
+pub use crate::drawing_buffer::{Attributes, DrawingBuffer, clamp_size};
 use crate::error::ErrorState;
 use crate::parameters::{self, Kind, Parameter};
 use crate::pixels;
@@ -24,143 +23,107 @@ new_key_type! {
     pub struct ObjectKey;
 }
 
-/// A WebGL object owned by a context. Later capabilities add variants
-/// (buffers, textures, …).
-#[allow(
-    clippy::empty_enums,
-    reason = "no object types exist yet; the slotmap is their extension point"
-)]
-#[derive(Debug)]
-pub enum Object {}
-
-/// The drawing buffer: an EGL pbuffer with its context (WebGL 1.0 §2.2). The
-/// pbuffer is an internal choice; a framebuffer object can replace it without
-/// changing this type's interface.
-#[derive(Debug)]
-pub struct DrawingBuffer {
-    context: GlContext,
-    width: i32,
-    height: i32,
-}
-
-impl DrawingBuffer {
-    /// Creates a context on `display` with a buffer of the requested size, or
-    /// smaller with the same aspect ratio when that exceeds the
-    /// implementation's limits.
-    ///
-    /// # Errors
-    ///
-    /// The failing EGL call, for example when the display cannot create an
-    /// OpenGL ES 3.0 context.
-    pub fn new(display: &Display, request: &ContextRequest) -> Result<Self, String> {
-        let version = if request.webgl2 {
-            ClientVersion::Es3
-        } else {
-            ClientVersion::Es2
-        };
-        let mut context = display.create_context(version).map_err(|e| e.to_string())?;
-        let (renderbuffer, viewport) = {
-            let current = context.make_current().map_err(|e| e.to_string())?;
-            (
-                integers(&current, GL_MAX_RENDERBUFFER_SIZE),
-                integers(&current, GL_MAX_VIEWPORT_DIMS),
-            )
-        };
-        let limits = renderbuffer
-            .zip(viewport)
-            .zip(context.max_pbuffer_size())
-            .map(
-                |(([renderbuffer, _], [viewport_width, viewport_height]), (pw, ph))| {
-                    (
-                        pw.min(renderbuffer).min(viewport_width),
-                        ph.min(renderbuffer).min(viewport_height),
-                    )
-                },
-            );
-        let Some((max_width, max_height)) = limits.filter(|&(w, h)| w > 0 && h > 0) else {
-            return Err("cannot query the drawing buffer size limits".into());
-        };
-        let (width, height) = clamp_size(request.width, request.height, max_width, max_height);
-        context
-            .attach_pbuffer(width, height)
-            .map_err(|e| e.to_string())?;
-        // A new pbuffer's contents are undefined; the drawing buffer starts
-        // transparent black (WebGL 1.0 §2.2). The context is fresh, so the
-        // clear values are still their defaults (0,0,0,0, depth 1, stencil 0).
-        // The context was first made current without a surface, which left
-        // its viewport and scissor box at 0×0; both start at the drawing
-        // buffer's size (WebGL 1.0 §5.14.4).
-        {
-            let current = context.make_current().map_err(|e| e.to_string())?;
-            current.apply(StateCall::Viewport(0, 0, width, height));
-            current.apply(StateCall::Scissor(0, 0, width, height));
-            current.clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
-        }
-        Ok(Self {
-            context,
-            width,
-            height,
-        })
-    }
-
-    /// Actual width in pixels.
-    #[must_use]
-    pub fn width(&self) -> i32 {
-        self.width
-    }
-
-    /// Actual height in pixels.
-    #[must_use]
-    pub fn height(&self) -> i32 {
-        self.height
-    }
-}
-
-/// Scales `width`×`height` down to fit `max_width`×`max_height`, preserving
-/// the aspect ratio (WebGL 1.0 §2.2). Results are at least 1.
-#[must_use]
-pub fn clamp_size(width: f64, height: f64, max_width: i32, max_height: i32) -> (i32, i32) {
-    let scale = (f64::from(max_width) / width)
-        .min(f64::from(max_height) / height)
-        .min(1.0);
-    let fit = |value: f64, max: i32| {
-        // In 1..=max by construction (and `as` saturates regardless).
-        #[allow(clippy::cast_possible_truncation, reason = "bounded above")]
-        let pixels = (value * scale).floor().max(1.0) as i32;
-        pixels.min(max.max(1))
-    };
-    (fit(width, max_width), fit(height, max_height))
+/// A WebGL object owned by a context, holding its GL name.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Object {
+    /// A buffer and the kind of target it was first bound to.
+    Buffer {
+        /// GL name.
+        name: u32,
+        /// WebGL's buffer target class (WebGL 1.0 §6.1).
+        kind: crate::rendering::BufferKind,
+    },
+    /// A shader.
+    Shader {
+        /// GL name.
+        name: u32,
+    },
+    /// A program.
+    Program {
+        /// GL name.
+        name: u32,
+    },
+    /// A texture.
+    Texture {
+        /// GL name.
+        name: u32,
+    },
+    /// A sampler (WebGL 2).
+    Sampler {
+        /// GL name.
+        name: u32,
+    },
+    /// A framebuffer.
+    Framebuffer {
+        /// GL name.
+        name: u32,
+    },
+    /// A renderbuffer.
+    Renderbuffer {
+        /// GL name.
+        name: u32,
+        /// Allocated as WebGL's `DEPTH_STENCIL`, reported back as such.
+        depth_stencil: bool,
+    },
+    /// A vertex array object (WebGL 2).
+    VertexArray {
+        /// GL name.
+        name: u32,
+    },
+    /// A transform feedback object (WebGL 2).
+    TransformFeedback {
+        /// GL name.
+        name: u32,
+    },
+    /// A query (WebGL 2).
+    Query {
+        /// GL name.
+        name: u32,
+    },
+    /// A sync object (WebGL 2).
+    Sync {
+        /// GL handle.
+        handle: oxgl_sys::SyncHandle,
+    },
 }
 
 /// A live WebGL context.
 #[derive(Debug)]
 pub struct Context {
-    buffer: DrawingBuffer,
-    errors: ErrorState,
-    objects: SlotMap<ObjectKey, Object>,
-    unpack: UnpackState,
-    webgl2: bool,
+    pub(crate) buffer: DrawingBuffer,
+    pub(crate) errors: ErrorState,
+    pub(crate) objects: SlotMap<ObjectKey, Object>,
+    pub(crate) unpack: UnpackState,
+    pub(crate) webgl2: bool,
+    /// The renderbuffer bound to `RENDERBUFFER`, for the `DEPTH_STENCIL`
+    /// format alias.
+    pub(crate) bound_renderbuffer: Option<ObjectKey>,
+    /// Enabled WebGL extensions.
+    pub(crate) extensions: crate::extensions::ExtensionState,
+    /// Shaders and programs deleted while GL keeps them alive (attached to a
+    /// program, or the current program); their slots stay until GL frees
+    /// them (OpenGL ES 2.0 §2.10.1, §2.10.3).
+    pub(crate) flagged: Vec<ObjectKey>,
+    /// Per linked program, the GL type of the uniform at each location, for
+    /// `getUniform`; built on first use, dropped on link and deletion.
+    pub(crate) uniform_types:
+        std::collections::HashMap<ObjectKey, std::collections::HashMap<i32, u32>>,
 }
 
 /// Makes `buffer`'s context current, setting the lost flag if that fails: a
 /// context EGL can no longer make current is unusable.
-fn current<'a>(buffer: &'a DrawingBuffer, errors: &mut ErrorState) -> Option<Current<'a>> {
+pub(crate) fn current<'a>(
+    buffer: &'a DrawingBuffer,
+    errors: &mut ErrorState,
+) -> Option<Current<'a>> {
     if errors.is_lost() {
         return None;
     }
     buffer
-        .context
+        .context()
         .make_current()
         .inspect_err(|_| errors.mark_lost())
         .ok()
-}
-
-/// The first two integer values of `pname`; `None` if the query failed.
-fn integers(current: &Current<'_>, pname: u32) -> Option<[i32; 2]> {
-    match current.get_values(pname, ValueType::Integer)? {
-        Values::Integers([a, b, ..]) => Some([a, b]),
-        _ => None,
-    }
 }
 
 /// The current pack parameters, read from the GL so ANGLE stays their only
@@ -186,7 +149,7 @@ fn pack_layout(current: &Current<'_>, webgl2: bool) -> pixels::PackLayout {
 }
 
 /// Sets the lost flag if the GL reports a graphics reset.
-fn check_reset(current: &Current<'_>, errors: &mut ErrorState) {
+pub(crate) fn check_reset(current: &Current<'_>, errors: &mut ErrorState) {
     if current.graphics_reset_status() != GL_NO_ERROR {
         errors.mark_lost();
     }
@@ -196,12 +159,21 @@ impl Context {
     /// Wraps a drawing buffer.
     #[must_use]
     pub fn new(buffer: DrawingBuffer, webgl2: bool) -> Self {
+        // WebGL 2 always restarts primitives at the fixed index (WebGL 2.0
+        // §5.18), and pages cannot toggle it (see `set_state`).
+        if webgl2 && let Ok(current) = buffer.context().make_current() {
+            current.apply(StateCall::Enable(GL_PRIMITIVE_RESTART_FIXED_INDEX));
+        }
         Self {
             buffer,
             errors: ErrorState::default(),
             objects: SlotMap::with_key(),
             unpack: UnpackState::default(),
             webgl2,
+            bound_renderbuffer: None,
+            extensions: crate::extensions::ExtensionState::default(),
+            flagged: Vec::new(),
+            uniform_types: std::collections::HashMap::new(),
         }
     }
 
@@ -233,8 +205,15 @@ impl Context {
     /// A value-only state call (WebGL 1.0 §5.14.3–§5.14.4, §5.14.11),
     /// forwarded for ANGLE to validate.
     pub fn set_state(&mut self, call: StateCall) {
-        if let Some(current) = current(&self.buffer, &mut self.errors) {
-            current.apply(call);
+        let Some(current) = current(&self.buffer, &mut self.errors) else {
+            return;
+        };
+        match call {
+            StateCall::Enable(GL_PRIMITIVE_RESTART_FIXED_INDEX)
+            | StateCall::Disable(GL_PRIMITIVE_RESTART_FIXED_INDEX) => {
+                self.errors.synthesize(GL_INVALID_ENUM);
+            }
+            call => current.apply(call),
         }
     }
 
@@ -253,7 +232,14 @@ impl Context {
 
     /// `isEnabled` (WebGL 1.0 §5.14.3); `false` when lost.
     pub fn is_enabled(&mut self, cap: u32) -> bool {
-        current(&self.buffer, &mut self.errors).is_some_and(|current| current.is_enabled(cap))
+        let Some(current) = current(&self.buffer, &mut self.errors) else {
+            return false;
+        };
+        if cap == GL_PRIMITIVE_RESTART_FIXED_INDEX {
+            self.errors.synthesize(GL_INVALID_ENUM);
+            return false;
+        }
+        current.is_enabled(cap)
     }
 
     /// `getParameter` (WebGL 1.0 §5.14.3, WebGL 2.0 §3.7.2). `None` (JS
@@ -261,13 +247,40 @@ impl Context {
     /// for a query ANGLE rejected, and on a lost context.
     pub fn get_parameter(&mut self, pname: u32) -> Option<Parameter> {
         let current = current(&self.buffer, &mut self.errors)?;
-        let Some(entry) = parameters::lookup(pname, self.webgl2) else {
+        let extensions = &self.extensions;
+        let entry = parameters::lookup(pname, self.webgl2)
+            .or_else(|| parameters::lookup_extension(pname, |name| extensions.is_enabled(name)));
+        let Some(entry) = entry else {
             self.errors.synthesize(GL_INVALID_ENUM);
             return None;
         };
+        let draw_buffers = self.webgl2 || self.extensions.is_enabled("WEBGL_draw_buffers");
+        match self.buffer.parameter(&current, pname, draw_buffers) {
+            Some(Ok(value)) => return Some(Parameter::Number(f64::from(value))),
+            Some(Err(code)) => {
+                self.errors.synthesize(code);
+                return None;
+            }
+            None => {}
+        }
         Some(match entry.kind {
             Kind::Object => Parameter::Null,
-            Kind::CompressedFormats => Parameter::Uint32(Vec::new()),
+            Kind::CompressedFormats => {
+                // ANGLE lists only the formats of enabled extensions.
+                let count = match current
+                    .get_values(GL_NUM_COMPRESSED_TEXTURE_FORMATS, ValueType::Integer)
+                {
+                    Some(Values::Integers([n, ..])) => usize::try_from(n).unwrap_or(0),
+                    _ => 0,
+                };
+                Parameter::Uint32(
+                    current
+                        .integers(pname, count)
+                        .into_iter()
+                        .map(i32::cast_unsigned)
+                        .collect(),
+                )
+            }
             Kind::ClientWaitTimeout => Parameter::Number(0.0),
             Kind::Shadow => match pname {
                 UNPACK_FLIP_Y_WEBGL => Parameter::Boolean(self.unpack.flip_y),
@@ -280,6 +293,12 @@ impl Context {
                     self.webgl2,
                     current.get_string(pname).as_deref(),
                 ),
+                parameters::UNMASKED_VENDOR_WEBGL => {
+                    current.get_string(GL_VENDOR).unwrap_or_default()
+                }
+                parameters::UNMASKED_RENDERER_WEBGL => {
+                    current.get_string(GL_RENDERER).unwrap_or_default()
+                }
                 _ => "oxgl".to_owned(),
             }),
             kind => {
@@ -346,6 +365,11 @@ impl Context {
             self.errors.synthesize(GL_INVALID_VALUE);
             return;
         };
+        if self.pack_buffer_bound(&current) {
+            // WebGL 2.0 §3.7.10: the view overload needs no pack buffer.
+            self.errors.synthesize(GL_INVALID_OPERATION);
+            return;
+        }
         let layout = pixels::components(args.format, self.webgl2)
             .zip(pixels::type_info(args.ty, self.webgl2));
         let required = match layout {
@@ -379,10 +403,39 @@ impl Context {
         };
         let mut staging = vec![0; required];
         destination.copy_to(&mut staging);
-        if current.read_pixels(args, &mut staging) > 0 {
+        let resolved = self.buffer.begin_read(&current);
+        let read = current.read_pixels(args, &mut staging);
+        if resolved {
+            self.buffer.end_read(&current);
+        }
+        if read > 0 {
             destination.copy_from(&staging);
         }
         check_reset(&current, &mut self.errors);
+    }
+
+    /// `getContextAttributes` (WebGL 1.0 §5.14.2); `None` when lost.
+    #[must_use]
+    pub fn attributes(&self) -> Option<Attributes> {
+        (!self.errors.is_lost()).then(|| self.buffer.attributes())
+    }
+
+    /// Non-standard `resize`: reallocates the drawing buffer (WebGL 1.0
+    /// §2.2). Marks the context lost if not even 1×1 can be allocated.
+    pub fn resize(&mut self, width: f64, height: f64) {
+        if self.errors.is_lost() {
+            return;
+        }
+        if !self.buffer.resize(width, height, &mut self.errors) {
+            self.errors.mark_lost();
+        }
+    }
+
+    /// The drawing buffer after compositing; see [`DrawingBuffer::present`].
+    pub fn present(&mut self, always: bool) {
+        if !self.errors.is_lost() {
+            self.buffer.present(&mut self.errors, always);
+        }
     }
 
     /// Simulates a device loss through `GL_CHROMIUM_lose_context`, as
@@ -392,31 +445,9 @@ impl Context {
         if let Some(current) = current(&self.buffer, &mut self.errors) {
             current.request_extension(c"GL_CHROMIUM_lose_context");
             current.lose_context(GL_GUILTY_CONTEXT_RESET_EXT, GL_INNOCENT_CONTEXT_RESET_EXT);
+            // WebGL 1.0 §5.15.3: the context is lost as soon as the call
+            // returns, not when the GL next reports it.
+            self.errors.mark_lost();
         }
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn sizes_within_limits_are_kept() {
-        assert_eq!(clamp_size(300.0, 150.0, 4096, 4096), (300, 150));
-        assert_eq!(clamp_size(4096.0, 1.0, 4096, 4096), (4096, 1));
-    }
-
-    #[test]
-    fn oversized_requests_keep_the_aspect_ratio() {
-        assert_eq!(clamp_size(8192.0, 4096.0, 4096, 4096), (4096, 2048));
-        assert_eq!(clamp_size(1000.0, 30000.0, 16384, 8192), (273, 8192));
-        let (w, h) = clamp_size(1e12, 3e11, 16384, 16384);
-        assert_eq!(w, 16384);
-        assert!((f64::from(w) / f64::from(h) - 1e12 / 3e11).abs() * f64::from(h) <= 1.0);
-    }
-
-    #[test]
-    fn extreme_ratios_keep_one_pixel() {
-        assert_eq!(clamp_size(1e9, 1.0, 16384, 16384), (16384, 1));
     }
 }

@@ -363,7 +363,13 @@ test('page runner: outcomes, early errors, media, canvas shim, crashes, timeouts
         'image.html',
         'markup-image.html',
         'canvas-defaults.html',
-        'zero-canvas.html',
+        'context-2d.html',
+        'image-2d.html',
+        'video.html',
+        'video-frame.html',
+        'messages.html',
+        'rejected.html',
+        'canvas-owner.html',
         'realm.html',
         'rejection.html',
         'destroy-throws.html',
@@ -413,7 +419,7 @@ test('page runner: outcomes, early errors, media, canvas shim, crashes, timeouts
   assert.equal(outcome('webgl1', 'recovers.html'), 'PASS');
   assert.match(pageOf(report, 'webgl1', 'recovers.html').error, /error in a side callback/);
 
-  // Texture upload from an image: the image fires error promptly.
+  // Missing image: error fires promptly.
   for (const path of ['image.html', 'markup-image.html']) {
     assert.equal(outcome('webgl1', path), 'FAIL', path);
     assert.match(pageOf(report, 'webgl1', path).message, /failed to load/, path);
@@ -422,9 +428,26 @@ test('page runner: outcomes, early errors, media, canvas shim, crashes, timeouts
 
   // Default canvas size, unsupported context type, one context per canvas.
   assert.equal(outcome('webgl1', 'canvas-defaults.html'), 'PASS', pageOf(report, 'webgl1', 'canvas-defaults.html').message);
-  // Creation rejected by oxgl: getContext returns null and the message is recorded.
-  assert.equal(outcome('webgl1', 'zero-canvas.html'), 'PASS');
-  assert.match(pageOf(report, 'webgl1', 'zero-canvas.html').contextErrors[0], /width/);
+  // 2D context, one context type per canvas in both directions, ImageData.
+  assert.equal(outcome('webgl1', 'context-2d.html'), 'PASS', pageOf(report, 'webgl1', 'context-2d.html').message);
+  // Image drawn into a 2D canvas: natural size and decoded pixels.
+  assert.equal(outcome('webgl1', 'image-2d.html'), 'PASS', pageOf(report, 'webgl1', 'image-2d.html').message);
+  // A video that cannot load: play() rejects and error fires promptly.
+  assert.equal(outcome('webgl1', 'video.html'), 'PASS', pageOf(report, 'webgl1', 'video.html').message);
+  assert.ok(pageOf(report, 'webgl1', 'video.html').durationMs < PROMPT_MS);
+  // A video decoded by ffmpeg: it plays, and its frame uploads.
+  assert.equal(outcome('webgl1', 'video-frame.html'), 'PASS', pageOf(report, 'webgl1', 'video-frame.html').message);
+  // Zero-timeout helper, message from a frame, mismatched target origin.
+  assert.equal(outcome('webgl1', 'messages.html'), 'PASS', pageOf(report, 'webgl1', 'messages.html').message);
+  // Creation rejected by oxgl: getContext returns null and the message is
+  // recorded. Software rendering is always a major performance caveat; a GPU
+  // host may create the context.
+  if (process.env.OXGL_BACKEND === 'software') {
+    assert.equal(outcome('webgl1', 'rejected.html'), 'PASS', pageOf(report, 'webgl1', 'rejected.html').message);
+    assert.match(pageOf(report, 'webgl1', 'rejected.html').contextErrors[0], /failIfMajorPerformanceCaveat/);
+  }
+  // Context belongs to its canvas; resizes through property and attribute.
+  assert.equal(outcome('webgl1', 'canvas-owner.html'), 'PASS', pageOf(report, 'webgl1', 'canvas-owner.html').message);
   // An unhandled rejection is ignored, as in a browser.
   assert.equal(outcome('webgl1', 'rejection.html'), 'PASS', pageOf(report, 'webgl1', 'rejection.html').message);
   // A throwing destroy() keeps the outcome and is recorded.
@@ -541,12 +564,23 @@ test('the command rejects bad options before fetching the suite', async () => {
   assert.equal(await main(['--help'], { fetchSuite: neverFetch }), 0);
 });
 
+test('Canvas package missing: the command stops before any page, naming canvas and npm ci', async () => {
+  const missing = () => {
+    throw new Error("Cannot find module 'canvas'");
+  };
+  await assert.rejects(main([], { fetchSuite: neverFetch, loadCanvas: missing }), /'canvas' package.*npm ci/);
+});
+
+test('ffmpeg missing: the command stops before any page, naming ffmpeg', async () => {
+  await assert.rejects(main([], { fetchSuite: neverFetch, hasFfmpeg: false }), /ffmpeg.*cannot be run/);
+});
+
 test('Entry without a reason: the command fails before running any page', async () => {
   const dir = mkdtempSync(join(tmpdir(), 'oxgl-conformance-'));
   try {
     const expectationsPath = join(dir, 'expectations.txt');
     writeFileSync(expectationsPath, 'webgl1 conformance/a.html FAIL\n');
-    await assert.rejects(main([], { expectationsPath, fetchSuite: neverFetch }), /:1: webgl1 conformance\/a\.html has no reason/);
+    await assert.rejects(main([], { expectationsPath, fetchSuite: neverFetch, hasFfmpeg: true }), /:1: webgl1 conformance\/a\.html has no reason/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }

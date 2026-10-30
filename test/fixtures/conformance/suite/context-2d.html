@@ -1,0 +1,24 @@
+<!DOCTYPE html>
+<html><head><script src="harness.js"></script></head><body>
+<script>
+var ctx = document.createElement("canvas").getContext("2d");
+if (ctx) testPassed("2d context"); else testFailed("no 2d context");
+ctx.fillStyle = "red";
+ctx.fillRect(0, 0, 4, 4);
+var px = Array.prototype.slice.call(ctx.getImageData(0, 0, 1, 1).data);
+if (px.join() === "255,0,0,255") testPassed("red"); else testFailed("pixel " + px);
+if (document.createElement("canvas").getContext("bitmaprenderer") === null) testPassed("bitmaprenderer is null");
+else testFailed("bitmaprenderer not null");
+var a = document.createElement("canvas");
+a.getContext("2d");
+if (a.getContext("webgl") === null) testPassed("webgl after 2d is null"); else testFailed("webgl after 2d");
+var b = document.createElement("canvas");
+b.getContext("webgl");
+if (b.getContext("2d") === null) testPassed("2d after webgl is null"); else testFailed("2d after webgl");
+var data = new ImageData(2, 1);
+if (data.width === 2 && data.height === 1 && data.data.length === 8 && Array.prototype.every.call(data.data, function (v) { return v === 0; }))
+  testPassed("ImageData constructed"); else testFailed("bad ImageData");
+if (ctx.getImageData(0, 0, 1, 1) instanceof ImageData) testPassed("getImageData is an ImageData"); else testFailed("not ImageData");
+finishTest();
+</script>
+</body></html>

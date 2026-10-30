@@ -14,5 +14,6 @@
 # ANGLE allocates each thread's egl::Thread (and its Display TLS) on the
 # thread's first EGL call and intentionally never frees it: 72 bytes per thread
 # that used EGL (README, Known issues). Test threads exit before LeakSanitizer
-# runs. Seen on Linux arm64 only.
+# runs. Seen on Linux arm64 only. Rechecked on each ANGLE update (angle/README.md,
+# "Known upstream issues").
 leak:egl::GetCurrentThread
