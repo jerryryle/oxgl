@@ -28,7 +28,7 @@ The runner SHALL provide two suites, each selected by the suite's own test lists
 - **THEN** no page under `conformance2/` is run
 
 ### Requirement: Pages obtain oxgl contexts through canvas
-Within a page, `getContext` on a canvas element SHALL return an oxgl context for `'webgl'` and `'experimental-webgl'` (WebGL 1) and for `'webgl2'` (WebGL 2), and a working 2D context for `'2d'`. An oxgl context SHALL be created with the canvas's `width` and `height`, the attributes passed to `getContext`, and the element as its `canvas`. Later calls on that canvas SHALL return the same context, and `null` for any other context type. The page's global scope SHALL expose oxgl's `WebGLRenderingContext` and `WebGL2RenderingContext`.
+In a page, `getContext` on a canvas SHALL return an oxgl context for `'webgl'` and `'experimental-webgl'` (WebGL 1) and `'webgl2'` (WebGL 2), created with the canvas's size, the `getContext` attributes and the element as its `canvas`, and a working 2D context for `'2d'`. Later calls SHALL return the same context, and `null` for other types. The page's global scope SHALL expose oxgl's `WebGLRenderingContext` and `WebGL2RenderingContext`.
 
 #### Scenario: Default canvas size
 - **WHEN** a page calls `getContext('webgl')` on a canvas with no size attributes
