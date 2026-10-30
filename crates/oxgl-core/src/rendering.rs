@@ -41,6 +41,10 @@ pub enum ObjectType {
     Texture,
     /// `createSampler` (WebGL 2).
     Sampler,
+    /// `createFramebuffer`.
+    Framebuffer,
+    /// `createRenderbuffer`.
+    Renderbuffer,
 }
 
 /// A `getShaderParameter`/`getProgramParameter`/`getVertexAttrib` scalar.
@@ -295,12 +299,21 @@ impl Context {
                 name: current.gen_sampler(),
             },
             ObjectType::Sampler => return None,
+            ObjectType::Framebuffer => Object::Framebuffer {
+                name: current.gen_framebuffer(),
+            },
+            ObjectType::Renderbuffer => Object::Renderbuffer {
+                name: current.gen_renderbuffer(),
+                depth_stencil: false,
+            },
         };
         let (Object::Buffer { name, .. }
         | Object::Shader { name }
         | Object::Program { name }
         | Object::Texture { name }
-        | Object::Sampler { name }) = object;
+        | Object::Sampler { name }
+        | Object::Framebuffer { name }
+        | Object::Renderbuffer { name, .. }) = object;
         (name != 0).then(|| self.objects.insert(object))
     }
 
@@ -319,6 +332,16 @@ impl Context {
             Object::Program { name } => current.delete_program(name),
             Object::Texture { name } => current.delete_texture(name),
             Object::Sampler { name } => current.delete_sampler(name),
+            Object::Framebuffer { name } => {
+                self.unbind_framebuffer(&current, name);
+                current.delete_framebuffer(name);
+            }
+            Object::Renderbuffer { name, .. } => {
+                if self.bound_renderbuffer == Some(key) {
+                    self.bound_renderbuffer = None;
+                }
+                current.delete_renderbuffer(name);
+            }
         }
     }
 
@@ -342,6 +365,16 @@ impl Context {
                 .context()
                 .make_current()
                 .is_ok_and(|current| current.is_texture(*name) != 0),
+            Some(Object::Framebuffer { name }) => self
+                .buffer
+                .context()
+                .make_current()
+                .is_ok_and(|current| current.is_framebuffer(*name) != 0),
+            Some(Object::Renderbuffer { name, .. }) => self
+                .buffer
+                .context()
+                .make_current()
+                .is_ok_and(|current| current.is_renderbuffer(*name) != 0),
             Some(_) => true,
         }
     }

@@ -14,7 +14,9 @@ export {
 export {
   WebGLActiveInfo,
   WebGLBuffer,
+  WebGLFramebuffer,
   WebGLObject,
+  WebGLRenderbuffer,
   WebGLProgram,
   WebGLSampler,
   WebGLShader,

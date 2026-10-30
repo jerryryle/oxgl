@@ -90,7 +90,8 @@ pub fn synthesize_error(env: Env, index: u32, version: u32, code: u32) -> napi::
 }
 
 /// `createBuffer` (`kind` 0), `createShader` (1, with `shader_type`),
-/// `createProgram` (2), `createTexture` (3) or `createSampler` (4); `null`
+/// `createProgram` (2), `createTexture` (3), `createSampler` (4),
+/// `createFramebuffer` (5) or `createRenderbuffer` (6); `null`
 /// when lost or refused.
 #[napi]
 pub fn create_object(
@@ -105,6 +106,8 @@ pub fn create_object(
         1 => ObjectType::Shader(shader_type),
         3 => ObjectType::Texture,
         4 => ObjectType::Sampler,
+        5 => ObjectType::Framebuffer,
+        6 => ObjectType::Renderbuffer,
         _ => ObjectType::Program,
     };
     query(env, index, version, None, |c| {

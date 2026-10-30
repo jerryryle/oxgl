@@ -11,7 +11,10 @@ import {
   type ShaderState,
   WebGLActiveInfo,
   WebGLBuffer,
+  WebGLFramebuffer,
   WebGLObject,
+  WebGLRenderbuffer,
+  type FramebufferState,
   WebGLProgram,
   WebGLShader,
   WebGLSampler,
@@ -144,6 +147,25 @@ interface ContextState {
   activeUnit: number;
   /** `MAX_COMBINED_TEXTURE_IMAGE_UNITS`. */
   maxUnits: number;
+  /** The framebuffer bound for drawing; `null` is the drawing buffer. */
+  drawFramebuffer: WebGLFramebuffer | null;
+  /** The framebuffer bound for reading (WebGL 2; the same as drawing on WebGL 1). */
+  readFramebuffer: WebGLFramebuffer | null;
+  renderbuffer: WebGLRenderbuffer | null;
+}
+
+/** Detaches `object` from the bound framebuffers, as GL does when it is deleted (OpenGL ES 3.0 §4.4.2.4). */
+function detach(s: ContextState, object: WebGLTexture | WebGLRenderbuffer): void {
+  for (const framebuffer of [s.drawFramebuffer, s.readFramebuffer]) {
+    if (framebuffer === null) continue;
+    const { attachments } = objectState(framebuffer) as FramebufferState;
+    for (const [point, attached] of attachments) if (attached === object) attachments.delete(point);
+  }
+}
+
+/** The framebuffer bound to `target`. */
+function framebufferFor(s: ContextState, target: number): WebGLFramebuffer | null {
+  return target === GL.READ_FRAMEBUFFER ? s.readFramebuffer : s.drawFramebuffer;
 }
 
 /** The contexts of canvases, so a canvas can be a `TexImageSource`. */
@@ -325,6 +347,8 @@ function compressed(s: ContextState, call: number, args: NativeTexArgs, rest: un
 
 /** A context's state; assigned by `ContextBase`'s static block. */
 let contextState: (gl: ContextBase) => ContextState;
+/** `framebufferTextureLayer`'s attachment; assigned by `ContextBase`'s static block. */
+let attachLayer: (gl: ContextBase, target: number, attachment: number, texture: unknown, level: number, layer: number) => void;
 
 const GL = WEBGL2_CONSTANTS;
 
@@ -436,6 +460,10 @@ function boundObject(s: ContextState, pname: number): WebGLObject | null | undef
       return s.vao.element;
     case GL.CURRENT_PROGRAM:
       return s.program;
+    case GL.FRAMEBUFFER_BINDING:
+      return s.drawFramebuffer;
+    case GL.RENDERBUFFER_BINDING:
+      return s.renderbuffer;
     case GL.TEXTURE_BINDING_2D:
       return unitOf(s).get(GL.TEXTURE_2D) ?? null;
     case GL.TEXTURE_BINDING_CUBE_MAP:
@@ -449,6 +477,8 @@ function boundObject(s: ContextState, pname: number): WebGLObject | null | undef
       return unitOf(s).get(GL.TEXTURE_2D_ARRAY) ?? null;
     case GL.SAMPLER_BINDING:
       return s.samplers[s.activeUnit] ?? null;
+    case GL.READ_FRAMEBUFFER_BINDING:
+      return s.readFramebuffer;
   }
   const target = BINDING_TARGETS.get(pname);
   return target === undefined ? undefined : (s.buffers.get(target) ?? null);
@@ -554,6 +584,9 @@ abstract class ContextBase {
       gl.#resizeTo(width, height);
     };
     contextState = (gl) => gl.#s;
+    attachLayer = (gl, target, attachment, texture, level, layer) => {
+      gl.#attachLayer(target, attachment, texture, level, layer);
+    };
   }
 
   /** @internal Use {@link createContext}. */
@@ -588,6 +621,9 @@ abstract class ContextBase {
       samplers: [],
       activeUnit: 0,
       maxUnits: 0,
+      drawFramebuffer: null,
+      readFramebuffer: null,
+      renderbuffer: null,
     };
     const units = native.getParameter(index, version, GL.MAX_COMBINED_TEXTURE_IMAGE_UNITS);
     this.#s.maxUnits = units?.numbers[0] ?? 0;
@@ -689,17 +725,36 @@ abstract class ContextBase {
     height: number,
     format: number,
     type: number,
-    pixels: ArrayBufferView | null,
+    pixels: ArrayBufferView | null | undefined | number,
+    dstOffset?: number,
   ): void {
     requireArguments('readPixels', 7, arguments.length);
+    const s = this.#s;
     const args = [toLong(x), toLong(y), toLong(width), toLong(height), toUnsignedLong(format), toUnsignedLong(type)] as const;
+    if (s.webgl2 && typeof pixels !== 'object' && pixels !== undefined) {
+      // WebGL 2.0 §3.7.10: the pixel pack buffer overload.
+      const offset = toLongLong(pixels);
+      if (!s.destroyed) native.readPixelsToBuffer(s.index, s.version, ...args, offset);
+      return;
+    }
     // `ArrayBufferView?`: undefined converts to null.
-    const destination = (pixels as ArrayBufferView | null | undefined) ?? null;
+    let destination = (pixels as ArrayBufferView | null | undefined) ?? null;
     if (destination !== null && !ArrayBuffer.isView(destination)) {
       throw new TypeError("Failed to execute 'readPixels': parameter 7 is not of type 'ArrayBufferView'.");
     }
-    if (this.#s.destroyed) return;
-    native.readPixels(this.#s.index, this.#s.version, ...args, destination);
+    if (s.webgl2 && arguments.length > 7) {
+      if (destination === null) throw new TypeError("Failed to execute 'readPixels': parameter 7 is not of type 'ArrayBufferView'.");
+      const offset = toUnsignedLongLong(dstOffset);
+      const length = (destination as Partial<Uint8Array>).length ?? destination.byteLength;
+      if (offset > length) {
+        if (!s.destroyed) native.synthesizeError(s.index, s.version, GL.INVALID_VALUE);
+        return;
+      }
+      const view = destination as Partial<Uint8Array>;
+      destination = typeof view.subarray === 'function' ? view.subarray(offset) : new DataView(destination.buffer, destination.byteOffset + offset);
+    }
+    if (s.destroyed) return;
+    native.readPixels(s.index, s.version, ...args, destination);
   }
 
   /**
@@ -1563,6 +1618,171 @@ abstract class ContextBase {
     this.#state(native.drawElements, toUnsignedLong(mode), toLong(count), toUnsignedLong(type), toLongLong(offset));
   }
 
+  // --- Framebuffers and renderbuffers (WebGL 1.0 §5.14.6–§5.14.7) -------
+
+  /** WebGL 1.0 §5.14.6. */
+  createFramebuffer(): WebGLFramebuffer {
+    return createObject(this.#s, WebGLFramebuffer, 5, 0, { attachments: new Map() }) as WebGLFramebuffer;
+  }
+
+  /** WebGL 1.0 §5.14.6; `null` binds the drawing buffer. */
+  bindFramebuffer(target: number, framebuffer: WebGLFramebuffer | null): void {
+    requireArguments('bindFramebuffer', 2, arguments.length);
+    const s = this.#s;
+    const t = toUnsignedLong(target);
+    const state = checkObject(s, framebuffer, WebGLFramebuffer, 'bindFramebuffer', 2, true, GL.INVALID_OPERATION);
+    if (state === undefined) return;
+    if (!native.bindFramebuffer(s.index, s.version, t, ...keyOf(state))) return;
+    if (t !== GL.READ_FRAMEBUFFER) s.drawFramebuffer = framebuffer;
+    if (t !== GL.DRAW_FRAMEBUFFER) s.readFramebuffer = framebuffer;
+  }
+
+  /** WebGL 1.0 §5.14.6; a bound framebuffer falls back to the drawing buffer. */
+  deleteFramebuffer(framebuffer: WebGLFramebuffer | null): void {
+    requireArguments('deleteFramebuffer', 1, arguments.length);
+    const s = this.#s;
+    const state = checkObject(s, framebuffer, WebGLFramebuffer, 'deleteFramebuffer', 1, true, 0);
+    if (!state || framebuffer === null) return;
+    state.deleted = true;
+    collectedObjects.unregister(framebuffer);
+    if (s.drawFramebuffer === framebuffer) s.drawFramebuffer = null;
+    if (s.readFramebuffer === framebuffer) s.readFramebuffer = null;
+    native.deleteObject(s.index, s.version, ...keyOf(state));
+  }
+
+  /** WebGL 1.0 §5.14.6: true once the framebuffer has been bound. */
+  isFramebuffer(framebuffer: WebGLFramebuffer | null): boolean {
+    requireArguments('isFramebuffer', 1, arguments.length);
+    const s = this.#s;
+    const state = checkObject(s, framebuffer, WebGLFramebuffer, 'isFramebuffer', 1, true, 0);
+    return !!state && native.hasObject(s.index, s.version, ...keyOf(state));
+  }
+
+  /** WebGL 1.0 §5.14.7. */
+  createRenderbuffer(): WebGLRenderbuffer {
+    return createObject(this.#s, WebGLRenderbuffer, 6, 0, {}) as WebGLRenderbuffer;
+  }
+
+  /** WebGL 1.0 §5.14.7. */
+  bindRenderbuffer(target: number, renderbuffer: WebGLRenderbuffer | null): void {
+    requireArguments('bindRenderbuffer', 2, arguments.length);
+    const s = this.#s;
+    const t = toUnsignedLong(target);
+    const state = checkObject(s, renderbuffer, WebGLRenderbuffer, 'bindRenderbuffer', 2, true, GL.INVALID_OPERATION);
+    if (state === undefined) return;
+    if (native.bindRenderbuffer(s.index, s.version, t, ...keyOf(state))) s.renderbuffer = renderbuffer;
+  }
+
+  /** WebGL 1.0 §5.14.7; detached from the bound framebuffers. */
+  deleteRenderbuffer(renderbuffer: WebGLRenderbuffer | null): void {
+    requireArguments('deleteRenderbuffer', 1, arguments.length);
+    const s = this.#s;
+    const state = checkObject(s, renderbuffer, WebGLRenderbuffer, 'deleteRenderbuffer', 1, true, 0);
+    if (!state || renderbuffer === null) return;
+    state.deleted = true;
+    collectedObjects.unregister(renderbuffer);
+    if (s.renderbuffer === renderbuffer) s.renderbuffer = null;
+    detach(s, renderbuffer);
+    native.deleteObject(s.index, s.version, ...keyOf(state));
+  }
+
+  /** WebGL 1.0 §5.14.7: true once the renderbuffer has been bound. */
+  isRenderbuffer(renderbuffer: WebGLRenderbuffer | null): boolean {
+    requireArguments('isRenderbuffer', 1, arguments.length);
+    const s = this.#s;
+    const state = checkObject(s, renderbuffer, WebGLRenderbuffer, 'isRenderbuffer', 1, true, 0);
+    return !!state && native.hasObject(s.index, s.version, ...keyOf(state));
+  }
+
+  /** WebGL 1.0 §5.14.7. */
+  renderbufferStorage(target: number, internalformat: number, width: number, height: number): void {
+    requireArguments('renderbufferStorage', 4, arguments.length);
+    this.#state(native.renderbufferStorage, toUnsignedLong(target), toUnsignedLong(internalformat), toLong(width), toLong(height), null);
+  }
+
+  /** WebGL 1.0 §5.14.7. */
+  getRenderbufferParameter(target: number, pname: number): unknown {
+    requireArguments('getRenderbufferParameter', 2, arguments.length);
+    const s = this.#s;
+    const t = toUnsignedLong(target);
+    const p = toUnsignedLong(pname);
+    if (s.destroyed) return null;
+    return native.getRenderbufferParameter(s.index, s.version, t, p);
+  }
+
+  /** Records an attachment GL accepted. */
+  #attached(target: number, attachment: number, object: WebGLTexture | WebGLRenderbuffer | null): void {
+    const framebuffer = framebufferFor(this.#s, target);
+    if (framebuffer === null) return;
+    const { attachments } = objectState(framebuffer) as FramebufferState;
+    const points = attachment === GL.DEPTH_STENCIL_ATTACHMENT ? [GL.DEPTH_ATTACHMENT, GL.STENCIL_ATTACHMENT] : [attachment];
+    for (const point of points) {
+      if (object === null) attachments.delete(point);
+      else attachments.set(point, object);
+    }
+  }
+
+  /** WebGL 1.0 §5.14.6. */
+  framebufferTexture2D(target: number, attachment: number, textarget: number, texture: WebGLTexture | null, level: number): void {
+    requireArguments('framebufferTexture2D', 5, arguments.length);
+    const s = this.#s;
+    const args = [toUnsignedLong(target), toUnsignedLong(attachment), toUnsignedLong(textarget)] as const;
+    const l = toLong(level);
+    const state = checkObject(s, texture, WebGLTexture, 'framebufferTexture2D', 4, true, GL.INVALID_OPERATION);
+    if (state === undefined) return;
+    if (native.attach(s.index, s.version, args[0], args[1], 0, args[2], l, ...keyOf(state))) {
+      this.#attached(args[0], args[1], texture);
+    }
+  }
+
+  /** WebGL 1.0 §5.14.6. */
+  framebufferRenderbuffer(target: number, attachment: number, renderbuffertarget: number, renderbuffer: WebGLRenderbuffer | null): void {
+    requireArguments('framebufferRenderbuffer', 4, arguments.length);
+    const s = this.#s;
+    const args = [toUnsignedLong(target), toUnsignedLong(attachment), toUnsignedLong(renderbuffertarget)] as const;
+    const state = checkObject(s, renderbuffer, WebGLRenderbuffer, 'framebufferRenderbuffer', 4, true, GL.INVALID_OPERATION);
+    if (state === undefined) return;
+    if (native.attach(s.index, s.version, args[0], args[1], 2, args[2], 0, ...keyOf(state))) {
+      this.#attached(args[0], args[1], renderbuffer);
+    }
+  }
+
+  /** `framebufferTextureLayer` (WebGL 2), reached through `attachLayer`. */
+  #attachLayer(target: number, attachment: number, texture: unknown, level: number, layer: number): void {
+    const s = this.#s;
+    const state = checkObject(s, texture, WebGLTexture, 'framebufferTextureLayer', 3, true, GL.INVALID_OPERATION);
+    if (state === undefined) return;
+    if (native.attach(s.index, s.version, target, attachment, 1, level, layer, ...keyOf(state))) {
+      this.#attached(target, attachment, texture as WebGLTexture | null);
+    }
+  }
+
+  /** WebGL 1.0 §5.14.6. */
+  checkFramebufferStatus(target: number): number {
+    requireArguments('checkFramebufferStatus', 1, arguments.length);
+    const s = this.#s;
+    const t = toUnsignedLong(target);
+    if (s.destroyed) return 0;
+    return native.checkFramebufferStatus(s.index, s.version, t);
+  }
+
+  /** WebGL 1.0 §5.14.6. */
+  getFramebufferAttachmentParameter(target: number, attachment: number, pname: number): unknown {
+    requireArguments('getFramebufferAttachmentParameter', 3, arguments.length);
+    const s = this.#s;
+    const args = [toUnsignedLong(target), toUnsignedLong(attachment), toUnsignedLong(pname)] as const;
+    if (s.destroyed) return null;
+    const framebuffer = framebufferFor(s, args[0]);
+    if (args[2] === GL.FRAMEBUFFER_ATTACHMENT_OBJECT_NAME && framebuffer !== null) {
+      // The type query validates the target and attachment.
+      const type = native.getFramebufferAttachmentParameter(s.index, s.version, args[0], args[1], GL.FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE);
+      if (type === null || type.numbers[0] === GL.NONE) return null;
+      const point = args[1] === GL.DEPTH_STENCIL_ATTACHMENT ? GL.DEPTH_ATTACHMENT : args[1];
+      return (objectState(framebuffer) as FramebufferState).attachments.get(point) ?? null;
+    }
+    return parameterValue(native.getFramebufferAttachmentParameter(s.index, s.version, ...args));
+  }
+
   // --- Textures (WebGL 1.0 §5.14.8) --------------------------------------
 
   /** WebGL 1.0 §5.14.8. */
@@ -1591,6 +1811,7 @@ abstract class ContextBase {
     for (const unit of s.textureUnits) {
       for (const [target, bound] of unit) if (bound === texture) unit.set(target, null);
     }
+    detach(s, texture);
     native.deleteObject(s.index, s.version, ...keyOf(state));
   }
 
@@ -1857,6 +2078,102 @@ abstract class WebGL2Members extends ContextBase {
     uniformMatrixList(this, 'uniformMatrix4x3fv', 4, 3, arguments.length, location, transpose, data, srcOffset, srcLength);
   }
 
+  /** WebGL 2.0 §3.7.4. */
+  framebufferTextureLayer(target: number, attachment: number, texture: WebGLTexture | null, level: number, layer: number): void {
+    requireArguments('framebufferTextureLayer', 5, arguments.length);
+    const t = toUnsignedLong(target);
+    const a = toUnsignedLong(attachment);
+    const l = toLong(level);
+    const y = toLong(layer);
+    attachLayer(this, t, a, texture, l, y);
+  }
+
+  /** WebGL 2.0 §3.7.4. */
+  blitFramebuffer(srcX0: number, srcY0: number, srcX1: number, srcY1: number, dstX0: number, dstY0: number, dstX1: number, dstY1: number, mask: number, filter: number): void {
+    requireArguments('blitFramebuffer', 10, arguments.length);
+    const s = contextState(this);
+    const args = [toLong(srcX0), toLong(srcY0), toLong(srcX1), toLong(srcY1), toLong(dstX0), toLong(dstY0), toLong(dstX1), toLong(dstY1), toUnsignedLong(mask), toUnsignedLong(filter)] as const;
+    if (!s.destroyed) native.blitFramebuffer(s.index, s.version, ...args);
+  }
+
+  /** WebGL 2.0 §3.7.11. */
+  drawBuffers(buffers: Iterable<number>): void {
+    requireArguments('drawBuffers', 1, arguments.length);
+    const s = contextState(this);
+    const list = [...toList(Uint32Array, toUnsignedLong, buffers, 'drawBuffers')];
+    if (!s.destroyed) native.drawBuffers(s.index, s.version, list);
+  }
+
+  /** WebGL 2.0 §3.7.4. */
+  readBuffer(src: number): void {
+    requireArguments('readBuffer', 1, arguments.length);
+    const s = contextState(this);
+    const v = toUnsignedLong(src);
+    if (!s.destroyed) native.readBuffer(s.index, s.version, v);
+  }
+
+  /** WebGL 2.0 §3.7.4. */
+  invalidateFramebuffer(target: number, attachments: Iterable<number>): void {
+    requireArguments('invalidateFramebuffer', 2, arguments.length);
+    const s = contextState(this);
+    const t = toUnsignedLong(target);
+    const list = [...toList(Uint32Array, toUnsignedLong, attachments, 'invalidateFramebuffer')];
+    if (!s.destroyed) native.invalidateFramebuffer(s.index, s.version, t, list, null);
+  }
+
+  /** WebGL 2.0 §3.7.4. */
+  invalidateSubFramebuffer(target: number, attachments: Iterable<number>, x: number, y: number, width: number, height: number): void {
+    requireArguments('invalidateSubFramebuffer', 6, arguments.length);
+    const s = contextState(this);
+    const t = toUnsignedLong(target);
+    const list = [...toList(Uint32Array, toUnsignedLong, attachments, 'invalidateSubFramebuffer')];
+    const region = [toLong(x), toLong(y), toLong(width), toLong(height)];
+    if (!s.destroyed) native.invalidateFramebuffer(s.index, s.version, t, list, region);
+  }
+
+  /** WebGL 2.0 §3.7.9. */
+  clearBufferfv(buffer: number, drawbuffer: number, values: Iterable<number>, srcOffset = 0): void {
+    requireArguments('clearBufferfv', 3, arguments.length);
+    clearBuffer(this, buffer, drawbuffer, 0, toList(Float32Array, toFloat, values, 'clearBufferfv'), srcOffset);
+  }
+
+  /** WebGL 2.0 §3.7.9. */
+  clearBufferiv(buffer: number, drawbuffer: number, values: Iterable<number>, srcOffset = 0): void {
+    requireArguments('clearBufferiv', 3, arguments.length);
+    clearBuffer(this, buffer, drawbuffer, 1, toList(Int32Array, toLong, values, 'clearBufferiv'), srcOffset);
+  }
+
+  /** WebGL 2.0 §3.7.9. */
+  clearBufferuiv(buffer: number, drawbuffer: number, values: Iterable<number>, srcOffset = 0): void {
+    requireArguments('clearBufferuiv', 3, arguments.length);
+    clearBuffer(this, buffer, drawbuffer, 2, toList(Uint32Array, toUnsignedLong, values, 'clearBufferuiv'), srcOffset);
+  }
+
+  /** WebGL 2.0 §3.7.9. */
+  clearBufferfi(buffer: number, drawbuffer: number, depth: number, stencil: number): void {
+    requireArguments('clearBufferfi', 4, arguments.length);
+    const s = contextState(this);
+    const args = [toUnsignedLong(buffer), toLong(drawbuffer), toFloat(depth), toLong(stencil)] as const;
+    if (!s.destroyed) native.clearBufferFi(s.index, s.version, ...args);
+  }
+
+  /** WebGL 2.0 §3.7.5. */
+  renderbufferStorageMultisample(target: number, samples: number, internalformat: number, width: number, height: number): void {
+    requireArguments('renderbufferStorageMultisample', 5, arguments.length);
+    const s = contextState(this);
+    const args = [toUnsignedLong(target), toLong(samples), toUnsignedLong(internalformat), toLong(width), toLong(height)] as const;
+    if (!s.destroyed) native.renderbufferStorage(s.index, s.version, args[0], args[2], args[3], args[4], args[1]);
+  }
+
+  /** WebGL 2.0 §3.7.5. */
+  getInternalformatParameter(target: number, internalformat: number, pname: number): unknown {
+    requireArguments('getInternalformatParameter', 3, arguments.length);
+    const s = contextState(this);
+    const args = [toUnsignedLong(target), toUnsignedLong(internalformat), toUnsignedLong(pname)] as const;
+    if (s.destroyed) return null;
+    return parameterValue(native.getInternalformatParameter(s.index, s.version, ...args));
+  }
+
   /** WebGL 2.0 §3.7.6. */
   texImage3D(target: number, level: number, internalformat: number, width: number, height: number, depth: number, border: number, format: number, type: number, ...rest: unknown[]): void {
     requireArguments('texImage3D', 10, arguments.length);
@@ -2013,6 +2330,15 @@ export const WebGL2RenderingContext: WebGL2Constants & {
   readonly prototype: WebGL2RenderingContext;
   new (...args: ContextArguments): WebGL2RenderingContext;
 } = withConstants(class WebGL2RenderingContext extends WebGL2Members {}, WEBGL2_CONSTANTS);
+
+/** `clearBuffer{fv,iv,uiv}`; `kind` 0 float, 1 int, 2 uint. */
+function clearBuffer(gl: ContextBase, buffer: unknown, drawbuffer: unknown, kind: number, values: ArrayBufferView, srcOffset: unknown): void {
+  const s = contextState(gl);
+  const b = toUnsignedLong(buffer);
+  const d = toLong(drawbuffer);
+  const offset = toUnsignedLongLong(srcOffset);
+  if (!s.destroyed) native.clearBuffer(s.index, s.version, b, d, kind, values, offset);
+}
 
 /** `samplerParameter[if]`. */
 function samplerParameter(gl: ContextBase, sampler: unknown, pname: number, value: number, float: boolean, method: string): void {

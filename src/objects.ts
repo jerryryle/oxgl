@@ -73,6 +73,18 @@ export class WebGLShader extends WebGLObject {
 export class WebGLTexture extends WebGLObject {
   declare private readonly brand: 'WebGLTexture';
 }
+/** WebGL 1.0 §5.5. */
+export class WebGLFramebuffer extends WebGLObject {
+  declare private readonly brand: 'WebGLFramebuffer';
+}
+/** WebGL 1.0 §5.7. */
+export class WebGLRenderbuffer extends WebGLObject {
+  declare private readonly brand: 'WebGLRenderbuffer';
+}
+/** A framebuffer's extra state: what is attached at each point. */
+export interface FramebufferState extends ObjectState {
+  readonly attachments: Map<number, WebGLTexture | WebGLRenderbuffer>;
+}
 /** WebGL 2.0 §3.3. */
 export class WebGLSampler extends WebGLObject {
   declare private readonly brand: 'WebGLSampler';

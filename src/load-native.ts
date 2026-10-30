@@ -118,6 +118,21 @@ export interface NativeBinding {
   samplerParameter: (index: number, version: number, oi: number, ov: number, pname: number, value: number, float: boolean) => void;
   getSamplerParameter: (index: number, version: number, oi: number, ov: number, pname: number) => NativeParameter | null;
   drawingBufferPixels: (index: number, version: number) => { data: Uint8Array; width: number; height: number } | null;
+  bindFramebuffer: (index: number, version: number, target: number, oi: number, ov: number) => boolean;
+  bindRenderbuffer: (index: number, version: number, target: number, oi: number, ov: number) => boolean;
+  renderbufferStorage: (index: number, version: number, target: number, format: number, width: number, height: number, samples: number | null) => void;
+  getRenderbufferParameter: (index: number, version: number, target: number, pname: number) => number | null;
+  attach: (index: number, version: number, target: number, attachment: number, kind: number, a: number, b: number, oi: number, ov: number) => boolean;
+  checkFramebufferStatus: (index: number, version: number, target: number) => number;
+  getFramebufferAttachmentParameter: (index: number, version: number, target: number, attachment: number, pname: number) => NativeParameter | null;
+  blitFramebuffer: (index: number, version: number, sx0: number, sy0: number, sx1: number, sy1: number, dx0: number, dy0: number, dx1: number, dy1: number, mask: number, filter: number) => void;
+  drawBuffers: (index: number, version: number, buffers: number[]) => void;
+  readBuffer: (index: number, version: number, source: number) => void;
+  invalidateFramebuffer: (index: number, version: number, target: number, attachments: number[], region: number[] | null) => void;
+  clearBuffer: (index: number, version: number, buffer: number, drawbuffer: number, kind: number, values: ArrayBufferView, offset: number) => void;
+  clearBufferFi: (index: number, version: number, buffer: number, drawbuffer: number, depth: number, stencil: number) => void;
+  getInternalformatParameter: (index: number, version: number, target: number, format: number, pname: number) => NativeParameter | null;
+  readPixelsToBuffer: (index: number, version: number, x: number, y: number, width: number, height: number, format: number, type: number, offset: number) => void;
   drawRangeElements: (index: number, version: number, mode: number, start: number, end: number, count: number, type: number, offset: number) => void;
   resize(index: number, version: number, width: number, height: number): { width: number; height: number };
   destroy(index: number, version: number): void;
@@ -180,7 +195,7 @@ export interface NativeBinding {
 }
 
 /** Version of the JS ↔ native interface this package was built for. */
-export const NATIVE_ABI_VERSION = 6;
+export const NATIVE_ABI_VERSION = 7;
 
 function nativeMissing(detail: string, cause?: unknown): Error {
   const error = new Error(

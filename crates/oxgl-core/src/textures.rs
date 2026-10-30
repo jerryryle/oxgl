@@ -394,7 +394,8 @@ impl Context {
                     self.errors.synthesize(GL_INVALID_VALUE);
                     return;
                 }
-                let codec = Codec::new(args.format, args.ty);
+                let codec = Codec::new(args.format, args.ty)
+                    .or_else(|| Codec::opaque(args.format, args.ty));
                 if !flags || codec.is_none() {
                     if flags && is_3d {
                         self.errors.synthesize(GL_INVALID_OPERATION);
@@ -607,11 +608,28 @@ impl Context {
         let (width, height) = (self.buffer.width(), self.buffer.height());
         let (w, h) = (usize::try_from(width).ok()?, usize::try_from(height).ok()?);
         let mut pixels = vec![0u8; w.checked_mul(h)?.checked_mul(4)?];
-        // Read with the default pack state, then restore it.
-        let alignment = match current.get_values(GL_PACK_ALIGNMENT, ValueType::Integer) {
-            Some(Values::Integers([a, ..])) => a,
-            _ => 4,
+        // Read with the default pack state, keeping the page's errors and
+        // dropping the read's own, then restore everything.
+        crate::drawing_buffer::drain_into(&current, &mut self.errors);
+        let pack: &[u32] = if self.webgl2 {
+            &[
+                GL_PACK_ALIGNMENT,
+                GL_PACK_ROW_LENGTH,
+                GL_PACK_SKIP_PIXELS,
+                GL_PACK_SKIP_ROWS,
+            ]
+        } else {
+            &[GL_PACK_ALIGNMENT]
         };
+        let saved: Vec<i32> = pack
+            .iter()
+            .map(
+                |&pname| match current.get_values(pname, ValueType::Integer) {
+                    Some(Values::Integers([v, ..])) => v,
+                    _ => 0,
+                },
+            )
+            .collect();
         let pack_buffer = if self.webgl2 {
             integers(&current, GL_PIXEL_PACK_BUFFER_BINDING).map_or(0, |[n, _]| n.cast_unsigned())
         } else {
@@ -619,7 +637,9 @@ impl Context {
         };
         let read =
             integers(&current, GL_READ_FRAMEBUFFER_BINDING).map_or(0, |[n, _]| n.cast_unsigned());
-        current.pixel_store(GL_PACK_ALIGNMENT, 1);
+        for (i, &pname) in pack.iter().enumerate() {
+            current.pixel_store(pname, i32::from(i == 0));
+        }
         if pack_buffer != 0 {
             current.bind_buffer(GL_PIXEL_PACK_BUFFER, 0);
         }
@@ -638,9 +658,32 @@ impl Context {
             self.buffer.end_read(&current);
         }
         current.bind_framebuffer(GL_READ_FRAMEBUFFER, read);
-        current.pixel_store(GL_PACK_ALIGNMENT, alignment);
+        for (&pname, &value) in pack.iter().zip(&saved) {
+            current.pixel_store(pname, value);
+        }
         if pack_buffer != 0 {
             current.bind_buffer(GL_PIXEL_PACK_BUFFER, pack_buffer);
+        }
+        crate::drawing_buffer::discard_errors(&current);
+        // A premultiplied drawing buffer becomes unpremultiplied RGBA8, as a
+        // canvas's pixels are read for upload (WebGL 1.0 §5.14.8).
+        let attributes = self.buffer.attributes();
+        if attributes.premultiplied_alpha && attributes.alpha {
+            for pixel in pixels.chunks_mut(4) {
+                if let [r, g, b, a] = pixel
+                    && *a != 0
+                    && *a != 255
+                {
+                    let scale = 255.0 / f32::from(*a);
+                    #[allow(
+                        clippy::cast_possible_truncation,
+                        clippy::cast_sign_loss,
+                        reason = "clamped to 0..=255"
+                    )]
+                    let un = |c: u8| (f32::from(c) * scale).round().min(255.0) as u8;
+                    (*r, *g, *b) = (un(*r), un(*g), un(*b));
+                }
+            }
         }
         // GL rows are bottom first; a canvas is top first.
         let row = w * 4;

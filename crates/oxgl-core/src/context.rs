@@ -52,6 +52,18 @@ pub enum Object {
         /// GL name.
         name: u32,
     },
+    /// A framebuffer.
+    Framebuffer {
+        /// GL name.
+        name: u32,
+    },
+    /// A renderbuffer.
+    Renderbuffer {
+        /// GL name.
+        name: u32,
+        /// Allocated as WebGL's `DEPTH_STENCIL`, reported back as such.
+        depth_stencil: bool,
+    },
 }
 
 /// A live WebGL context.
@@ -62,6 +74,9 @@ pub struct Context {
     pub(crate) objects: SlotMap<ObjectKey, Object>,
     pub(crate) unpack: UnpackState,
     pub(crate) webgl2: bool,
+    /// The renderbuffer bound to `RENDERBUFFER`, for the `DEPTH_STENCIL`
+    /// format alias.
+    pub(crate) bound_renderbuffer: Option<ObjectKey>,
 }
 
 /// Makes `buffer`'s context current, setting the lost flag if that fails: a
@@ -119,6 +134,7 @@ impl Context {
             objects: SlotMap::with_key(),
             unpack: UnpackState::default(),
             webgl2,
+            bound_renderbuffer: None,
         }
     }
 
@@ -271,6 +287,11 @@ impl Context {
             self.errors.synthesize(GL_INVALID_VALUE);
             return;
         };
+        if self.pack_buffer_bound(&current) {
+            // WebGL 2.0 §3.7.10: the view overload needs no pack buffer.
+            self.errors.synthesize(GL_INVALID_OPERATION);
+            return;
+        }
         let layout = pixels::components(args.format, self.webgl2)
             .zip(pixels::type_info(args.ty, self.webgl2));
         let required = match layout {

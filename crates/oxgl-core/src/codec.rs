@@ -119,6 +119,28 @@ impl Codec {
         })
     }
 
+    /// A codec that only knows the pixel size, for formats with no color to
+    /// convert (depth and depth-stencil): rows can be flipped, and
+    /// premultiplying leaves them unchanged.
+    #[must_use]
+    pub fn opaque(format: u32, ty: u32) -> Option<Self> {
+        let size = match (format, ty) {
+            (GL_DEPTH_COMPONENT, GL_UNSIGNED_SHORT) => 2,
+            (GL_DEPTH_COMPONENT, GL_UNSIGNED_INT | GL_FLOAT)
+            | (GL_DEPTH_STENCIL, GL_UNSIGNED_INT_24_8) => 4,
+            (GL_DEPTH_STENCIL, GL_FLOAT_32_UNSIGNED_INT_24_8_REV) => 8,
+            _ => return None,
+        };
+        Some(Self {
+            channels: &[0],
+            layout: Layout::Components {
+                size,
+                kind: Component::Uint,
+            },
+            integer: true,
+        })
+    }
+
     /// Bytes per pixel.
     #[must_use]
     pub fn bytes_per_pixel(&self) -> usize {

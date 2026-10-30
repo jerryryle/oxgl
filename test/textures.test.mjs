@@ -250,3 +250,33 @@ test('sampler overrides texture filtering', () => {
   assert.equal(gl.getError(), gl.NO_ERROR);
   gl.destroy();
 });
+
+test('canvas sources are unpremultiplied and do not disturb the source context', () => {
+  const { gl } = textured();
+  const other = createContext({ width: 2, height: 2, webgl2: true });
+  other.clearColor(1, 0, 0, 0.5);
+  other.clear(other.COLOR_BUFFER_BIT);
+  other.pixelStorei(other.PACK_ROW_LENGTH, 64);
+  other.clear(0x1); // a pending error of the source's own
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, other.canvas);
+  const [pixel] = draw(gl);
+  const expected = [255, 0, 0, 128];
+  pixel.forEach((c, i) => assert.ok(Math.abs(c - expected[i]) <= 2, String(pixel)));
+  assert.equal(other.getError(), other.INVALID_VALUE);
+  assert.equal(other.getError(), other.NO_ERROR);
+  assert.equal(other.getParameter(other.PACK_ROW_LENGTH), 64);
+  other.destroy();
+  gl.destroy();
+});
+
+test('flip applies to depth uploads', () => {
+  const gl = createContext({ width: 1, height: 1, webgl2: true });
+  gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
+  gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+  gl.pixelStorei(gl.UNPACK_ALIGNMENT, 2);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT16, 1, 2, 0, gl.DEPTH_COMPONENT, gl.UNSIGNED_SHORT, new Uint16Array([1, 2]));
+  assert.equal(gl.getError(), gl.NO_ERROR);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT16, 1, 2, 0, gl.DEPTH_COMPONENT, gl.UNSIGNED_SHORT, new Uint16Array([1]));
+  assert.equal(gl.getError(), gl.INVALID_OPERATION, 'a short view is still rejected');
+  gl.destroy();
+});

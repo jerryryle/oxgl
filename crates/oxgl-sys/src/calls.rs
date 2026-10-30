@@ -115,6 +115,14 @@ value_calls! {
     uniform_3ui = glUniform3ui(location: GLint, x: GLuint, y: GLuint, z: GLuint);
     uniform_4ui = glUniform4ui(location: GLint, x: GLuint, y: GLuint, z: GLuint, w: GLuint);
     bind_framebuffer = glBindFramebuffer(target: GLenum, framebuffer: GLuint);
+    is_framebuffer = glIsFramebuffer(framebuffer: GLuint) -> u8;
+    is_renderbuffer = glIsRenderbuffer(renderbuffer: GLuint) -> u8;
+    framebuffer_texture_2d = glFramebufferTexture2D(
+        target: GLenum, attachment: GLenum, textarget: GLenum, texture: GLuint, level: GLint);
+    framebuffer_texture_layer = glFramebufferTextureLayer(
+        target: GLenum, attachment: GLenum, texture: GLuint, level: GLint, layer: GLint);
+    read_buffer = glReadBuffer(src: GLenum);
+    clear_buffer_fi = glClearBufferfi(buffer: GLenum, drawbuffer: GLint, depth: f32, stencil: GLint);
     bind_renderbuffer = glBindRenderbuffer(target: GLenum, renderbuffer: GLuint);
     renderbuffer_storage = glRenderbufferStorage(
         target: GLenum, internalformat: GLenum, width: GLsizei, height: GLsizei);

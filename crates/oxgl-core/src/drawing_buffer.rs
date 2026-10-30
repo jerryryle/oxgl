@@ -6,11 +6,11 @@ use oxgl_sys::bindings::{
     GL_BACK, GL_COLOR_ATTACHMENT0, GL_COLOR_BUFFER_BIT, GL_COLOR_CLEAR_VALUE, GL_COLOR_WRITEMASK,
     GL_DEPTH_ATTACHMENT, GL_DEPTH_BUFFER_BIT, GL_DEPTH_CLEAR_VALUE, GL_DEPTH_COMPONENT24,
     GL_DEPTH_STENCIL_ATTACHMENT, GL_DEPTH_WRITEMASK, GL_DEPTH24_STENCIL8, GL_DRAW_FRAMEBUFFER,
-    GL_DRAW_FRAMEBUFFER_BINDING, GL_FRAMEBUFFER_COMPLETE, GL_MAX_DRAW_BUFFERS,
-    GL_MAX_RENDERBUFFER_SIZE, GL_MAX_SAMPLES, GL_MAX_VIEWPORT_DIMS, GL_NEAREST, GL_NO_ERROR,
-    GL_NONE, GL_RASTERIZER_DISCARD, GL_READ_FRAMEBUFFER, GL_READ_FRAMEBUFFER_BINDING,
-    GL_RENDERBUFFER, GL_RENDERBUFFER_BINDING, GL_RGB8, GL_RGBA8, GL_SCISSOR_TEST,
-    GL_STENCIL_ATTACHMENT, GL_STENCIL_BACK_WRITEMASK, GL_STENCIL_BUFFER_BIT,
+    GL_DRAW_FRAMEBUFFER_BINDING, GL_FRAMEBUFFER_COMPLETE, GL_INVALID_OPERATION,
+    GL_MAX_DRAW_BUFFERS, GL_MAX_RENDERBUFFER_SIZE, GL_MAX_SAMPLES, GL_MAX_VIEWPORT_DIMS,
+    GL_NEAREST, GL_NO_ERROR, GL_NONE, GL_RASTERIZER_DISCARD, GL_READ_FRAMEBUFFER,
+    GL_READ_FRAMEBUFFER_BINDING, GL_RENDERBUFFER, GL_RENDERBUFFER_BINDING, GL_RGB8, GL_RGBA8,
+    GL_SCISSOR_TEST, GL_STENCIL_ATTACHMENT, GL_STENCIL_BACK_WRITEMASK, GL_STENCIL_BUFFER_BIT,
     GL_STENCIL_CLEAR_VALUE, GL_STENCIL_INDEX8, GL_STENCIL_WRITEMASK,
 };
 use oxgl_sys::{ClientVersion, Current, Display, GlContext, StateCall, ValueType, Values};
@@ -160,6 +160,10 @@ pub struct DrawingBuffer {
     requested: Attributes,
     limits: Limits,
     allocated: Attempt,
+    /// The default framebuffer's draw buffer (WebGL 2): `BACK` or `NONE`.
+    draw_buffer: std::cell::Cell<u32>,
+    /// The default framebuffer's read buffer (WebGL 2): `BACK` or `NONE`.
+    read_buffer: std::cell::Cell<u32>,
 }
 
 impl DrawingBuffer {
@@ -211,6 +215,8 @@ impl DrawingBuffer {
                 depth: false,
                 stencil: false,
             },
+            draw_buffer: std::cell::Cell::new(GL_BACK),
+            read_buffer: std::cell::Cell::new(GL_BACK),
         };
         let mut errors = ErrorState::default();
         buffer
@@ -308,6 +314,9 @@ impl DrawingBuffer {
             GL_IMPLEMENTATION_COLOR_READ_TYPE, GL_INVALID_ENUM, GL_READ_BUFFER,
         };
         let enum_value = |value: u32| Some(Ok(i32::try_from(value).ok()?));
+        let bound = |pname| {
+            integers(current, pname).map(|[name, _]| name.cast_unsigned()) == Some(self.names.draw)
+        };
         match pname {
             GL_IMPLEMENTATION_COLOR_READ_FORMAT | GL_IMPLEMENTATION_COLOR_READ_TYPE => {
                 // Reads go through the single-sample buffer; ask ANGLE about
@@ -321,19 +330,50 @@ impl DrawingBuffer {
                 current.bind_framebuffer(GL_READ_FRAMEBUFFER, self.names.draw);
                 value.map(Ok)
             }
-            GL_READ_BUFFER | GL_DRAW_BUFFER0 if self.webgl2 => enum_value(GL_BACK),
+            GL_READ_BUFFER if self.webgl2 && bound(GL_READ_FRAMEBUFFER_BINDING) => {
+                enum_value(self.read_buffer.get())
+            }
+            GL_DRAW_BUFFER0 if self.webgl2 && bound(GL_DRAW_FRAMEBUFFER_BINDING) => {
+                enum_value(self.draw_buffer.get())
+            }
             _ if self.webgl2 && pname > GL_DRAW_BUFFER0 && pname <= GL_DRAW_BUFFER0 + 15 => {
                 let index = i64::from(pname - GL_DRAW_BUFFER0);
-                if index < i64::from(self.limits.max_draw_buffers) {
-                    enum_value(GL_NONE)
-                } else {
+                if index >= i64::from(self.limits.max_draw_buffers) {
                     // ANGLE reports INVALID_OPERATION here; WebGL 2.0
                     // §3.7.2 lists an unknown pname as INVALID_ENUM.
                     Some(Err(GL_INVALID_ENUM))
+                } else if bound(GL_DRAW_FRAMEBUFFER_BINDING) {
+                    enum_value(GL_NONE)
+                } else {
+                    None
                 }
             }
             _ => None,
         }
+    }
+
+    /// Whether `pname`'s framebuffer binding (`DRAW_FRAMEBUFFER_BINDING` or
+    /// `READ_FRAMEBUFFER_BINDING`) is the drawing buffer.
+    pub(crate) fn is_bound(&self, current: &Current<'_>, pname: u32) -> bool {
+        integers(current, pname).map(|[name, _]| name.cast_unsigned()) == Some(self.names.draw)
+    }
+
+    /// `drawBuffers` or `readBuffer` (`read`) while the drawing buffer is
+    /// bound (WebGL 2): `BACK` maps to the FBO's color attachment, `NONE`
+    /// stays; anything else is `INVALID_OPERATION` (OpenGL ES 3.0 §4.2.1,
+    /// §4.3.1). Returns the GL value to set, or the error.
+    pub(crate) fn set_buffer(&self, value: u32, read: bool) -> Result<u32, u32> {
+        let mapped = match value {
+            GL_BACK => GL_COLOR_ATTACHMENT0,
+            GL_NONE => GL_NONE,
+            _ => return Err(GL_INVALID_OPERATION),
+        };
+        if read {
+            self.read_buffer.set(value);
+        } else {
+            self.draw_buffer.set(value);
+        }
+        Ok(mapped)
     }
 
     /// Whether reads of the bound read framebuffer go through the resolve
@@ -595,7 +635,7 @@ pub(crate) fn drain_into(current: &Current<'_>, errors: &mut ErrorState) {
 }
 
 /// Drops the errors oxgl's own calls generated.
-fn discard_errors(current: &Current<'_>) {
+pub(crate) fn discard_errors(current: &Current<'_>) {
     for _ in 0..8 {
         if current.get_error() == GL_NO_ERROR {
             break;

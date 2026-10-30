@@ -6,6 +6,7 @@ pub mod codec;
 pub mod context;
 pub mod drawing_buffer;
 pub mod error;
+pub mod framebuffers;
 pub mod parameters;
 pub mod pixels;
 pub mod rendering;

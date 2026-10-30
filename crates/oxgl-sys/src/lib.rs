@@ -21,6 +21,7 @@ pub mod bindings {
 
 mod calls;
 mod egl;
+mod framebuffers;
 mod loader;
 #[cfg(feature = "node")]
 pub mod napi_view;
@@ -34,6 +35,7 @@ mod view;
 pub use egl::{
     ClientVersion, Current, Display, DisplayKind, EglError, GlContext, ReadPixels, live_contexts,
 };
+pub use framebuffers::ClearValues;
 pub use loader::{Angle, LoadError, LoadErrorKind};
 pub use pointers::{
     ActiveInfo, AttribQuery, Quad, UniformData, UniformMatrix, UniformOut, UniformVector,
