@@ -102,6 +102,8 @@ value_calls! {
     is_query = glIsQuery(id: GLuint) -> u8;
     bind_texture = glBindTexture(target: GLenum, texture: GLuint);
     is_texture = glIsTexture(texture: GLuint) -> u8;
+    is_shader = glIsShader(shader: GLuint) -> u8;
+    is_program = glIsProgram(program: GLuint) -> u8;
     tex_parameter_i = glTexParameteri(target: GLenum, pname: GLenum, param: GLint);
     tex_parameter_f = glTexParameterf(target: GLenum, pname: GLenum, param: f32);
     generate_mipmap = glGenerateMipmap(target: GLenum);

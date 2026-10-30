@@ -449,10 +449,13 @@ impl Context {
                 self.errors.synthesize(GL_INVALID_ENUM);
                 return None;
             }
-            // On WebGL 2 an empty attachment point answers only OBJECT_TYPE and
-            // OBJECT_NAME (OpenGL ES 3.0 §6.1.13), whatever else pname is;
-            // ANGLE checks pname first.
-            if self.webgl2
+            // An empty attachment point answers only OBJECT_TYPE and
+            // OBJECT_NAME (the TS layer answers the name), whatever else
+            // pname is: INVALID_OPERATION on WebGL 2 (OpenGL ES 3.0 §6.1.13),
+            // INVALID_ENUM on WebGL 1 (OpenGL ES 2.0 §6.1.3). ANGLE checks
+            // pname first. ES 2.0 cannot be asked about DEPTH_STENCIL_ATTACHMENT.
+            let es2_depth_stencil = !self.webgl2 && attachment == GL_DEPTH_STENCIL_ATTACHMENT;
+            if !es2_depth_stencil
                 && pname != GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE
                 && pname != GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME
                 && current.framebuffer_attachment_parameter(
@@ -461,7 +464,11 @@ impl Context {
                     GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE,
                 ) == i32::try_from(GL_NONE).ok()
             {
-                self.errors.synthesize(GL_INVALID_OPERATION);
+                self.errors.synthesize(if self.webgl2 {
+                    GL_INVALID_OPERATION
+                } else {
+                    GL_INVALID_ENUM
+                });
                 return None;
             }
             return number(current.framebuffer_attachment_parameter(target, attachment, pname)?);

@@ -313,6 +313,14 @@ impl Context {
     /// `texParameterf`/`texParameteri`.
     pub fn tex_parameter(&mut self, target: u32, pname: u32, value: f64, float: bool) {
         if let Some(current) = current(&self.buffer, &mut self.errors) {
+            if texture_missing(&current, self.webgl2, target, TargetUse::Binding) {
+                self.errors.synthesize(GL_INVALID_OPERATION);
+                return;
+            }
+            if !self.tex_pname_known(pname) {
+                self.errors.synthesize(GL_INVALID_ENUM);
+                return;
+            }
             #[allow(
                 clippy::cast_possible_truncation,
                 reason = "WebIDL-converted GLint or GLfloat"
@@ -325,12 +333,12 @@ impl Context {
         }
     }
 
-    /// `getTexParameter`, with the JS type of WebGL 2.0 §3.7.6's table.
-    pub fn get_tex_parameter(&mut self, target: u32, pname: u32) -> Option<Parameter> {
-        let current = current(&self.buffer, &mut self.errors)?;
-        // ANGLE also answers pnames of GL extensions enabled for oxgl's own
-        // use, such as REQUIRED_TEXTURE_IMAGE_UNITS_OES.
-        let known = match pname {
+    /// Whether `pname` is a texture parameter of WebGL's lists, grown by
+    /// enabled extensions. ANGLE also answers pnames of GL extensions enabled
+    /// for oxgl's own use (`REQUIRED_TEXTURE_IMAGE_UNITS_OES`) and GL ones
+    /// WebGL leaves out (`TEXTURE_SWIZZLE_*`, WebGL 2.0 §5.19).
+    fn tex_pname_known(&self, pname: u32) -> bool {
+        match pname {
             GL_TEXTURE_MAG_FILTER
             | GL_TEXTURE_MIN_FILTER
             | GL_TEXTURE_WRAP_S
@@ -351,7 +359,17 @@ impl Context {
                 self.extensions.is_enabled("WEBGL_stencil_texturing")
             }
             _ => false,
-        };
+        }
+    }
+
+    /// `getTexParameter`, with the JS type of WebGL 2.0 §3.7.6's table.
+    pub fn get_tex_parameter(&mut self, target: u32, pname: u32) -> Option<Parameter> {
+        let current = current(&self.buffer, &mut self.errors)?;
+        if texture_missing(&current, self.webgl2, target, TargetUse::Binding) {
+            self.errors.synthesize(GL_INVALID_OPERATION);
+            return None;
+        }
+        let known = self.tex_pname_known(pname);
         if !known {
             self.errors.synthesize(GL_INVALID_ENUM);
             return None;
@@ -370,9 +388,14 @@ impl Context {
 
     /// `generateMipmap`.
     pub fn generate_mipmap(&mut self, target: u32) {
-        if let Some(current) = current(&self.buffer, &mut self.errors) {
-            current.generate_mipmap(target);
+        let Some(current) = current(&self.buffer, &mut self.errors) else {
+            return;
+        };
+        if texture_missing(&current, self.webgl2, target, TargetUse::Binding) {
+            self.errors.synthesize(GL_INVALID_OPERATION);
+            return;
         }
+        current.generate_mipmap(target);
     }
 
     /// `texImage2D`/`texSubImage2D`/`texImage3D`/`texSubImage3D` from any
@@ -381,6 +404,10 @@ impl Context {
         let Some(current) = current(&self.buffer, &mut self.errors) else {
             return;
         };
+        if texture_missing(&current, self.webgl2, args.target, TargetUse::of(call)) {
+            self.errors.synthesize(GL_INVALID_OPERATION);
+            return;
+        }
         let webgl2 = self.webgl2;
         let is_3d = matches!(call, Upload::Image3D | Upload::SubImage3D);
         let flags = self.unpack.flip_y || self.unpack.premultiply_alpha;
@@ -482,6 +509,10 @@ impl Context {
         let Some(current) = current(&self.buffer, &mut self.errors) else {
             return;
         };
+        if texture_missing(&current, self.webgl2, args.target, TargetUse::of(call)) {
+            self.errors.synthesize(GL_INVALID_OPERATION);
+            return;
+        }
         if self.unpack_buffer_bound(&current) {
             self.errors.synthesize(GL_INVALID_OPERATION);
             return;
@@ -507,6 +538,10 @@ impl Context {
         let Some(current) = current(&self.buffer, &mut self.errors) else {
             return;
         };
+        if texture_missing(&current, self.webgl2, args.target, TargetUse::of(call)) {
+            self.errors.synthesize(GL_INVALID_OPERATION);
+            return;
+        }
         if !self.unpack_buffer_bound(&current) {
             self.errors.synthesize(GL_INVALID_OPERATION);
             return;
@@ -531,6 +566,23 @@ impl Context {
         let Some(current) = current(&self.buffer, &mut self.errors) else {
             return;
         };
+        let (target, use_) = match copy {
+            TexCopy::Image2D { target, .. } => (target, TargetUse::Image2D),
+            TexCopy::SubImage {
+                target, zoffset, ..
+            } => (
+                target,
+                if zoffset.is_some() {
+                    TargetUse::Image3D
+                } else {
+                    TargetUse::Image2D
+                },
+            ),
+        };
+        if texture_missing(&current, self.webgl2, target, use_) {
+            self.errors.synthesize(GL_INVALID_OPERATION);
+            return;
+        }
         let resolved = self.buffer.begin_read(&current);
         match copy {
             TexCopy::Image2D {
@@ -592,6 +644,19 @@ impl Context {
         depth: Option<i32>,
     ) {
         if let Some(current) = current(&self.buffer, &mut self.errors) {
+            if texture_missing(
+                &current,
+                self.webgl2,
+                target,
+                if depth.is_some() {
+                    TargetUse::Image3D
+                } else {
+                    TargetUse::Storage2D
+                },
+            ) {
+                self.errors.synthesize(GL_INVALID_OPERATION);
+                return;
+            }
             match depth {
                 None => current.tex_storage_2d(target, levels, internal_format, width, height),
                 Some(depth) => {
@@ -782,4 +847,49 @@ pub enum TexCopy {
         width: i32,
         height: i32,
     },
+}
+
+/// The texture targets a call takes; a target outside them is left to GL,
+/// which generates `INVALID_ENUM`.
+#[derive(Debug, Clone, Copy)]
+enum TargetUse {
+    /// `texParameter*`, `getTexParameter`, `generateMipmap`: binding targets.
+    Binding,
+    /// 2D uploads and copies: `TEXTURE_2D` and the cube map faces.
+    Image2D,
+    /// 3D uploads, copies and `texStorage3D`: `TEXTURE_3D`, `TEXTURE_2D_ARRAY`.
+    Image3D,
+    /// `texStorage2D`: `TEXTURE_2D`, `TEXTURE_CUBE_MAP`.
+    Storage2D,
+}
+
+impl TargetUse {
+    fn of(call: Upload) -> Self {
+        match call {
+            Upload::Image2D | Upload::SubImage2D => Self::Image2D,
+            Upload::Image3D | Upload::SubImage3D => Self::Image3D,
+        }
+    }
+}
+
+/// Whether `target`, one `use_` takes, has no texture bound: WebGL
+/// generates `INVALID_OPERATION` there (WebGL 1.0 §5.14.8), where GL would
+/// use texture 0.
+fn texture_missing(current: &Current<'_>, webgl2: bool, target: u32, use_: TargetUse) -> bool {
+    let face = (GL_TEXTURE_CUBE_MAP_POSITIVE_X..=GL_TEXTURE_CUBE_MAP_NEGATIVE_Z).contains(&target);
+    let binding = match (use_, target) {
+        (TargetUse::Binding | TargetUse::Image2D | TargetUse::Storage2D, GL_TEXTURE_2D) => {
+            GL_TEXTURE_BINDING_2D
+        }
+        (TargetUse::Binding | TargetUse::Storage2D, GL_TEXTURE_CUBE_MAP) => {
+            GL_TEXTURE_BINDING_CUBE_MAP
+        }
+        (TargetUse::Image2D, _) if face => GL_TEXTURE_BINDING_CUBE_MAP,
+        (TargetUse::Binding | TargetUse::Image3D, GL_TEXTURE_3D) if webgl2 => GL_TEXTURE_BINDING_3D,
+        (TargetUse::Binding | TargetUse::Image3D, GL_TEXTURE_2D_ARRAY) if webgl2 => {
+            GL_TEXTURE_BINDING_2D_ARRAY
+        }
+        _ => return false,
+    };
+    crate::drawing_buffer::integers(current, binding).is_some_and(|[name, _]| name == 0)
 }

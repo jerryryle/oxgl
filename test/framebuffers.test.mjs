@@ -152,8 +152,10 @@ test('attachment queries and deleted attachments', () => {
   assert.equal(query(gl.FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE), gl.RENDERBUFFER);
   gl.deleteRenderbuffer(renderbuffer);
   assert.equal(query(gl.FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE), gl.NONE);
-  assert.equal(query(gl.FRAMEBUFFER_ATTACHMENT_OBJECT_NAME), null);
   assert.equal(gl.getError(), gl.NO_ERROR);
+  // WebGL 1 answers only OBJECT_TYPE for an empty point (OpenGL ES 2.0 §6.1.3).
+  assert.equal(query(gl.FRAMEBUFFER_ATTACHMENT_OBJECT_NAME), null);
+  assert.equal(gl.getError(), gl.INVALID_ENUM);
   gl.bindFramebuffer(gl.FRAMEBUFFER, null);
   assert.equal(gl.getFramebufferAttachmentParameter(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE), null);
   assert.equal(gl.getError(), gl.INVALID_OPERATION, 'framebuffer 0 has no attachment queries on WebGL 1');

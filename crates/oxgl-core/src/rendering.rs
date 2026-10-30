@@ -353,6 +353,35 @@ impl Context {
     /// Deletes an object now (`delete*`, or a collected object). A stale key
     /// does nothing. On a lost context only the handle is dropped.
     pub fn delete_object(&mut self, key: ObjectKey) {
+        // A shader or program GL keeps alive after deletion stays in
+        // `objects`, flagged, until `sweep_flagged` sees GL free it.
+        if let Some(&(Object::Shader { name } | Object::Program { name })) = self.objects.get(key) {
+            let Some(current) = current(&self.buffer, &mut self.errors) else {
+                self.objects.remove(key);
+                return;
+            };
+            let shader = matches!(self.objects.get(key), Some(Object::Shader { .. }));
+            if shader {
+                current.delete_shader(name);
+            } else {
+                current.delete_program(name);
+            }
+            let alive = if shader {
+                current.is_shader(name)
+            } else {
+                current.is_program(name)
+            } != 0;
+            if alive {
+                if !self.flagged.contains(&key) {
+                    self.flagged.push(key);
+                }
+            } else {
+                self.objects.remove(key);
+                // A deleted program releases its attached shaders.
+                self.sweep_flagged();
+            }
+            return;
+        }
         let Some(object) = self.objects.remove(key) else {
             return;
         };
@@ -361,8 +390,7 @@ impl Context {
         };
         match object {
             Object::Buffer { name, .. } => current.delete_buffer(name),
-            Object::Shader { name } => current.delete_shader(name),
-            Object::Program { name } => current.delete_program(name),
+            Object::Shader { .. } | Object::Program { .. } => {}
             Object::Texture { name } => current.delete_texture(name),
             Object::Sampler { name } => current.delete_sampler(name),
             Object::Framebuffer { name } => {
@@ -652,6 +680,32 @@ impl Context {
                 current.detach_shader(program, shader);
             }
         }
+        if !attach {
+            self.sweep_flagged();
+        }
+    }
+
+    /// Drops the slots of flagged shaders and programs GL has freed: after a
+    /// detach, a program change, or a program's deletion.
+    pub(crate) fn sweep_flagged(&mut self) {
+        if self.flagged.is_empty() {
+            return;
+        }
+        let Some(current) = current(&self.buffer, &mut self.errors) else {
+            return;
+        };
+        let objects = &mut self.objects;
+        self.flagged.retain(|&key| {
+            let alive = match objects.get(key) {
+                Some(Object::Shader { name }) => current.is_shader(*name) != 0,
+                Some(Object::Program { name }) => current.is_program(*name) != 0,
+                _ => false,
+            };
+            if !alive {
+                objects.remove(key);
+            }
+            alive
+        });
     }
 
     /// `linkProgram`.
@@ -687,8 +741,11 @@ impl Context {
             return false;
         };
         current.use_program(name);
-        crate::drawing_buffer::integers(&current, GL_CURRENT_PROGRAM)
-            .is_some_and(|[now, _]| now.cast_unsigned() == name)
+        let used = crate::drawing_buffer::integers(&current, GL_CURRENT_PROGRAM)
+            .is_some_and(|[now, _]| now.cast_unsigned() == name);
+        // The previous program, if deleted, is freed now.
+        self.sweep_flagged();
+        used
     }
 
     /// `getProgramParameter` (WebGL 1.0 §5.14.9, WebGL 2.0 §3.7.7).
@@ -769,6 +826,15 @@ impl Context {
         let Some(program) = self.program_or_error(program) else {
             return -1;
         };
+        // WebGL needs a linked program here, whatever the name (GL would
+        // answer -1 after a failed link); Khronos
+        // `conformance/attribs/gl-get-attrib-location-errors.html`.
+        let linked = current(&self.buffer, &mut self.errors)
+            .is_some_and(|current| crate::webgl2::linked(&current, program));
+        if !linked {
+            self.synthesize_error(GL_INVALID_OPERATION);
+            return -1;
+        }
         let Ok(name) = self.location_name(name) else {
             return -1;
         };

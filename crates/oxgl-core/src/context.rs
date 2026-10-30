@@ -4,8 +4,8 @@ use oxgl_sys::bindings::{
     GL_FRAGMENT_SHADER, GL_GUILTY_CONTEXT_RESET_EXT, GL_HIGH_INT, GL_INNOCENT_CONTEXT_RESET_EXT,
     GL_INVALID_ENUM, GL_INVALID_OPERATION, GL_INVALID_VALUE, GL_LOW_FLOAT, GL_NO_ERROR,
     GL_NUM_COMPRESSED_TEXTURE_FORMATS, GL_PACK_ALIGNMENT, GL_PACK_ROW_LENGTH, GL_PACK_SKIP_PIXELS,
-    GL_PACK_SKIP_ROWS, GL_RENDERER, GL_SHADING_LANGUAGE_VERSION, GL_VENDOR, GL_VERSION,
-    GL_VERTEX_SHADER,
+    GL_PACK_SKIP_ROWS, GL_PRIMITIVE_RESTART_FIXED_INDEX, GL_RENDERER, GL_SHADING_LANGUAGE_VERSION,
+    GL_VENDOR, GL_VERSION, GL_VERTEX_SHADER,
 };
 use oxgl_sys::{
     Current, PixelDestination, PrecisionFormat, ReadPixels, StateCall, ValueType, Values,
@@ -100,6 +100,10 @@ pub struct Context {
     pub(crate) bound_renderbuffer: Option<ObjectKey>,
     /// Enabled WebGL extensions.
     pub(crate) extensions: crate::extensions::ExtensionState,
+    /// Shaders and programs deleted while GL keeps them alive (attached to a
+    /// program, or the current program); their slots stay until GL frees
+    /// them (OpenGL ES 2.0 §2.10.1, §2.10.3).
+    pub(crate) flagged: Vec<ObjectKey>,
 }
 
 /// Makes `buffer`'s context current, setting the lost flag if that fails: a
@@ -151,6 +155,11 @@ impl Context {
     /// Wraps a drawing buffer.
     #[must_use]
     pub fn new(buffer: DrawingBuffer, webgl2: bool) -> Self {
+        // WebGL 2 always restarts primitives at the fixed index (WebGL 2.0
+        // §5.18), and pages cannot toggle it (see `set_state`).
+        if webgl2 && let Ok(current) = buffer.context().make_current() {
+            current.apply(StateCall::Enable(GL_PRIMITIVE_RESTART_FIXED_INDEX));
+        }
         Self {
             buffer,
             errors: ErrorState::default(),
@@ -159,6 +168,7 @@ impl Context {
             webgl2,
             bound_renderbuffer: None,
             extensions: crate::extensions::ExtensionState::default(),
+            flagged: Vec::new(),
         }
     }
 
@@ -190,8 +200,15 @@ impl Context {
     /// A value-only state call (WebGL 1.0 §5.14.3–§5.14.4, §5.14.11),
     /// forwarded for ANGLE to validate.
     pub fn set_state(&mut self, call: StateCall) {
-        if let Some(current) = current(&self.buffer, &mut self.errors) {
-            current.apply(call);
+        let Some(current) = current(&self.buffer, &mut self.errors) else {
+            return;
+        };
+        match call {
+            StateCall::Enable(GL_PRIMITIVE_RESTART_FIXED_INDEX)
+            | StateCall::Disable(GL_PRIMITIVE_RESTART_FIXED_INDEX) => {
+                self.errors.synthesize(GL_INVALID_ENUM);
+            }
+            call => current.apply(call),
         }
     }
 
@@ -210,7 +227,14 @@ impl Context {
 
     /// `isEnabled` (WebGL 1.0 §5.14.3); `false` when lost.
     pub fn is_enabled(&mut self, cap: u32) -> bool {
-        current(&self.buffer, &mut self.errors).is_some_and(|current| current.is_enabled(cap))
+        let Some(current) = current(&self.buffer, &mut self.errors) else {
+            return false;
+        };
+        if cap == GL_PRIMITIVE_RESTART_FIXED_INDEX {
+            self.errors.synthesize(GL_INVALID_ENUM);
+            return false;
+        }
+        current.is_enabled(cap)
     }
 
     /// `getParameter` (WebGL 1.0 §5.14.3, WebGL 2.0 §3.7.2). `None` (JS

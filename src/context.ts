@@ -477,8 +477,10 @@ export function checkObject(
     if (foreignError !== 0) native.synthesizeError(s.index, s.version, foreignError);
     return undefined;
   }
-  // A deleted program stays usable while current (OpenGL ES 2.0 §2.10.3).
-  if ((state.deleted && value !== s.program) || state.key === null) {
+  // GL keeps a deleted shader alive while attached, and a deleted program
+  // while current (OpenGL ES 2.0 §2.10.1, §2.10.3); native code knows.
+  const alive = state.deleted && (value instanceof WebGLShader || value instanceof WebGLProgram) && native.hasObject(s.index, s.version, ...keyOf(state));
+  if ((state.deleted && !alive) || state.key === null) {
     if (deletedError !== 0) native.synthesizeError(s.index, s.version, deletedError);
     return undefined;
   }
@@ -1466,9 +1468,7 @@ abstract class ContextBase {
     if (!state || program === null) return;
     state.deleted = true;
     collectedObjects.unregister(program);
-    // GL deletes the current program once it is replaced (OpenGL ES 2.0
-    // §2.10.3); useProgram does that.
-    if (s.program !== program) native.deleteObject(s.index, s.version, ...keyOf(state));
+    native.deleteObject(s.index, s.version, ...keyOf(state));
   }
 
   /** WebGL 1.0 §5.14.9. */
@@ -1595,12 +1595,8 @@ abstract class ContextBase {
     const s = this.#s;
     const p = checkObject(s, program, WebGLProgram, 'useProgram', 1, true, GL.INVALID_VALUE);
     if (p === undefined) return;
-    const previous = s.program;
     if (!native.useProgram(s.index, s.version, ...keyOf(p))) return;
     s.program = program;
-    if (previous !== null && previous !== program && objectState(previous).deleted) {
-      native.deleteObject(s.index, s.version, ...keyOf(objectState(previous)));
-    }
   }
 
   /** WebGL 1.0 §5.14.9. */
@@ -1610,7 +1606,6 @@ abstract class ContextBase {
     const name = toUnsignedLong(pname);
     const p = checkObject(s, program, WebGLProgram, 'getProgramParameter', 1, false, GL.INVALID_VALUE);
     if (!p) return null;
-    if (p.deleted && name === GL.DELETE_STATUS) return true;
     return parameterValue(native.getProgramParameter(s.index, s.version, ...keyOf(p), name));
   }
 
@@ -2102,7 +2097,12 @@ abstract class ContextBase {
     if (args[2] === GL.FRAMEBUFFER_ATTACHMENT_OBJECT_NAME && framebuffer !== null) {
       // The type query validates the target and attachment.
       const type = native.getFramebufferAttachmentParameter(s.index, s.version, args[0], args[1], GL.FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE);
-      if (type === null || type.numbers[0] === GL.NONE) return null;
+      if (type === null) return null;
+      if (type.numbers[0] === GL.NONE) {
+        // WebGL 1 has no name to report for an empty point (OpenGL ES 2.0 §6.1.3).
+        if (!s.webgl2) native.synthesizeError(s.index, s.version, GL.INVALID_ENUM);
+        return null;
+      }
       const { attachments } = objectState(framebuffer) as FramebufferState;
       if (args[1] === GL.DEPTH_STENCIL_ATTACHMENT) {
         // Different objects at depth and stencil: WebGL 2.0 §3.7.4.

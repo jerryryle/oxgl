@@ -29,8 +29,8 @@ fn channels(format: u32) -> Option<&'static [usize]> {
     })
 }
 
-/// Whether `format` is an integer format (no normalization; never
-/// premultiplied).
+/// Whether `format` is an integer format (no normalization; views of it are
+/// not premultiplied, `TexImageSource` pixels are).
 fn is_integer(format: u32) -> bool {
     matches!(
         format,
@@ -638,7 +638,18 @@ pub fn from_rgba8(
                     f32::from(byte) / 255.0
                 };
             }
-            if premultiply && !codec.integer {
+            // Integer formats are premultiplied too, in 8-bit units, as
+            // Chromium does for a TexImageSource.
+            if premultiply && codec.integer {
+                let [r, g, b, a] = rgba;
+                let scale = a / 255.0;
+                rgba = [
+                    (r * scale).round(),
+                    (g * scale).round(),
+                    (b * scale).round(),
+                    a,
+                ];
+            } else if premultiply {
                 let [r, g, b, a] = rgba;
                 rgba = [r * a, g * a, b * a, a];
             }

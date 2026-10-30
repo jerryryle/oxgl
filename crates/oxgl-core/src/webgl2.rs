@@ -518,10 +518,10 @@ pub enum TransformFeedbackOp {
     Resume,
 }
 
-/// Whether the program's last link succeeded: the uniform block queries
-/// need a linked program (WebGL 2.0 §3.7.16; ANGLE reports an out-of-range
-/// index instead).
-fn linked(current: &oxgl_sys::Current<'_>, program: u32) -> bool {
+/// Whether the program's last link succeeded: uniform block and location
+/// queries need a linked program (WebGL 2.0 §3.7.16; ANGLE reports an
+/// out-of-range index or -1 instead).
+pub(crate) fn linked(current: &oxgl_sys::Current<'_>, program: u32) -> bool {
     current
         .program_parameter(program, GL_LINK_STATUS)
         .is_some_and(|status| status != 0)

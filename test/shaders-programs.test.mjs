@@ -101,12 +101,13 @@ test('deleted shader still attached', () => {
   gl.attachShader(p, vs);
   gl.attachShader(p, shader(gl, gl.FRAGMENT_SHADER, FRAGMENT));
   gl.deleteShader(vs);
-  assert.equal(gl.isShader(vs), false);
+  // GL keeps it until detached (OpenGL ES 2.0 §2.10.1).
+  assert.equal(gl.isShader(vs), true);
   assert.ok(gl.getAttachedShaders(p).includes(vs));
   gl.linkProgram(p);
   assert.equal(gl.getProgramParameter(p, gl.LINK_STATUS), true);
   gl.compileShader(vs);
-  assert.equal(gl.getError(), gl.INVALID_VALUE);
+  assert.equal(gl.getError(), gl.NO_ERROR);
   gl.destroy();
 });
 

@@ -84,6 +84,23 @@ test('deleted program still in use', () => {
   gl.destroy();
 });
 
+test('deleted shaders live while attached', () => {
+  const gl = createContext({ width: 1, height: 1 });
+  const p = program(gl);
+  const [vs, fs] = gl.getAttachedShaders(p);
+  gl.deleteShader(vs);
+  assert.equal(gl.isShader(vs), true);
+  assert.equal(gl.getShaderParameter(vs, gl.DELETE_STATUS), true);
+  gl.detachShader(p, vs);
+  assert.equal(gl.isShader(vs), false);
+  gl.deleteShader(fs);
+  gl.deleteProgram(p);
+  assert.equal(gl.isShader(fs), false);
+  assert.equal(gl.isProgram(p), false);
+  assert.equal(gl.getError(), gl.NO_ERROR);
+  gl.destroy();
+});
+
 test('objects of a lost context', () => {
   const gl = createContext({ width: 1, height: 1 });
   const old = gl.createBuffer();
