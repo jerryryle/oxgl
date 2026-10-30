@@ -5,15 +5,9 @@
 webgl1 conformance/canvas/buffer-offscreen-test.html FAIL # remainder of buffer should be cleared
 webgl1 conformance/canvas/buffer-preserve-test.html FAIL # remainder of buffer should be cleared
 webgl1 conformance/canvas/canvas-test.html TIMEOUT # no new result within the time limit
-webgl1 conformance/canvas/draw-static-webgl-to-multiple-canvas-test.html FAIL # drawImage: Should be (64,128,192,255).
-webgl1 conformance/canvas/draw-webgl-to-canvas-test.html FAIL # drawImage: Should be [64, 128, 192, 255]
-webgl1 conformance/canvas/render-after-resize-test.html FAIL # should be 0,255,0,255
-webgl1 conformance/canvas/to-data-url-after-composite.html FAIL # toDataURL loaded into image, drawn into 2D context, should be green
-webgl1 conformance/canvas/to-data-url-test.html FAIL # should be 0,255,0,255
-webgl1 conformance/canvas/webgl-to-2d-canvas.html FAIL # canvas 2d is correct color
 webgl1 conformance/context/context-attribute-preserve-drawing-buffer.html FAIL # Did not render ok with preserveDrawingBuffer false.
 webgl1 conformance/context/context-release-with-workers.html TIMEOUT # no new result within the time limit
-webgl1 conformance/context/premultiplyalpha-test.html FAIL # should draw with 64,128,255,128
+webgl1 conformance/context/premultiplyalpha-test.html FAIL # should draw with 255,192,128,1
 webgl1 conformance/extensions/angle-instanced-arrays-out-of-bounds.html FAIL # getError expected: INVALID_OPERATION. Was NO_ERROR : after evaluating: ext.drawArraysInstancedANGLE(gl.TRIANGLES, 0, 9, 1)
 webgl1 conformance/extensions/angle-instanced-arrays.html FAIL # remainder of buffer should be cleared
 webgl1 conformance/extensions/webgl-depth-texture.html FAIL # getError expected one of: INVALID_ENUM or INVALID_VALUE. Was NO_ERROR : after evaluating: gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT, 1, 1, 0, gl.DEPTH_COMPONENT, gl.UNSIGNED_SHORT, null)
@@ -21,93 +15,42 @@ webgl1 conformance/extensions/webgl-draw-buffers.html FAIL # should be clear
 webgl1 conformance/extensions/webgl-multi-draw.html FAIL # remainder of buffer should be cleared
 webgl1 conformance/glsl/misc/shader-with-double-underscore.html FAIL # [unexpected vertex shader compile status] (expected: true) fragment shader that uses double-underscore in identifier should succeed
 webgl1 conformance/misc/expando-loss.html FAIL # TypeError: Cannot read properties of null (reading 'expando1')
-webgl1 conformance/more/functions/readPixelsBadArgs.html TIMEOUT # no new result within the time limit
+webgl1 conformance/more/functions/readPixelsBadArgs.html FAIL # testReadPixelsSOPIMG
 webgl1 conformance/more/functions/texImage2DBadArgs.html FAIL # testTexImage2D
-webgl1 conformance/more/functions/texImage2DHTML.html TIMEOUT # no new result within the time limit
-webgl1 conformance/more/functions/texSubImage2DHTML.html TIMEOUT # no new result within the time limit
-webgl1 conformance/reading/read-pixels-test.html TIMEOUT # no new result within the time limit
+webgl1 conformance/more/functions/texImage2DHTML.html FAIL # testTexImage2DNonSOP
+webgl1 conformance/more/functions/texSubImage2DHTML.html FAIL # testTexImage2DNonSOP
 webgl1 conformance/rendering/clear-default-framebuffer-with-scissor-test.html FAIL # The canvas color at (0, 0) is not expected
 webgl1 conformance/textures/misc/exif-orientation.html TIMEOUT # no new result within the time limit
-webgl1 conformance/textures/misc/gl-pixelstorei.html FAIL # should be 255,0,0,255
 webgl1 conformance/textures/misc/gl-teximage.html FAIL # should be 255,0,255,255
-webgl1 conformance/textures/misc/origin-clean-conformance-offscreencanvas.html FAIL # Image setup failed (TypeError: img.decode is not a function).
-webgl1 conformance/textures/misc/origin-clean-conformance.html FAIL # Image setup failed (TypeError: img.decode is not a function).
-webgl1 conformance/textures/misc/png-image-types.html TIMEOUT # no new result within the time limit
+webgl1 conformance/textures/misc/origin-clean-conformance.html FAIL # texImage2D with cross-origin image should throw exception.
 webgl1 conformance/textures/misc/tex-image-svg-image-no-natural-width-and-height.html TIMEOUT # no new result within the time limit
 webgl1 conformance/textures/misc/tex-image-with-format-and-type.html FAIL # TypeError: Failed to execute 'texImage2D': parameter 6 is not of type 'TexImageSource'.
-webgl1 conformance/textures/misc/tex-video-using-tex-unit-non-zero.html TIMEOUT # no new result within the time limit
 webgl1 conformance/textures/misc/texture-npot-video.html TIMEOUT # no new result within the time limit
 webgl1 conformance/textures/misc/texture-upload-size.html FAIL # Texture was smaller than the expected size 2x4
 webgl1 conformance/textures/misc/video-rotation.html FAIL # No supported video types.
 webgl1 conformance/typedarrays/array-large-array-tests.html FAIL # Construction of huge Float32Array should throw exception
-webgl1 conformance/uniforms/no-over-optimization-on-uniform-array-00.html TIMEOUT # no new result within the time limit
-webgl1 conformance/uniforms/no-over-optimization-on-uniform-array-01.html TIMEOUT # no new result within the time limit
-webgl1 conformance/uniforms/no-over-optimization-on-uniform-array-02.html TIMEOUT # no new result within the time limit
-webgl1 conformance/uniforms/no-over-optimization-on-uniform-array-03.html TIMEOUT # no new result within the time limit
-webgl1 conformance/uniforms/no-over-optimization-on-uniform-array-04.html TIMEOUT # no new result within the time limit
-webgl1 conformance/uniforms/no-over-optimization-on-uniform-array-05.html TIMEOUT # no new result within the time limit
-webgl1 conformance/uniforms/no-over-optimization-on-uniform-array-06.html TIMEOUT # no new result within the time limit
-webgl1 conformance/uniforms/no-over-optimization-on-uniform-array-07.html TIMEOUT # no new result within the time limit
-webgl1 conformance/uniforms/no-over-optimization-on-uniform-array-08.html TIMEOUT # no new result within the time limit
-webgl1 conformance/uniforms/no-over-optimization-on-uniform-array-09.html TIMEOUT # no new result within the time limit
-webgl1 conformance/uniforms/no-over-optimization-on-uniform-array-10.html TIMEOUT # no new result within the time limit
-webgl1 conformance/uniforms/no-over-optimization-on-uniform-array-11.html TIMEOUT # no new result within the time limit
-webgl1 conformance/uniforms/no-over-optimization-on-uniform-array-12.html TIMEOUT # no new result within the time limit
-webgl1 conformance/uniforms/no-over-optimization-on-uniform-array-13.html TIMEOUT # no new result within the time limit
-webgl1 conformance/uniforms/no-over-optimization-on-uniform-array-14.html TIMEOUT # no new result within the time limit
-webgl1 conformance/uniforms/no-over-optimization-on-uniform-array-15.html TIMEOUT # no new result within the time limit
-webgl1 conformance/uniforms/no-over-optimization-on-uniform-array-16.html TIMEOUT # no new result within the time limit
-webgl1 conformance/uniforms/no-over-optimization-on-uniform-array-17.html TIMEOUT # no new result within the time limit
 webgl1 conformance/uniforms/uniform-default-values.html FAIL # should be green
 webgl2 conformance/canvas/buffer-offscreen-test.html FAIL # remainder of buffer should be cleared
 webgl2 conformance/canvas/buffer-preserve-test.html FAIL # remainder of buffer should be cleared
 webgl2 conformance/canvas/canvas-test.html TIMEOUT # no new result within the time limit
-webgl2 conformance/canvas/draw-static-webgl-to-multiple-canvas-test.html FAIL # drawImage: Should be (64,128,192,255).
-webgl2 conformance/canvas/draw-webgl-to-canvas-test.html FAIL # drawImage: Should be [64, 128, 192, 255]
-webgl2 conformance/canvas/render-after-resize-test.html FAIL # should be 0,255,0,255
-webgl2 conformance/canvas/to-data-url-after-composite.html FAIL # toDataURL loaded into image, drawn into 2D context, should be green
-webgl2 conformance/canvas/to-data-url-test.html FAIL # should be 0,255,0,255
-webgl2 conformance/canvas/webgl-to-2d-canvas.html FAIL # canvas 2d is correct color
 webgl2 conformance/context/context-attribute-preserve-drawing-buffer.html FAIL # Did not render ok with preserveDrawingBuffer false.
 webgl2 conformance/context/context-release-with-workers.html TIMEOUT # no new result within the time limit
-webgl2 conformance/context/premultiplyalpha-test.html FAIL # should draw with 64,128,255,128
+webgl2 conformance/context/premultiplyalpha-test.html FAIL # should draw with 255,192,128,1
 webgl2 conformance/extensions/webgl-multi-draw.html FAIL # remainder of buffer should be cleared
 webgl2 conformance/glsl/misc/shader-with-double-underscore.html FAIL # [unexpected vertex shader compile status] (expected: true) fragment shader that uses double-underscore in identifier should succeed
-webgl2 conformance/more/functions/readPixelsBadArgs.html TIMEOUT # no new result within the time limit
+webgl2 conformance/more/functions/readPixelsBadArgs.html FAIL # testReadPixelsSOPIMG
 webgl2 conformance/more/functions/texImage2DBadArgs.html FAIL # testTexImage2D
-webgl2 conformance/more/functions/texImage2DHTML.html TIMEOUT # no new result within the time limit
-webgl2 conformance/more/functions/texSubImage2DHTML.html TIMEOUT # no new result within the time limit
+webgl2 conformance/more/functions/texImage2DHTML.html FAIL # testTexImage2DNonSOP
+webgl2 conformance/more/functions/texSubImage2DHTML.html FAIL # testTexImage2DNonSOP
 webgl2 conformance/rendering/clear-default-framebuffer-with-scissor-test.html FAIL # The canvas color at (0, 0) is not expected
 webgl2 conformance/textures/misc/exif-orientation.html TIMEOUT # no new result within the time limit
-webgl2 conformance/textures/misc/gl-pixelstorei.html FAIL # should be 255,0,0,255
 webgl2 conformance/textures/misc/gl-teximage.html FAIL # should be 255,0,255,255
-webgl2 conformance/textures/misc/origin-clean-conformance-offscreencanvas.html FAIL # Image setup failed (TypeError: img.decode is not a function).
-webgl2 conformance/textures/misc/origin-clean-conformance.html FAIL # Image setup failed (TypeError: img.decode is not a function).
-webgl2 conformance/textures/misc/png-image-types.html TIMEOUT # no new result within the time limit
+webgl2 conformance/textures/misc/origin-clean-conformance.html FAIL # texImage2D with cross-origin image should throw exception.
 webgl2 conformance/textures/misc/tex-image-svg-image-no-natural-width-and-height.html TIMEOUT # no new result within the time limit
 webgl2 conformance/textures/misc/tex-image-with-format-and-type.html FAIL # TypeError: Failed to execute 'texImage2D': parameter 6 is not of type 'TexImageSource'.
-webgl2 conformance/textures/misc/tex-video-using-tex-unit-non-zero.html TIMEOUT # no new result within the time limit
 webgl2 conformance/textures/misc/texture-upload-size.html FAIL # Texture was smaller than the expected size 2x4
 webgl2 conformance/textures/misc/video-rotation.html FAIL # No supported video types.
 webgl2 conformance/typedarrays/array-large-array-tests.html FAIL # Construction of huge Float32Array should throw exception
-webgl2 conformance/uniforms/no-over-optimization-on-uniform-array-00.html TIMEOUT # no new result within the time limit
-webgl2 conformance/uniforms/no-over-optimization-on-uniform-array-01.html TIMEOUT # no new result within the time limit
-webgl2 conformance/uniforms/no-over-optimization-on-uniform-array-02.html TIMEOUT # no new result within the time limit
-webgl2 conformance/uniforms/no-over-optimization-on-uniform-array-03.html TIMEOUT # no new result within the time limit
-webgl2 conformance/uniforms/no-over-optimization-on-uniform-array-04.html TIMEOUT # no new result within the time limit
-webgl2 conformance/uniforms/no-over-optimization-on-uniform-array-05.html TIMEOUT # no new result within the time limit
-webgl2 conformance/uniforms/no-over-optimization-on-uniform-array-06.html TIMEOUT # no new result within the time limit
-webgl2 conformance/uniforms/no-over-optimization-on-uniform-array-07.html TIMEOUT # no new result within the time limit
-webgl2 conformance/uniforms/no-over-optimization-on-uniform-array-08.html TIMEOUT # no new result within the time limit
-webgl2 conformance/uniforms/no-over-optimization-on-uniform-array-09.html TIMEOUT # no new result within the time limit
-webgl2 conformance/uniforms/no-over-optimization-on-uniform-array-10.html TIMEOUT # no new result within the time limit
-webgl2 conformance/uniforms/no-over-optimization-on-uniform-array-11.html TIMEOUT # no new result within the time limit
-webgl2 conformance/uniforms/no-over-optimization-on-uniform-array-12.html TIMEOUT # no new result within the time limit
-webgl2 conformance/uniforms/no-over-optimization-on-uniform-array-13.html TIMEOUT # no new result within the time limit
-webgl2 conformance/uniforms/no-over-optimization-on-uniform-array-14.html TIMEOUT # no new result within the time limit
-webgl2 conformance/uniforms/no-over-optimization-on-uniform-array-15.html TIMEOUT # no new result within the time limit
-webgl2 conformance/uniforms/no-over-optimization-on-uniform-array-16.html TIMEOUT # no new result within the time limit
-webgl2 conformance/uniforms/no-over-optimization-on-uniform-array-17.html TIMEOUT # no new result within the time limit
 webgl2 conformance/uniforms/uniform-default-values.html FAIL # should be green
 webgl2 conformance2/attribs/gl-vertexattribipointer.html FAIL # getError expected: INVALID_OPERATION. Was NO_ERROR : vertexAttribIPointer should fail if no buffer is bound and offset is non-zero
 webgl2 conformance2/extensions/webgl-multi-draw-instanced-base-vertex-base-instance.html FAIL # remainder of buffer should be cleared
@@ -119,7 +62,6 @@ webgl2 conformance2/renderbuffers/multisampled-depth-renderbuffer-initialization
 webgl2 conformance2/rendering/rasterizer-discard-and-implicit-clear.html FAIL # left half of canvas should be clear
 webgl2 conformance2/sync/sync-webgl-specific.html FAIL # gl.getError() should be 1282. Was 1281.
 webgl2 conformance2/textures/misc/immutable-tex-render-feedback.html FAIL # checkFramebufferStatus expected: FRAMEBUFFER_INCOMPLETE_ATTACHMENT. Was FRAMEBUFFER_COMPLETE: {immutable: false, level_prime_base/max: [1, 0], minFilter: LINEAR, dest: 1}
-webgl2 conformance2/textures/misc/origin-clean-conformance-offscreencanvas.html FAIL # Image setup failed (TypeError: img.decode is not a function).
 webgl2 conformance2/textures/misc/tex-image-10bpc.html FAIL # uniquePixels.size should be >= 7. Was 2 (of type number).
 webgl2 conformance2/textures/misc/tex-image-with-bad-args-from-dom-elements.html FAIL # getError expected one of: INVALID_VALUE or INVALID_ENUM or INVALID_OPERATION. Was NO_ERROR : TexImage2D taking RGB10_A2UI/RGBA_INTEGER/UNSIGNED_INT_2_10_10_10_REV should fail
 webgl2 conformance2/textures/misc/tex-image-with-different-data-source.html FAIL # getError expected one of: INVALID_VALUE or INVALID_ENUM. Was NO_ERROR : TexImage2D taking RGB10_A2UI internalformat and a canvas source should fail

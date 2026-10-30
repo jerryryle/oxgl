@@ -283,16 +283,16 @@ A context's `canvas` attribute (WebGL 1.0 §5.14.1) SHALL return the `canvas` op
 - **WHEN** `new HeadlessCanvas()` is evaluated
 - **THEN** a `TypeError` is thrown
 
-### Requirement: Drawing buffer resize
-A context's non-standard `resize(width, height)` SHALL reallocate its drawing buffer at the new size, clamped as when the context was created, with the contents of a new buffer. All other context state, including the viewport and scissor box, SHALL be kept (WebGL 1.0 §2.2). On a `HeadlessCanvas` context it SHALL also set the canvas's `width` and `height` to the requested, unclamped size. On a lost context it SHALL do nothing.
+### Requirement: Drawing buffer resizing
+A context's non-standard `resize(width, height)` SHALL reallocate its drawing buffer at the new size, clamped as at creation, with a new buffer's contents, and keep all other state, including viewport and scissor box (WebGL 1.0 §2.2). A resize to the size last requested SHALL change nothing. On a `HeadlessCanvas` context it SHALL set the canvas's `width` and `height` to the requested size; on a lost context it SHALL do nothing.
 
 #### Scenario: Viewport kept on resize
 - **WHEN** a 10×20 context is resized to 20×10 and `getParameter(VIEWPORT)` is called
 - **THEN** it returns `[0, 0, 10, 20]`, `drawingBufferWidth` is `20`, and every pixel reads back as zero (cf. Khronos `conformance/canvas/viewport-unchanged-upon-resize.html`)
 
-#### Scenario: Resize to the same size clears
+#### Scenario: Resize to the same size keeps the contents
 - **WHEN** a context cleared to red is resized to its current size
-- **THEN** every pixel reads back as zero
+- **THEN** every pixel still reads back as red (cf. Khronos `conformance/canvas/render-after-resize-test.html`)
 
 #### Scenario: State that affects clearing is kept
 - **WHEN** a context sets a red clear color, `colorMask(true, false, false, false)` and an enabled scissor test, and is then resized
