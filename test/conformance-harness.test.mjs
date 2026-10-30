@@ -580,7 +580,7 @@ test('Entry without a reason: the command fails before running any page', async 
   try {
     const expectationsPath = join(dir, 'expectations.txt');
     writeFileSync(expectationsPath, 'webgl1 conformance/a.html FAIL\n');
-    await assert.rejects(main([], { expectationsPath, fetchSuite: neverFetch }), /:1: webgl1 conformance\/a\.html has no reason/);
+    await assert.rejects(main([], { expectationsPath, fetchSuite: neverFetch, hasFfmpeg: true }), /:1: webgl1 conformance\/a\.html has no reason/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
