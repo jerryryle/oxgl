@@ -307,7 +307,7 @@ A context's non-standard `resize(width, height)` SHALL reallocate its drawing bu
 - **THEN** `gl.canvas.width` is `max + 100` and `gl.drawingBufferWidth` is at most `max`
 
 ### Requirement: Compositing clears the drawing buffer
-A host that composites a canvas (the conformance runner) SHALL be able to present a context's drawing buffer. Without `preserveDrawingBuffer`, or when the host asks to present always (an OffscreenCanvas's `transferToImageBitmap`), presenting SHALL clear color, depth and stencil to their defaults (WebGL 1.0 §2.2) whatever the draw buffer, and leave every piece of context state unchanged, indexed color masks and framebuffer bindings included. It SHALL NOT be part of the public API; headless contexts are never composited.
+A host that composites a canvas (the conformance runner) SHALL be able to present a context's drawing buffer, internally. Without `preserveDrawingBuffer`, or when the host presents always (an OffscreenCanvas's `transferToImageBitmap`), presenting SHALL clear color, depth and stencil to their defaults (WebGL 1.0 §2.2), whatever the draw buffer, and leave all context state unchanged, indexed color masks and bindings included.
 
 #### Scenario: Presented without preserveDrawingBuffer
 - **WHEN** a context with a red-cleared drawing buffer, a scissor test enabled and a framebuffer object bound is presented
