@@ -318,6 +318,18 @@ export function canvasPixels(canvas: object): Pixels | undefined {
   return native.drawingBufferPixels(owner.index, owner.version) ?? EMPTY;
 }
 
+let imageDecoder: ((image: object) => Pixels | undefined) | undefined;
+
+/**
+ * Lets a host that has a document image's bytes (the conformance runner's
+ * DOM) decode it as browsers do for WebGL: unpremultiplied RGBA8, top row
+ * first, without gamma or color profiles. Without one, or when it returns
+ * `undefined`, the image is read through a 2D canvas, which premultiplies.
+ */
+export function setImageDecoder(decoder: ((image: object) => Pixels | undefined) | undefined): void {
+  imageDecoder = decoder;
+}
+
 /**
  * A `TexImageSource` as RGBA8, top row first (design: "TexImageSource"):
  * an `ImageData`-shaped object, an oxgl context's canvas, an object with a
@@ -353,6 +365,8 @@ function imagePixels(source: unknown, method: string, position: number): Pixels 
     if (!originClean(source, document)) {
       throw new DOMException(`Failed to execute '${method}': The image element contains cross-origin data, and may not be loaded.`, 'SecurityError');
     }
+    const decoded = imageDecoder?.(source);
+    if (decoded !== undefined) return decoded;
     const scratch = document.createElement('canvas') as { width: number; height: number };
     scratch.width = w;
     scratch.height = h;

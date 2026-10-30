@@ -314,3 +314,33 @@ test('document images from another origin are refused', () => {
   assert.equal(gl.getError(), gl.NO_ERROR);
   gl.destroy();
 });
+
+test('a host image decoder supplies unpremultiplied, and 16-bit, pixels', async () => {
+  // A host that has an image's bytes (the conformance runner) decodes it.
+  const { setImageDecoder } = await import('../dist/context.js');
+  const gl = createContext({ width: 1, height: 1, webgl2: true });
+  const document = { URL: 'http://a.test/', createElement: () => assert.fail('the 2D canvas path is not used') };
+  const image = { naturalWidth: 1, naturalHeight: 1, src: 'x.png', crossOrigin: null, ownerDocument: document };
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, gl.createFramebuffer());
+  try {
+    // Alpha 1 keeps its color, which a premultiplied 2D canvas would lose.
+    setImageDecoder(() => ({ data: new Uint8ClampedArray([255, 192, 128, 1]), width: 1, height: 1 }));
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    const bytes = new Uint8Array(4);
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, bytes);
+    assert.deepEqual([...bytes], [255, 192, 128, 1]);
+    // A 16-bit red of 64/65535 is 1/1023 in RGB10_A2, and 0 in 8 bits.
+    setImageDecoder(() => ({ data: new Uint16Array([64, 0, 0, 65535]), width: 1, height: 1 }));
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB10_A2, gl.RGBA, gl.UNSIGNED_INT_2_10_10_10_REV, image);
+    const packed = new Uint32Array(1);
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_INT_2_10_10_10_REV, packed);
+    assert.equal(packed[0] & 0x3ff, 1);
+    assert.equal(gl.getError(), gl.NO_ERROR);
+  } finally {
+    setImageDecoder(undefined);
+    gl.destroy();
+  }
+});

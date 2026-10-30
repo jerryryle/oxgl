@@ -15,11 +15,14 @@ import { resolve } from 'node:path';
 import { compileFunction } from 'node:vm';
 import { Worker as ThreadWorker } from 'node:worker_threads';
 
-import { JSDOM, VirtualConsole } from 'jsdom';
+import jsdom from 'jsdom';
 
 import { native } from '../dist/native.js';
 
+import { decodePng, encodePng } from './png.mjs';
 import { resolveFile } from './server.mjs';
+
+const { JSDOM, VirtualConsole, requestInterceptor } = jsdom;
 
 const CONTEXT_URL = new URL('../dist/context.js', import.meta.url);
 const CONSTANTS_URL = new URL('../dist/generated/webgl-constants.js', import.meta.url);
@@ -27,6 +30,21 @@ const CONSTANTS_URL = new URL('../dist/generated/webgl-constants.js', import.met
 // jsdom gives a frame a new window each time it navigates, through this
 // module's createWindow, and offers no public hook for it.
 const jsdomWindow = createRequire(import.meta.url)('jsdom/lib/jsdom/browser/Window.js');
+
+// jsdom reloads an image, and fires load again, when its width attribute
+// changes; browsers do that only for responsive images (srcset or sizes),
+// and pages that resize an image in its load handler would loop.
+const ImageImpl = createRequire(import.meta.url)('jsdom/lib/jsdom/living/nodes/HTMLImageElement-impl.js').implementation;
+const imageAttributeChange = ImageImpl.prototype._attributeChangeSteps;
+const elementAttributeChange = Object.getPrototypeOf(ImageImpl.prototype)._attributeChangeSteps;
+if (typeof imageAttributeChange !== 'function' || typeof elementAttributeChange !== 'function') {
+  throw new Error('jsdom no longer has _attributeChangeSteps on images; update the image shim');
+}
+ImageImpl.prototype._attributeChangeSteps = function (localName, oldValue, value, namespace) {
+  const responsive = this.hasAttributeNS(null, 'srcset') || this.hasAttributeNS(null, 'sizes');
+  const steps = namespace === null && localName === 'width' && !responsive ? elementAttributeChange : imageAttributeChange;
+  return steps.call(this, localName, oldValue, value, namespace);
+};
 
 /**
  * Runs the page at `url`. `hooks.beforeParse(window)` runs after the shim is
@@ -134,7 +152,7 @@ export async function runPage(url, { endEarly = false, root } = {}, hooks = {}) 
 
   await JSDOM.fromURL(url, {
     runScripts: 'dangerously',
-    resources: 'usable',
+    resources: { interceptors: [keepImageBytes] },
     pretendToBeVisual: true,
     virtualConsole,
     beforeParse(window) {
@@ -247,7 +265,7 @@ function contextSource() {
     parts.push(body);
   };
   inline(CONTEXT_URL);
-  return `${parts.join('\n')}\nreturn { createContext, canvasPixels, presentDrawingBuffer, ${INTERFACES.join(', ')} };`;
+  return `${parts.join('\n')}\nreturn { createContext, canvasPixels, presentDrawingBuffer, setImageDecoder, ${INTERFACES.join(', ')} };`;
 }
 
 /**
@@ -353,10 +371,38 @@ function installShim(window, state) {
       return getImageData.apply(this, args);
     };
   };
+  // A WebGL canvas's PNG is written from its unpremultiplied pixels, as
+  // browsers do; through the canvas package it would be premultiplied.
   const toDataURL = window.HTMLCanvasElement.prototype.toDataURL;
-  window.HTMLCanvasElement.prototype.toDataURL = function (...args) {
+  window.HTMLCanvasElement.prototype.toDataURL = function (type, ...rest) {
     if (tainted.has(this)) throw securityError('toDataURL');
-    return toDataURL.apply(asImage(this) ?? this, args);
+    const pixels = canvasPixels(this);
+    if (pixels !== undefined && pixels.width > 0 && pixels.height > 0 && (type === undefined || String(type).toLowerCase() === 'image/png')) {
+      return `data:image/png;base64,${encodePng(pixels).toString('base64')}`;
+    }
+    return toDataURL.call(asImage(this) ?? this, type, ...rest);
+  };
+  oxgl.setImageDecoder((image) => {
+    let fetched = imageBytes.get(image);
+    if (fetched?.url !== image.src) {
+      const bytes = dataUrlBytes(image.src);
+      if (bytes === undefined) return undefined;
+      fetched = { url: image.src, bytes, decoded: undefined };
+      imageBytes.set(image, fetched);
+    }
+    // An SVG image is drawn at the element's size (HTML §4.8.4.3.6).
+    if (isSvg(fetched.bytes)) return rasterize(image, image.width, image.height);
+    fetched.decoded ??= decodePng(fetched.bytes) ?? null;
+    return fetched.decoded ?? undefined;
+  });
+  const rasterize = (image, width, height) => {
+    if (width === 0 || height === 0) return undefined;
+    const scratch = window.document.createElement('canvas');
+    scratch.width = width;
+    scratch.height = height;
+    const context = getContext2d.call(scratch, '2d');
+    context.drawImage(image, 0, 0, width, height);
+    return { data: context.getImageData(0, 0, width, height).data, width, height };
   };
   // jsdom's own getContext gives 2D contexts (through the canvas package).
   // It does not know oxgl's contexts, so one type per canvas is enforced here
@@ -564,6 +610,35 @@ function closureImport(window, root) {
  * set, so pages that wait for media fail promptly. Images load through jsdom
  * and the canvas package.
  */
+/** The bytes each image element last fetched, by element: `{ url, bytes, decoded }`. */
+const imageBytes = new WeakMap();
+
+/** Keeps the bytes images fetch, for WebGL's decoding of them. */
+const keepImageBytes = requestInterceptor(async (request, { element }) => {
+  if (element?.localName !== 'img') return undefined;
+  const response = await fetch(request.url);
+  const bytes = Buffer.from(await response.arrayBuffer());
+  imageBytes.set(element, { url: request.url, bytes, decoded: undefined });
+  return new Response(bytes, { status: response.status, headers: response.headers });
+});
+
+/** Whether image bytes are an SVG document. */
+function isSvg(bytes) {
+  return /^\s*(<\?xml[^>]*>\s*)?(<!--[\s\S]*?-->\s*|<!DOCTYPE[^>]*>\s*)*<svg[\s>]/i.test(bytes.subarray(0, 1024).toString('latin1'));
+}
+
+/** The bytes of a `data:` URL, base64 or percent-encoded, or `undefined`. */
+function dataUrlBytes(url) {
+  const match = /^data:([^,]*),(.*)$/s.exec(url);
+  if (match === null) return undefined;
+  if (/;base64$/i.test(match[1])) return Buffer.from(match[2], 'base64');
+  try {
+    return Buffer.from(decodeURIComponent(match[2]), 'utf8');
+  } catch {
+    return undefined;
+  }
+}
+
 /** What a worker thread runs before its script: the worker globals pages use. */
 const WORKER_PRELUDE = `
 const { parentPort, workerData } = require('node:worker_threads');

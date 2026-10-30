@@ -602,7 +602,8 @@ pub fn repack(
 }
 
 /// A sub-rectangle of an RGBA8 source (`source_width × source_height`, top
-/// row first) encoded with `codec`, premultiplied when asked. The first row
+/// row first; RGBA16 in native byte order when `wide`, as a decoded 16-bit
+/// image keeps its precision) encoded with `codec`, premultiplied when asked. The first row
 /// uploaded is the source's top row (WebGL 1.0 §5.14.8); with `flip` the
 /// source is flipped first, and the rectangle is selected in the flipped
 /// image (WebGL 2.0 §5.35 "Pixel store parameters for uploads from
@@ -621,8 +622,10 @@ pub fn from_rgba8(
     codec: &Codec,
     flip: bool,
     premultiply: bool,
+    wide: bool,
 ) -> Option<Image> {
     let (x, y, width, height) = rect;
+    let sample = if wide { 2 } else { 1 };
     if x.checked_add(width)? > source_width || y.checked_add(height)? > source_height {
         return None;
     }
@@ -635,14 +638,20 @@ pub fn from_rgba8(
             y + i
         };
         for (column, pixel) in out.chunks_mut(bpp).enumerate() {
-            let at = (source_row * source_width + x + column) * 4;
-            let texel = source.get(at..at + 4)?;
+            let at = (source_row * source_width + x + column) * 4 * sample;
+            let texel = source.get(at..at + 4 * sample)?;
             let mut rgba = [0f32; 4];
-            for (slot, &byte) in rgba.iter_mut().zip(texel) {
+            for (slot, bytes) in rgba.iter_mut().zip(texel.chunks_exact(sample)) {
+                // A normalized value in [0, 1]; integer formats take 8-bit units.
+                let unit = match *bytes {
+                    [byte] => f32::from(byte) / 255.0,
+                    [a, b] => f32::from(u16::from_ne_bytes([a, b])) / 65535.0,
+                    _ => 0.0,
+                };
                 *slot = if codec.integer {
-                    f32::from(byte)
+                    (unit * 255.0).round()
                 } else {
-                    f32::from(byte) / 255.0
+                    unit
                 };
             }
             // Integer formats are premultiplied too, in 8-bit units, as
@@ -783,17 +792,34 @@ mod tests {
         let source = [255, 0, 0, 255, 0, 255, 0, 255];
         let red = 0xf800u16.to_ne_bytes();
         let green = 0x07e0u16.to_ne_bytes();
-        let image = from_rgba8(&source, 1, 2, (0, 0, 1, 2), &codec, false, false).unwrap();
+        let image = from_rgba8(&source, 1, 2, (0, 0, 1, 2), &codec, false, false, false).unwrap();
         assert_eq!(image.data, [red, green].concat());
-        let flipped = from_rgba8(&source, 1, 2, (0, 0, 1, 2), &codec, true, false).unwrap();
+        let flipped = from_rgba8(&source, 1, 2, (0, 0, 1, 2), &codec, true, false, false).unwrap();
         assert_eq!(flipped.data, [green, red].concat());
-        let top = from_rgba8(&source, 1, 2, (0, 0, 1, 1), &codec, false, false).unwrap();
+        let top = from_rgba8(&source, 1, 2, (0, 0, 1, 1), &codec, false, false, false).unwrap();
         assert_eq!(top.data, red.to_vec());
-        let flipped_top = from_rgba8(&source, 1, 2, (0, 0, 1, 1), &codec, true, false).unwrap();
+        let flipped_top =
+            from_rgba8(&source, 1, 2, (0, 0, 1, 1), &codec, true, false, false).unwrap();
         assert_eq!(flipped_top.data, green.to_vec());
         assert_eq!(
-            from_rgba8(&source, 1, 2, (0, 1, 1, 2), &codec, false, false),
+            from_rgba8(&source, 1, 2, (0, 1, 1, 2), &codec, false, false, false),
             None
         );
+    }
+
+    #[test]
+    fn wide_sources_keep_their_precision() {
+        // One RGBA16 pixel: red 4/65535 apart from black would be lost in 8 bits.
+        let source: Vec<u8> = [64u16, 0, 0, 65535]
+            .iter()
+            .flat_map(|v| v.to_ne_bytes())
+            .collect();
+        let packed = Codec::new(GL_RGBA, GL_UNSIGNED_INT_2_10_10_10_REV).unwrap();
+        let image = from_rgba8(&source, 1, 1, (0, 0, 1, 1), &packed, false, false, true).unwrap();
+        let texel = u32::from_ne_bytes(image.data.try_into().unwrap());
+        assert_eq!(texel & 0x3ff, 1, "64/65535 of 1023 rounds to 1");
+        let bytes = Codec::new(GL_RGBA, GL_UNSIGNED_BYTE).unwrap();
+        let image = from_rgba8(&source, 1, 1, (0, 0, 1, 1), &bytes, false, false, true).unwrap();
+        assert_eq!(image.data, [0, 0, 0, 255]);
     }
 }

@@ -37,9 +37,10 @@ pub enum TexSource<'a> {
     },
     /// An offset into the bound pixel unpack buffer (WebGL 2).
     UnpackBuffer(i64),
-    /// RGBA8 pixels of a `TexImageSource`, top row first.
+    /// RGBA8 pixels of a `TexImageSource`, top row first; RGBA16 from a
+    /// `Uint16Array` (a decoded 16-bit image).
     Rgba8 {
-        /// `width × height × 4` bytes.
+        /// `width × height × 4` samples.
         source: &'a dyn ByteSource,
         /// Source width.
         width: usize,
@@ -239,6 +240,7 @@ fn rgba8_pixels(
     } else {
         0
     };
+    let wide = source.kind() == ViewKind::Uint16;
     let mut data = Vec::new();
     let mut fits = true;
     source.with_bytes(0..source.byte_len(), &mut |bytes| {
@@ -253,6 +255,7 @@ fn rgba8_pixels(
                 &codec,
                 unpack.flip_y,
                 unpack.premultiply_alpha,
+                wide,
             ) {
                 Some(image) => data.extend_from_slice(&image.data),
                 None => fits = false,
