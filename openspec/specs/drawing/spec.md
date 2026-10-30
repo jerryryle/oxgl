@@ -90,3 +90,10 @@ WebGL 2 contexts SHALL restart primitives at the fixed maximum index of the inde
 #### Scenario: Restart index splits a strip
 - **WHEN** a WebGL 2 `TRIANGLE_STRIP` element draw includes the index `0xFFFF` with `UNSIGNED_SHORT` indices
 - **THEN** it renders as two strips (cf. deqp `primitiverestart`)
+
+### Requirement: Attribute pointers without a buffer
+`vertexAttribPointer` and `vertexAttribIPointer` SHALL generate `INVALID_OPERATION` when no buffer is bound to `ARRAY_BUFFER` and the offset is not 0 (WebGL 1.0 §6.4).
+
+#### Scenario: Integer pointer without a buffer
+- **WHEN** `vertexAttribIPointer(0, 1, INT, 0, 4)` is called with no `ARRAY_BUFFER`
+- **THEN** it generates `INVALID_OPERATION` (cf. Khronos `conformance2/attribs/gl-vertexattribipointer.html`)

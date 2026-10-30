@@ -85,3 +85,10 @@ For an empty attachment point of a framebuffer object, `getFramebufferAttachment
 #### Scenario: Attaching past the maximum
 - **WHEN** a texture is attached at `COLOR_ATTACHMENT0 + MAX_COLOR_ATTACHMENTS`, then at the last valid point
 - **THEN** the first generates `INVALID_ENUM` and the second no error (cf. Khronos `conformance2/rendering/draw-buffers.html`)
+
+### Requirement: Multisampled DEPTH_STENCIL
+`renderbufferStorageMultisample` with `DEPTH_STENCIL` and more than 0 samples SHALL generate `INVALID_OPERATION`; `DEPTH24_STENCIL8` is the multisampled form.
+
+#### Scenario: Multisampled alias rejected
+- **WHEN** `renderbufferStorageMultisample(RENDERBUFFER, 1, DEPTH_STENCIL, 1, 1)` is called
+- **THEN** it generates `INVALID_OPERATION` (cf. Khronos `conformance2/renderbuffers/multisampled-depth-renderbuffer-initialization.html`)
