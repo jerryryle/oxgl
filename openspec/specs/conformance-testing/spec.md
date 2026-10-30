@@ -28,7 +28,7 @@ The runner SHALL provide two suites, each selected by the suite's own test lists
 - **THEN** no page under `conformance2/` is run
 
 ### Requirement: Pages obtain oxgl contexts through canvas
-Within a page, `getContext` on a canvas element SHALL return an oxgl context for `'webgl'` and `'experimental-webgl'` (WebGL 1) and for `'webgl2'` (WebGL 2), sized to the canvas's `width` and `height` when it is first created, and a working 2D context for `'2d'`. It SHALL return the same context on later calls for that canvas, and `null` for any other context type or for a type other than the canvas's first one (HTML §4.12.5, `getContext`). The page's global scope SHALL expose oxgl's `WebGLRenderingContext` and `WebGL2RenderingContext`.
+Within a page, `getContext` on a canvas element SHALL return an oxgl context for `'webgl'` and `'experimental-webgl'` (WebGL 1) and for `'webgl2'` (WebGL 2), sized to the canvas's `width` and `height` when it is first created, and a working 2D context for `'2d'`. It SHALL return the same context on later calls for that canvas, and `null` for any other context type. The page's global scope SHALL expose oxgl's `WebGLRenderingContext` and `WebGL2RenderingContext`.
 
 #### Scenario: Default canvas size
 - **WHEN** a page calls `getContext('webgl')` on a canvas with no size attributes
@@ -41,6 +41,9 @@ Within a page, `getContext` on a canvas element SHALL return an oxgl context for
 #### Scenario: 2D context
 - **WHEN** a page calls `getContext('2d')`, fills a rectangle red, and reads it with `getImageData`
 - **THEN** it receives a 2D context and reads back `[255, 0, 0, 255]`
+
+### Requirement: One context type per canvas
+A canvas that returned a context of one type SHALL return `null` from `getContext` for any other type, in both directions between oxgl's WebGL contexts and the 2D context (HTML §4.12.5, `getContext`).
 
 #### Scenario: One context type per canvas
 - **WHEN** a page calls `getContext('2d')` on a canvas, then `getContext('webgl')` on it, and does the same in the other order on a second canvas

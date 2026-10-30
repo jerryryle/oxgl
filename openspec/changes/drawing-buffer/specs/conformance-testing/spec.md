@@ -3,7 +3,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Pages obtain oxgl contexts through canvas
-Within a page, `getContext` on a canvas element SHALL return an oxgl context for `'webgl'` and `'experimental-webgl'` (WebGL 1) and for `'webgl2'` (WebGL 2), and a working 2D context for `'2d'`. An oxgl context SHALL be created with the canvas's `width` and `height`, the attributes passed to `getContext`, and the element as its `canvas`. Later calls on that canvas SHALL return the same context, and `null` for any other context type or for a type other than the canvas's first one (HTML §4.12.5, `getContext`). The page's global scope SHALL expose oxgl's `WebGLRenderingContext` and `WebGL2RenderingContext`.
+Within a page, `getContext` on a canvas element SHALL return an oxgl context for `'webgl'` and `'experimental-webgl'` (WebGL 1) and for `'webgl2'` (WebGL 2), and a working 2D context for `'2d'`. An oxgl context SHALL be created with the canvas's `width` and `height`, the attributes passed to `getContext`, and the element as its `canvas`. Later calls on that canvas SHALL return the same context, and `null` for any other context type. The page's global scope SHALL expose oxgl's `WebGLRenderingContext` and `WebGL2RenderingContext`.
 
 #### Scenario: Default canvas size
 - **WHEN** a page calls `getContext('webgl')` on a canvas with no size attributes
@@ -20,10 +20,6 @@ Within a page, `getContext` on a canvas element SHALL return an oxgl context for
 #### Scenario: 2D context
 - **WHEN** a page calls `getContext('2d')`, fills a rectangle red, and reads it with `getImageData`
 - **THEN** it receives a 2D context and reads back `[255, 0, 0, 255]`
-
-#### Scenario: One context type per canvas
-- **WHEN** a page calls `getContext('2d')` on a canvas, then `getContext('webgl')` on it, and does the same in the other order on a second canvas
-- **THEN** both second calls return `null`
 
 ### Requirement: Rejected context creation returns null
 When oxgl rejects a context creation requested through `getContext`, `getContext` SHALL return `null`, as a browser does when creation fails, and the rejection message SHALL be recorded with the page's results.
