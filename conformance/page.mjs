@@ -13,6 +13,7 @@ import { appendFileSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { compileFunction } from 'node:vm';
+import { Worker as ThreadWorker } from 'node:worker_threads';
 
 import { JSDOM, VirtualConsole } from 'jsdom';
 
@@ -326,16 +327,35 @@ function installShim(window, state) {
     }
     return scratch;
   };
-  // jsdom sets drawImage on each 2D context it creates, so getContext below
-  // wraps that instance's.
-  const wrapDrawImage = (context) => {
+  // A 2D canvas that draws an image from another origin is no longer
+  // origin-clean, and its pixels cannot be read (HTML §4.12.5.1.7). The
+  // suite's cross-origin images come from 127.0.0.1 and localhost swapped.
+  const tainted = new WeakSet();
+  const originClean = (image) => {
+    if (image instanceof window.HTMLCanvasElement) return !tainted.has(image);
+    if (!(image instanceof window.HTMLImageElement) || image.crossOrigin !== null) return true;
+    const url = new window.URL(image.src, window.document.URL);
+    return url.protocol === 'data:' || url.origin === window.location.origin;
+  };
+  const securityError = (method) =>
+    new window.DOMException(`Failed to execute '${method}': The canvas has been tainted by cross-origin data.`, 'SecurityError');
+  // jsdom sets drawImage and getImageData on each 2D context it creates, so
+  // getContext below wraps that instance's.
+  const wrapContext2d = (context) => {
     const own = context.drawImage;
     context.drawImage = function (image, ...rest) {
+      if (!originClean(image)) tainted.add(this.canvas);
       return own.call(this, (image instanceof window.HTMLCanvasElement && asImage(image)) || image, ...rest);
+    };
+    const getImageData = context.getImageData;
+    context.getImageData = function (...args) {
+      if (tainted.has(this.canvas)) throw securityError('getImageData');
+      return getImageData.apply(this, args);
     };
   };
   const toDataURL = window.HTMLCanvasElement.prototype.toDataURL;
   window.HTMLCanvasElement.prototype.toDataURL = function (...args) {
+    if (tainted.has(this)) throw securityError('toDataURL');
     return toDataURL.apply(asImage(this) ?? this, args);
   };
   // jsdom's own getContext gives 2D contexts (through the canvas package).
@@ -352,7 +372,7 @@ function installShim(window, state) {
       const context = getContext2d.call(this, type, ...rest);
       if (context !== null && context !== undefined && !canvases2d.has(this)) {
         canvases2d.add(this);
-        wrapDrawImage(context);
+        wrapContext2d(context);
       }
       return context ?? null;
     }
@@ -382,6 +402,26 @@ function installShim(window, state) {
   if (state.root !== undefined) window.CLOSURE_IMPORT_SCRIPT = closureImport(window, state.root);
   deliverMessages(window);
   failMedia(window);
+  installWorker(window);
+  loadOnce(window);
+}
+
+/**
+ * Lets a window's load event through once, as browsers fire it (HTML
+ * §8.4.1, "the end"). jsdom fires it again when images created after the
+ * first one finish loading, which runs `<body onload>` handlers twice.
+ */
+function loadOnce(window) {
+  let loaded = false;
+  window.addEventListener(
+    'load',
+    (event) => {
+      if (event.target !== window.document) return;
+      if (loaded) event.stopImmediatePropagation();
+      loaded = true;
+    },
+    true,
+  );
 }
 
 /**
@@ -524,6 +564,99 @@ function closureImport(window, root) {
  * set, so pages that wait for media fail promptly. Images load through jsdom
  * and the canvas package.
  */
+/** What a worker thread runs before its script: the worker globals pages use. */
+const WORKER_PRELUDE = `
+const { parentPort, workerData } = require('node:worker_threads');
+const listeners = [];
+globalThis.self = globalThis;
+globalThis.postMessage = (data, transfer) => parentPort.postMessage(data, transfer);
+globalThis.close = () => parentPort.close();
+globalThis.addEventListener = (type, listener) => { if (type === 'message') listeners.push(listener); };
+globalThis.importScripts = () => { throw new Error('importScripts is not supported by the conformance runner'); };
+parentPort.on('message', (data) => {
+  const event = { type: 'message', data };
+  if (typeof globalThis.onmessage === 'function') globalThis.onmessage(event);
+  for (const listener of listeners) listener(event);
+});
+require('node:vm').runInThisContext(workerData.source, { filename: workerData.url });
+`;
+
+/**
+ * Dedicated workers for classic scripts (HTML §10.2.6), on Node worker
+ * threads, so pages that use one run instead of skipping. Messages are
+ * structured clones; those reaching the page are rebuilt in its realm.
+ * Workers have no WebGL, OffscreenCanvas or importScripts.
+ */
+function installWorker(window) {
+  window.Worker = class Worker extends window.EventTarget {
+    onmessage = null;
+    onerror = null;
+    #thread;
+    #queue = [];
+    #terminated = false;
+
+    constructor(url) {
+      super();
+      const href = new window.URL(String(url), window.document.baseURI).href;
+      fetch(href)
+        .then((response) => (response.ok ? response.text() : Promise.reject(new Error(`${href}: HTTP ${response.status}`))))
+        .then((source) => {
+          if (this.#terminated) return;
+          this.#thread = new ThreadWorker(WORKER_PRELUDE, { eval: true, workerData: { source, url: href } });
+          this.#thread.unref();
+          this.#thread.on('message', (data) => this.#fire('message', new window.MessageEvent('message', { data: toRealm(window, data) })));
+          this.#thread.on('error', (error) => this.#fail(error));
+          for (const [data, transfer] of this.#queue) this.#thread.postMessage(data, transfer);
+          this.#queue = [];
+        })
+        .catch((error) => this.#fail(error));
+    }
+
+    postMessage(data, transfer = []) {
+      if (this.#terminated) return;
+      if (this.#thread === undefined) this.#queue.push([structuredClone(data, { transfer }), []]);
+      else this.#thread.postMessage(data, transfer);
+    }
+
+    terminate() {
+      this.#terminated = true;
+      void this.#thread?.terminate();
+    }
+
+    #fail(error) {
+      this.#fire('error', new window.ErrorEvent('error', { message: String(error?.message ?? error) }));
+    }
+
+    #fire(type, event) {
+      const handler = type === 'message' ? this.onmessage : this.onerror;
+      if (typeof handler === 'function') handler.call(this, event);
+      this.dispatchEvent(event);
+    }
+  };
+}
+
+/** A structured-cloned value from Node's realm, rebuilt in `window`'s. */
+function toRealm(window, value) {
+  if (typeof value !== 'object' || value === null) return value;
+  if (value instanceof ArrayBuffer) {
+    const copy = new window.ArrayBuffer(value.byteLength);
+    new window.Uint8Array(copy).set(new Uint8Array(value));
+    return copy;
+  }
+  if (ArrayBuffer.isView(value)) {
+    const buffer = toRealm(window, value.buffer);
+    if (value instanceof DataView) return new window.DataView(buffer, value.byteOffset, value.byteLength);
+    return new window[value.constructor.name](buffer, value.byteOffset, value.length);
+  }
+  if (Array.isArray(value)) return window.Array.from(value, (item) => toRealm(window, item));
+  if (Object.getPrototypeOf(value) === Object.prototype) {
+    const copy = new window.Object();
+    for (const [key, item] of Object.entries(value)) copy[key] = toRealm(window, item);
+    return copy;
+  }
+  return value;
+}
+
 function failMedia(window) {
   const failed = new WeakSet();
   const fail = (element) => {

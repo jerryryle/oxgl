@@ -291,3 +291,26 @@ test('deleting a texture bound only to a high unit', () => {
   assert.equal(gl.getError(), gl.NO_ERROR);
   gl.destroy();
 });
+
+test('document images from another origin are refused', () => {
+  const gl = createContext({ width: 1, height: 1 });
+  // A document image as a DOM implementation presents one: its pixels come
+  // through a 2D canvas the document creates.
+  const document = {
+    URL: 'http://a.test/page.html',
+    createElement: () => ({
+      width: 0,
+      height: 0,
+      getContext: () => ({ drawImage() {}, getImageData: (x, y, w, h) => ({ data: new Uint8ClampedArray(w * h * 4).fill(255) }) }),
+    }),
+  };
+  const image = (src, crossOrigin = null) => ({ naturalWidth: 1, naturalHeight: 1, src, crossOrigin, ownerDocument: document });
+  const upload = (source) => gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+  gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
+  assert.throws(() => upload(image('http://b.test/x.png')), (e) => e instanceof DOMException && e.name === 'SecurityError');
+  for (const clean of [image('x.png'), image('http://a.test/x.png'), image('data:image/png;base64,AA=='), image('http://b.test/x.png', 'anonymous')]) {
+    upload(clean);
+  }
+  assert.equal(gl.getError(), gl.NO_ERROR);
+  gl.destroy();
+});

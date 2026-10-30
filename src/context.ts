@@ -344,12 +344,15 @@ function imagePixels(source: unknown, method: string, position: number): Pixels 
   // A video element: Node decodes no video, so it never has a frame and
   // uploads as 0×0, as one without data does in browsers.
   if (typeof (shaped as { videoWidth?: unknown }).videoWidth === 'number') return EMPTY;
-  const document = shaped.ownerDocument as { createElement?: (name: string) => unknown } | null | undefined;
+  const document = shaped.ownerDocument as { createElement?: (name: string) => unknown; URL?: unknown } | null | undefined;
   if (typeof shaped.naturalWidth === 'number' && typeof document?.createElement === 'function') {
     const w = shaped.naturalWidth >>> 0;
     const h = Number(shaped.naturalHeight) >>> 0;
     // A broken or unloaded image uploads as 0×0, as in browsers.
     if (w === 0 || h === 0) return EMPTY;
+    if (!originClean(source, document)) {
+      throw new DOMException(`Failed to execute '${method}': The image element contains cross-origin data, and may not be loaded.`, 'SecurityError');
+    }
     const scratch = document.createElement('canvas') as { width: number; height: number };
     scratch.width = w;
     scratch.height = h;
@@ -359,6 +362,21 @@ function imagePixels(source: unknown, method: string, position: number): Pixels 
     return { data: drawn.getImageData(0, 0, w, h).data, width: w, height: h };
   }
   throw typeError(method, position, 'TexImageSource');
+}
+
+/**
+ * Whether a document image may be read (WebGL 1.0 §4.2): fetched from its
+ * document's origin, from a `data:` or `blob:` URL, or with CORS requested
+ * (`crossOrigin` set; a failed CORS check fails the load itself). A host
+ * without document URLs has no origins, and its images are clean.
+ */
+function originClean(image: { src?: unknown; currentSrc?: unknown; crossOrigin?: unknown }, document: { URL?: unknown }): boolean {
+  if (image.crossOrigin !== null && image.crossOrigin !== undefined) return true;
+  if (typeof document.URL !== 'string') return true;
+  const src = typeof image.currentSrc === 'string' && image.currentSrc !== '' ? image.currentSrc : image.src;
+  if (typeof src !== 'string' || !URL.canParse(src, document.URL)) return true;
+  const url = new URL(src, document.URL);
+  return url.protocol === 'data:' || url.protocol === 'blob:' || url.origin === new URL(document.URL).origin;
 }
 
 /**
