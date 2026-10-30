@@ -226,7 +226,7 @@ export interface NativeBinding {
 }
 
 /** Version of the JS ↔ native interface this package was built for. */
-export const NATIVE_ABI_VERSION = 11;
+export const NATIVE_ABI_VERSION = 12;
 
 function nativeMissing(detail: string, cause?: unknown): Error {
   const error = new Error(

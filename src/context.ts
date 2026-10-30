@@ -276,6 +276,8 @@ interface Pixels {
   data: ArrayBufferView;
   width: number;
   height: number;
+  /** An `ImageBitmap`'s pixels, uploaded without the flip and premultiply unpack parameters. */
+  asIs?: boolean;
 }
 
 const EMPTY: Pixels = { data: new Uint8Array(0), width: 0, height: 0 };
@@ -325,6 +327,7 @@ let imageDecoder: ((image: object) => Pixels | undefined) | undefined;
  * DOM) decode it as browsers do for WebGL: unpremultiplied RGBA8, top row
  * first, without gamma or color profiles. Without one, or when it returns
  * `undefined`, the image is read through a 2D canvas, which premultiplies.
+ * The host's other image objects (ImageBitmap) are read through it too.
  */
 export function setImageDecoder(decoder: ((image: object) => Pixels | undefined) | undefined): void {
   imageDecoder = decoder;
@@ -360,13 +363,15 @@ function imagePixels(source: unknown, method: string, position: number): Pixels 
   if (typeof shaped.naturalWidth === 'number' && typeof document?.createElement === 'function') {
     const w = shaped.naturalWidth >>> 0;
     const h = Number(shaped.naturalHeight) >>> 0;
-    // A broken or unloaded image uploads as 0×0, as in browsers.
-    if (w === 0 || h === 0) return EMPTY;
     if (!originClean(source, document)) {
       throw new DOMException(`Failed to execute '${method}': The image element contains cross-origin data, and may not be loaded.`, 'SecurityError');
     }
+    // Before the size check: an SVG without a natural size is drawn at the
+    // element's size.
     const decoded = imageDecoder?.(source);
     if (decoded !== undefined) return decoded;
+    // A broken or unloaded image uploads as 0×0, as in browsers.
+    if (w === 0 || h === 0) return EMPTY;
     const scratch = document.createElement('canvas') as { width: number; height: number };
     scratch.width = w;
     scratch.height = h;
@@ -375,6 +380,9 @@ function imagePixels(source: unknown, method: string, position: number): Pixels 
     drawn.drawImage(source, 0, 0);
     return { data: drawn.getImageData(0, 0, w, h).data, width: w, height: h };
   }
+  // Another host image object, such as an ImageBitmap.
+  const decoded = imageDecoder?.(source);
+  if (decoded !== undefined) return decoded;
   throw typeError(method, position, 'TexImageSource');
 }
 
@@ -417,7 +425,7 @@ function upload(
     if (s.destroyed) return;
     args.width = pixels.width;
     args.height = pixels.height;
-    native.texUpload(s.index, s.version, call, args, 3, pixels.data, 0, pixels.width, pixels.height);
+    native.texUpload(s.index, s.version, call, args, pixels.asIs === true ? 4 : 3, pixels.data, 0, pixels.width, pixels.height);
     return;
   }
   if (data === null || data === undefined) {
@@ -439,7 +447,7 @@ function upload(
   }
   if (!s.webgl2 || ranged) throw typeError(method, position, 'ArrayBufferView');
   const pixels = imagePixels(data, method, position);
-  if (!s.destroyed) native.texUpload(s.index, s.version, call, args, 3, pixels.data, 0, pixels.width, pixels.height);
+  if (!s.destroyed) native.texUpload(s.index, s.version, call, args, pixels.asIs === true ? 4 : 3, pixels.data, 0, pixels.width, pixels.height);
 }
 
 /**

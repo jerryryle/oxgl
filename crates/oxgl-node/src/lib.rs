@@ -36,7 +36,7 @@ use oxgl_sys::{ReadPixels, StateCall};
 #[napi]
 #[must_use]
 pub fn native_abi_version() -> u32 {
-    11
+    12
 }
 
 /// The environment's runtime, created by [`init`]. Node-API instance data is

@@ -113,7 +113,8 @@ pub fn generate_mipmap(env: Env, index: u32, version: u32, target: u32) -> napi:
 
 /// A texture upload. `kind` 0: `null` data; 1: a view (`source`, from
 /// `offset` bytes); 2: the pixel unpack buffer at `offset`; 3: RGBA8 pixels
-/// (`source`, `source_width` × `source_height`).
+/// (`source`, `source_width` × `source_height`); 4: the same from an
+/// `ImageBitmap`, uploaded as is.
 #[napi]
 #[allow(
     clippy::too_many_arguments,
@@ -149,10 +150,11 @@ pub fn tex_upload(
                 offset: byte_offset,
             },
             (2, _) => TexSource::UnpackBuffer(long(offset)),
-            (3, Some(v)) => TexSource::Rgba8 {
+            (3 | 4, Some(v)) => TexSource::Rgba8 {
                 source: v,
                 width: source_width as usize,
                 height: source_height as usize,
+                as_is: kind == 4,
             },
             _ => TexSource::None,
         };

@@ -127,7 +127,11 @@ export async function runPage(url, { endEarly = false, root } = {}, hooks = {}) 
   // Rejections in the page's realm reach Node's process-wide handling, whose
   // default ends the process. Browsers, and the official harness, ignore
   // them; so does this runner. The runner's own async work is awaited.
-  process.on('unhandledRejection', () => {});
+  // OXGL_CONFORMANCE_TRACE records them, a debugging aid for pages that hang.
+  process.on('unhandledRejection', (reason) => {
+    const trace = process.env.OXGL_CONFORMANCE_TRACE;
+    if (trace) appendFileSync(trace, `UNHANDLED REJECTION: ${describe(reason)}\n`);
+  });
 
   // Frames the page opens get the same shim before their documents parse,
   // and a console of their own: as in the official harness, a frame's
@@ -383,6 +387,9 @@ function installShim(window, state) {
     return toDataURL.call(asImage(this) ?? this, type, ...rest);
   };
   oxgl.setImageDecoder((image) => {
+    const bitmap = bitmapPixels.get(image);
+    if (bitmap !== undefined) return bitmap;
+    if (!(image instanceof window.HTMLImageElement)) return undefined;
     let fetched = imageBytes.get(image);
     if (fetched?.url !== image.src) {
       const bytes = dataUrlBytes(image.src);
@@ -391,19 +398,15 @@ function installShim(window, state) {
       imageBytes.set(image, fetched);
     }
     // An SVG image is drawn at the element's size (HTML §4.8.4.3.6).
-    if (isSvg(fetched.bytes)) return rasterize(image, image.width, image.height);
-    fetched.decoded ??= decodePng(fetched.bytes) ?? null;
+    if (isSvg(fetched.bytes)) return rasterizeSvg(fetched.bytes, image.width, image.height);
+    fetched.decoded ??= decodeImage(fetched.bytes) ?? null;
     return fetched.decoded ?? undefined;
   });
-  const rasterize = (image, width, height) => {
-    if (width === 0 || height === 0) return undefined;
-    const scratch = window.document.createElement('canvas');
-    scratch.width = width;
-    scratch.height = height;
-    const context = getContext2d.call(scratch, '2d');
-    context.drawImage(image, 0, 0, width, height);
-    return { data: context.getImageData(0, 0, width, height).data, width, height };
-  };
+  installImageBitmap(window, (image) => {
+    const fetched = imageBytes.get(image);
+    const bytes = fetched?.url === image.src ? fetched.bytes : dataUrlBytes(image.src);
+    return bytes === undefined ? undefined : decodeImage(bytes);
+  }, canvasPixels);
   // jsdom's own getContext gives 2D contexts (through the canvas package).
   // It does not know oxgl's contexts, so one type per canvas is enforced here
   // in both directions (HTML §4.12.5).
@@ -539,7 +542,10 @@ function forwardResizes(window, contexts) {
 
 /** The `canvas` package, which jsdom uses for 2D contexts and images. */
 function canvasPackage() {
-  canvasModule ??= createRequire(import.meta.url)('canvas');
+  if (canvasModule === undefined) {
+    canvasModule = createRequire(import.meta.url)('canvas');
+    loadUnsizedSvgEmpty();
+  }
   return canvasModule;
 }
 
@@ -621,6 +627,159 @@ const keepImageBytes = requestInterceptor(async (request, { element }) => {
   imageBytes.set(element, { url: request.url, bytes, decoded: undefined });
   return new Response(bytes, { status: response.status, headers: response.headers });
 });
+
+/** ImageBitmaps' pixels, as browsers upload them. */
+const bitmapPixels = new WeakMap();
+
+/**
+ * Image bytes decoded as browsers do for WebGL: PNGs by the runner's own
+ * decoder; others (JPEG) by the canvas package, which applies EXIF
+ * orientation as browsers do. `undefined` for bytes neither can decode.
+ */
+function decodeImage(bytes) {
+  const png = decodePng(bytes);
+  if (png !== undefined) return png;
+  const { Image, createCanvas } = canvasPackage();
+  const image = new Image();
+  try {
+    image.src = bytes;
+  } catch {
+    return undefined;
+  }
+  if (!(image.width > 0 && image.height > 0)) return undefined;
+  const canvas = createCanvas(image.width, image.height);
+  const context = canvas.getContext('2d');
+  context.drawImage(image, 0, 0);
+  const { data } = context.getImageData(0, 0, image.width, image.height);
+  return { data, width: image.width, height: image.height };
+}
+
+/** RGBA8 `{ data, width, height }` with color multiplied by alpha. */
+function premultiply({ data, width, height }) {
+  const out = new Uint8ClampedArray(data.length);
+  for (let i = 0; i < data.length; i += 4) {
+    const a = data[i + 3];
+    out[i] = Math.round((data[i] * a) / 255);
+    out[i + 1] = Math.round((data[i + 1] * a) / 255);
+    out[i + 2] = Math.round((data[i + 2] * a) / 255);
+    out[i + 3] = a;
+  }
+  return { data: out, width, height };
+}
+
+/** The rows of `{ data, width, height }` in reverse order. */
+function flipRows({ data, width, height }) {
+  const out = new data.constructor(data.length);
+  const row = width * 4;
+  for (let y = 0; y < height; y++) out.set(data.subarray(y * row, (y + 1) * row), (height - 1 - y) * row);
+  return { data: out, width, height };
+}
+
+/**
+ * `createImageBitmap` from a Blob, an image, ImageData or a canvas, with the
+ * `imageOrientation` and `premultiplyAlpha` options (HTML §8.10; `default`
+ * keeps alpha unpremultiplied), and `fetch` when jsdom has none:
+ * enough for pages that upload ImageBitmaps. `decodeElement` decodes an
+ * image element's bytes; `canvasPixels` reads a WebGL canvas.
+ */
+function installImageBitmap(window, decodeElement, canvasPixels) {
+  class ImageBitmap {
+    #width;
+    #height;
+    constructor(pixels) {
+      this.#width = pixels.width;
+      this.#height = pixels.height;
+      bitmapPixels.set(this, pixels);
+    }
+    get width() {
+      return this.#width;
+    }
+    get height() {
+      return this.#height;
+    }
+    close() {
+      this.#width = 0;
+      this.#height = 0;
+      bitmapPixels.set(this, { data: new Uint8ClampedArray(0), width: 0, height: 0, asIs: true });
+    }
+  }
+  window.ImageBitmap = ImageBitmap;
+  window.createImageBitmap = async (source, options = {}) => {
+    let pixels;
+    if (bitmapPixels.has(source)) pixels = bitmapPixels.get(source);
+    else if (typeof source?.arrayBuffer === 'function') pixels = decodeImage(Buffer.from(await source.arrayBuffer()));
+    else if (source instanceof window.HTMLImageElement) pixels = decodeElement(source);
+    else if (ArrayBuffer.isView(source?.data)) pixels = { data: source.data, width: source.width, height: source.height };
+    else if (source instanceof window.HTMLCanvasElement) {
+      pixels = canvasPixels(source) ?? source.getContext('2d')?.getImageData(0, 0, source.width, source.height);
+    }
+    if (pixels === undefined || pixels === null) throw new window.DOMException('The source image could not be decoded.', 'InvalidStateError');
+    // An ImageData's fields are accessors, which a spread does not copy.
+    pixels = { data: pixels.data, width: pixels.width, height: pixels.height };
+    if (options?.imageOrientation === 'flipY') pixels = flipRows(pixels);
+    if (options?.premultiplyAlpha === 'premultiply') pixels = premultiply(pixels);
+    return new ImageBitmap({ ...pixels, asIs: true });
+  };
+  if (typeof window.fetch !== 'function') {
+    window.fetch = (input, init) => fetch(new URL(String(input), window.document.baseURI), init);
+  }
+}
+
+/** An SVG document's root `<svg ...>` tag, or `undefined`. */
+function svgRoot(text) {
+  return /<svg\b[^>]*>/i.exec(text)?.[0];
+}
+
+/**
+ * An SVG drawn at `width × height`, as an image element shows it: its root
+ * is given that size, and a viewBox of its own size when it has none, so
+ * its content scales. `undefined` for an empty size.
+ */
+function rasterizeSvg(bytes, width, height) {
+  if (width === 0 || height === 0) return undefined;
+  const text = bytes.toString('utf8');
+  const root = svgRoot(text);
+  if (root === undefined) return undefined;
+  const size = (name) => new RegExp(`\\s${name}\\s*=\\s*["']([^"']*)["']`, 'i').exec(root)?.[1];
+  const viewBox = /\sviewBox\s*=/i.test(root) || size('width') === undefined || size('height') === undefined ? '' : ` viewBox="0 0 ${parseFloat(size('width'))} ${parseFloat(size('height'))}"`;
+  const sized = root
+    .replace(/\s(width|height)\s*=\s*("[^"]*"|'[^']*')/gi, '')
+    .replace(/^<svg\b/i, `<svg width="${width}" height="${height}"${viewBox}`);
+  const { Image, createCanvas } = canvasPackage();
+  const image = new Image();
+  try {
+    image.src = Buffer.from(text.replace(root, sized), 'utf8');
+  } catch {
+    return undefined;
+  }
+  const canvas = createCanvas(width, height);
+  const context = canvas.getContext('2d');
+  context.drawImage(image, 0, 0, width, height);
+  return { data: context.getImageData(0, 0, width, height).data, width, height };
+}
+
+/**
+ * The canvas package refuses an SVG whose root has no width or height;
+ * a browser loads it with no natural size (0×0). Such an SVG is not handed
+ * to the package, so the image loads empty.
+ */
+function loadUnsizedSvgEmpty() {
+  const { Image } = canvasPackage();
+  const descriptor = Object.getOwnPropertyDescriptor(Image.prototype, 'src');
+  if (descriptor?.set === undefined || descriptor.get === undefined) {
+    throw new Error('the canvas package no longer has an Image src accessor; update the SVG shim');
+  }
+  Object.defineProperty(Image.prototype, 'src', {
+    ...descriptor,
+    set(value) {
+      if (Buffer.isBuffer(value) && isSvg(value)) {
+        const root = svgRoot(value.toString('utf8')) ?? '';
+        if (!/\swidth\s*=/i.test(root) || !/\sheight\s*=/i.test(root)) return;
+      }
+      descriptor.set.call(this, value);
+    },
+  });
+}
 
 /** Whether image bytes are an SVG document. */
 function isSvg(bytes) {

@@ -46,6 +46,10 @@ pub enum TexSource<'a> {
         width: usize,
         /// Source height.
         height: usize,
+        /// An `ImageBitmap`'s pixels, which `UNPACK_FLIP_Y_WEBGL` and
+        /// `UNPACK_PREMULTIPLY_ALPHA_WEBGL` do not change (WebGL 1.0
+        /// §5.14.8).
+        as_is: bool,
     },
 }
 
@@ -526,9 +530,15 @@ impl Context {
                 source,
                 width,
                 height,
+                as_is,
             } => {
                 let saved = UnpackParams::read(&current, webgl2);
-                match rgba8_pixels(source, (width, height), args, is_3d, saved, self.unpack) {
+                let mut unpack = self.unpack;
+                if as_is {
+                    unpack.flip_y = false;
+                    unpack.premultiply_alpha = false;
+                }
+                match rgba8_pixels(source, (width, height), args, is_3d, saved, unpack) {
                     Ok(data) => with_neutral_unpack(&current, saved, webgl2, || {
                         current.tex_upload(call, args, UploadData::Client(Some(&data)));
                     }),

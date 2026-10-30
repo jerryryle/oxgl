@@ -344,3 +344,50 @@ test('a host image decoder supplies unpremultiplied, and 16-bit, pixels', async 
     gl.destroy();
   }
 });
+
+test('host image objects and size-less images go through the host decoder', async () => {
+  const { setImageDecoder } = await import('../dist/context.js');
+  const gl = createContext({ width: 1, height: 1 });
+  gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
+  const bitmap = {};
+  const document = { URL: 'http://a.test/', createElement: () => assert.fail('the 2D canvas path is not used') };
+  const svg = { naturalWidth: 0, naturalHeight: 0, width: 2, height: 2, src: 'x.svg', crossOrigin: null, ownerDocument: document };
+  const pixels = (n) => ({ data: new Uint8ClampedArray(n * n * 4).fill(255), width: n, height: n });
+  try {
+    setImageDecoder((source) => (source === bitmap ? pixels(1) : source === svg ? pixels(2) : undefined));
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bitmap);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, svg);
+    // Level 0 is 2×2: a 1×1 write at (1, 1) fits.
+    gl.texSubImage2D(gl.TEXTURE_2D, 0, 1, 1, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+    assert.equal(gl.getError(), gl.NO_ERROR);
+    setImageDecoder(undefined);
+    assert.throws(() => gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bitmap), TypeError);
+  } finally {
+    setImageDecoder(undefined);
+    gl.destroy();
+  }
+});
+
+test('ImageBitmap pixels ignore the flip and premultiply unpack parameters', async () => {
+  const { setImageDecoder } = await import('../dist/context.js');
+  const gl = createContext({ width: 1, height: 1 });
+  const tex = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, tex);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, gl.createFramebuffer());
+  const bitmap = {};
+  try {
+    // Top row red with alpha 128, bottom row green.
+    setImageDecoder(() => ({ data: new Uint8ClampedArray([255, 0, 0, 128, 0, 255, 0, 255]), width: 1, height: 2, asIs: true }));
+    gl.pixelStorei(gl.UNPACK_FLIP_Y_WEBGL, true);
+    gl.pixelStorei(gl.UNPACK_PREMULTIPLY_ALPHA_WEBGL, true);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bitmap);
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, tex, 0);
+    const out = new Uint8Array(8);
+    gl.readPixels(0, 0, 1, 2, gl.RGBA, gl.UNSIGNED_BYTE, out);
+    assert.deepEqual([...out], [255, 0, 0, 128, 0, 255, 0, 255]);
+    assert.equal(gl.getError(), gl.NO_ERROR);
+  } finally {
+    setImageDecoder(undefined);
+    gl.destroy();
+  }
+});
