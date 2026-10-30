@@ -213,11 +213,15 @@ The root `package.json` SHALL expose `npm run conformance`, which runs both suit
 - **THEN** the run is judged against the expectations it writes, the expectations entries for the pages that ran are replaced with their outcomes, existing reasons are kept for entries whose outcome is unchanged, entries for pages that now pass are removed, on a run of whole suites entries for pages those suites no longer contain are removed, and new or changed entries take the page's first escaped error as their reason, or its first failure message when it has none (for `TIMEOUT` and `CRASH`, `no new result within the time limit` / `crashed`, followed by the first escaped error's message when there is one), reduced to its first line and at most 200 characters; the command then exits zero unless the expectations file could not be parsed or a page had a harness error
 
 ### Requirement: Pages run in parallel
-The conformance command SHALL accept an option setting how many pages run at once, defaulting to the number of CPUs available to the process (at least one).
+The conformance command SHALL accept an option setting how many pages run at once, defaulting to the number of CPUs available to the process, but no more than one page per GiB of memory available to it (at least one).
 
 #### Scenario: Default parallelism
 - **WHEN** a developer runs the command without the parallelism option on a machine where 4 CPUs are available to the process
 - **THEN** up to 4 pages run at once, and the report records 4 as the number of pages run in parallel
+
+#### Scenario: Memory bounds the default
+- **WHEN** a developer runs the command without the parallelism option on a machine with 16 CPUs and 8 GiB of memory
+- **THEN** up to 8 pages run at once, so pages do not stall while the machine swaps
 
 ### Requirement: Backend follows the environment
 The runner SHALL create contexts with the backend selected by `OXGL_BACKEND` (backend-selection), and the report SHALL record that requested backend (`auto` when unset). Under `auto` the report does not say which backend served each context; runs meant to be compared set `OXGL_BACKEND` explicitly.
@@ -287,3 +291,17 @@ In the conformance runner, drawing a canvas that has an oxgl context into a 2D c
 #### Scenario: WebGL canvas drawn into a 2D canvas
 - **WHEN** a page clears a WebGL canvas to a color and draws it into a 2D canvas
 - **THEN** the 2D canvas reads back that color (cf. Khronos `conformance/canvas/draw-webgl-to-canvas-test.html`)
+
+### Requirement: Canvases are composited each frame
+At the start of each animation frame, before that frame's callbacks, the runner SHALL present the drawing buffer of every WebGL canvas in the document, as a browser composites it. Canvases outside the document SHALL NOT be presented.
+
+#### Scenario: On-screen and off-screen canvases
+- **WHEN** a page clears an on-screen and an off-screen canvas to red and waits for a composite
+- **THEN** the on-screen canvas reads transparent black and the off-screen one still reads red (cf. Khronos `conformance/canvas/buffer-offscreen-test.html`)
+
+### Requirement: Long-running pages load later resources
+The runner's server SHALL keep a page's idle connections open however long the page runs synchronously, so a resource requested afterwards (such as `js-test-post.js`) loads instead of failing on a connection the server closed.
+
+#### Scenario: Page busy for longer than five seconds
+- **WHEN** a page runs synchronously for more than five seconds and then calls `finishTest()`
+- **THEN** the page completes instead of timing out (cf. Khronos `conformance/reading/read-pixels-test.html`)

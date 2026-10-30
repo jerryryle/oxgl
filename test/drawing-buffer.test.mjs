@@ -333,3 +333,47 @@ test('resize on a lost context does nothing', () => {
   assert.equal(gl.drawingBufferWidth, 0);
   assert.equal(gl.canvas.width, 4);
 });
+
+test('compositing clears only without preserveDrawingBuffer', async () => {
+  // A host that composites canvases (the conformance runner) calls this.
+  const { presentDrawingBuffer } = await import('../dist/context.js');
+  for (const preserveDrawingBuffer of [false, true]) {
+    const gl = createContext({ width: 2, height: 2, attributes: { preserveDrawingBuffer } });
+    gl.clearColor(1, 0, 0, 1);
+    gl.enable(gl.SCISSOR_TEST);
+    gl.scissor(0, 0, 1, 1);
+    gl.disable(gl.SCISSOR_TEST);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.enable(gl.SCISSOR_TEST);
+    const fbo = gl.createFramebuffer();
+    gl.bindFramebuffer(gl.FRAMEBUFFER, fbo);
+    presentDrawingBuffer(gl);
+    assert.equal(gl.getParameter(gl.FRAMEBUFFER_BINDING), fbo);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+    assert.ok(allPixels(readAll(gl), preserveDrawingBuffer ? [255, 0, 0, 255] : [0, 0, 0, 0]));
+    assert.deepEqual([...gl.getParameter(gl.COLOR_CLEAR_VALUE)], [1, 0, 0, 1]);
+    assert.equal(gl.isEnabled(gl.SCISSOR_TEST), true);
+    gl.destroy();
+  }
+});
+
+test('compositing keeps per-draw-buffer color masks', async (t) => {
+  const { presentDrawingBuffer } = await import('../dist/context.js');
+  const gl = createContext({ width: 2, height: 2, webgl2: true });
+  const ext = gl.getExtension('OES_draw_buffers_indexed');
+  if (ext === null) {
+    t.skip('OES_draw_buffers_indexed unavailable');
+    gl.destroy();
+    return;
+  }
+  ext.colorMaskiOES(0, false, true, false, false);
+  ext.colorMaskiOES(1, true, false, false, false);
+  gl.clearColor(1, 1, 1, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  presentDrawingBuffer(gl);
+  assert.ok(allPixels(readAll(gl), [0, 0, 0, 0]));
+  assert.deepEqual([...gl.getIndexedParameter(gl.COLOR_WRITEMASK, 0)], [false, true, false, false]);
+  assert.deepEqual([...gl.getIndexedParameter(gl.COLOR_WRITEMASK, 1)], [true, false, false, false]);
+  assert.equal(gl.getError(), gl.NO_ERROR);
+  gl.destroy();
+});

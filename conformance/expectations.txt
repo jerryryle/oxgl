@@ -2,15 +2,10 @@
 # A page without an entry is expected to PASS. See CONTRIBUTING.md; `npm run conformance -- --update`
 # rewrites this file.
 
-webgl1 conformance/canvas/buffer-offscreen-test.html FAIL # remainder of buffer should be cleared
-webgl1 conformance/canvas/buffer-preserve-test.html FAIL # remainder of buffer should be cleared
-webgl1 conformance/context/context-attribute-preserve-drawing-buffer.html FAIL # Did not render ok with preserveDrawingBuffer false.
 webgl1 conformance/context/context-release-with-workers.html TIMEOUT # no new result within the time limit
 webgl1 conformance/context/premultiplyalpha-test.html FAIL # should draw with 255,192,128,1
 webgl1 conformance/extensions/angle-instanced-arrays-out-of-bounds.html FAIL # getError expected: INVALID_OPERATION. Was NO_ERROR : after evaluating: ext.drawArraysInstancedANGLE(gl.TRIANGLES, 0, 9, 1)
-webgl1 conformance/extensions/angle-instanced-arrays.html FAIL # remainder of buffer should be cleared
 webgl1 conformance/extensions/webgl-draw-buffers.html FAIL # should be clear
-webgl1 conformance/extensions/webgl-multi-draw.html FAIL # remainder of buffer should be cleared
 webgl1 conformance/glsl/misc/shader-with-double-underscore.html FAIL # [unexpected vertex shader compile status] (expected: true) fragment shader that uses double-underscore in identifier should succeed
 webgl1 conformance/more/functions/readPixelsBadArgs.html FAIL # testReadPixelsSOPIMG
 webgl1 conformance/more/functions/texImage2DHTML.html FAIL # testTexImage2DNonSOP
@@ -25,12 +20,8 @@ webgl1 conformance/textures/misc/texture-upload-size.html FAIL # Texture was sma
 webgl1 conformance/textures/misc/video-rotation.html FAIL # No supported video types.
 webgl1 conformance/typedarrays/array-large-array-tests.html FAIL # Construction of huge Float32Array should throw exception
 webgl1 conformance/uniforms/uniform-default-values.html FAIL # should be green
-webgl2 conformance/canvas/buffer-offscreen-test.html FAIL # remainder of buffer should be cleared
-webgl2 conformance/canvas/buffer-preserve-test.html FAIL # remainder of buffer should be cleared
-webgl2 conformance/context/context-attribute-preserve-drawing-buffer.html FAIL # Did not render ok with preserveDrawingBuffer false.
 webgl2 conformance/context/context-release-with-workers.html TIMEOUT # no new result within the time limit
 webgl2 conformance/context/premultiplyalpha-test.html FAIL # should draw with 255,192,128,1
-webgl2 conformance/extensions/webgl-multi-draw.html FAIL # remainder of buffer should be cleared
 webgl2 conformance/glsl/misc/shader-with-double-underscore.html FAIL # [unexpected vertex shader compile status] (expected: true) fragment shader that uses double-underscore in identifier should succeed
 webgl2 conformance/more/functions/readPixelsBadArgs.html FAIL # testReadPixelsSOPIMG
 webgl2 conformance/more/functions/texImage2DHTML.html FAIL # testTexImage2DNonSOP
@@ -44,9 +35,6 @@ webgl2 conformance/textures/misc/texture-upload-size.html FAIL # Texture was sma
 webgl2 conformance/textures/misc/video-rotation.html FAIL # No supported video types.
 webgl2 conformance/typedarrays/array-large-array-tests.html FAIL # Construction of huge Float32Array should throw exception
 webgl2 conformance/uniforms/uniform-default-values.html FAIL # should be green
-webgl2 conformance2/extensions/webgl-multi-draw-instanced-base-vertex-base-instance.html FAIL # remainder of buffer should be cleared
-webgl2 conformance2/misc/views-with-offsets.html FAIL # getError expected: INVALID_OPERATION. Was INVALID_VALUE :
-webgl2 conformance2/rendering/rasterizer-discard-and-implicit-clear.html FAIL # left half of canvas should be clear
 webgl2 conformance2/textures/misc/immutable-tex-render-feedback.html FAIL # checkFramebufferStatus expected: FRAMEBUFFER_INCOMPLETE_ATTACHMENT. Was FRAMEBUFFER_COMPLETE: {immutable: false, level_prime_base/max: [1, 0], minFilter: LINEAR, dest: 1}
 webgl2 conformance2/textures/misc/tex-image-10bpc.html FAIL # uniquePixels.size should be >= 7. Was 2 (of type number).
 webgl2 deqp/functional/gles3/shaderoperator/unary_operator_00.html FAIL # shaderop.unary_operator.minus.lowp_uint_vertex: Fail

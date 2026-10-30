@@ -431,6 +431,13 @@ impl Context {
         }
     }
 
+    /// The drawing buffer after compositing; see [`DrawingBuffer::present`].
+    pub fn present(&mut self) {
+        if !self.errors.is_lost() {
+            self.buffer.present(&mut self.errors);
+        }
+    }
+
     /// Simulates a device loss through `GL_CHROMIUM_lose_context`, as
     /// `WEBGL_lose_context.loseContext()` will. The loss is observed like a
     /// real one, by the next `getError` or `readPixels`.

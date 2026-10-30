@@ -485,8 +485,10 @@ impl Context {
                     self.errors.synthesize(GL_INVALID_OPERATION);
                     return;
                 }
+                // An offset past the view leaves too little data, as one
+                // inside it can (Khronos `conformance2/misc/views-with-offsets.html`).
                 if offset > source.byte_len() {
-                    self.errors.synthesize(GL_INVALID_VALUE);
+                    self.errors.synthesize(GL_INVALID_OPERATION);
                     return;
                 }
                 let codec = Codec::new(args.format, args.ty)

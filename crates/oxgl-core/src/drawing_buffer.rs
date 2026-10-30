@@ -295,6 +295,24 @@ impl DrawingBuffer {
         self.names.draw
     }
 
+    /// What a browser does after compositing the canvas (WebGL 1.0 §2.2):
+    /// without `preserveDrawingBuffer`, the drawing buffer is cleared to its
+    /// defaults, whatever the context's clear state. Headless contexts are
+    /// never composited; a host that composites (the conformance runner)
+    /// calls this.
+    pub fn present(&self, errors: &mut ErrorState) {
+        if self.requested.preserve_drawing_buffer {
+            return;
+        }
+        if let Ok(current) = self.context.make_current() {
+            drain_into(&current, errors);
+            let saved = Bindings::save(&current);
+            clear(&current, self.names.draw, self.webgl2);
+            discard_errors(&current);
+            saved.restore(&current, self.names.draw);
+        }
+    }
+
     /// `getContextAttributes`: `alpha`, `depth`, `stencil` and `antialias` as
     /// allocated, the rest as requested.
     #[must_use]
@@ -684,6 +702,17 @@ fn clear(current: &Current<'_>, framebuffer: u32, webgl2: bool) {
     };
     let color = floats(GL_COLOR_CLEAR_VALUE);
     let mask = booleans(GL_COLOR_WRITEMASK);
+    // With OES_draw_buffers_indexed enabled, the drawing buffer's color
+    // attachment has its own mask; setting the global one would overwrite
+    // every draw buffer's. Without it, the indexed query fails.
+    let indexed = webgl2 && current.integer64_indexed(GL_COLOR_WRITEMASK, 0).len() == 4;
+    let color_mask = |[r, g, b, a]: [bool; 4]| {
+        if indexed {
+            current.color_maski(0, u8::from(r), u8::from(g), u8::from(b), u8::from(a));
+        } else {
+            current.apply(StateCall::ColorMask(r, g, b, a));
+        }
+    };
     let depth = floats(GL_DEPTH_CLEAR_VALUE)[0];
     let depth_mask = booleans(GL_DEPTH_WRITEMASK)[0];
     let stencil = integer(GL_STENCIL_CLEAR_VALUE);
@@ -698,7 +727,7 @@ fn clear(current: &Current<'_>, framebuffer: u32, webgl2: bool) {
         current.apply(StateCall::Disable(GL_RASTERIZER_DISCARD));
     }
     current.clear_color(0.0, 0.0, 0.0, 0.0);
-    current.apply(StateCall::ColorMask(true, true, true, true));
+    color_mask([true; 4]);
     current.apply(StateCall::ClearDepth(1.0));
     current.apply(StateCall::DepthMask(true));
     current.apply(StateCall::ClearStencil(0));
@@ -706,7 +735,7 @@ fn clear(current: &Current<'_>, framebuffer: u32, webgl2: bool) {
     current.clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
 
     current.clear_color(color[0], color[1], color[2], color[3]);
-    current.apply(StateCall::ColorMask(mask[0], mask[1], mask[2], mask[3]));
+    color_mask(mask);
     current.apply(StateCall::ClearDepth(depth));
     current.apply(StateCall::DepthMask(depth_mask));
     current.apply(StateCall::ClearStencil(stencil));

@@ -296,6 +296,16 @@ function context2d(canvas: unknown): Canvas2D | null {
 }
 
 /**
+ * What compositing does to `gl`'s drawing buffer in a browser: cleared when
+ * `preserveDrawingBuffer` is false. For hosts that composite canvases (the
+ * conformance runner's DOM); headless contexts are never composited.
+ */
+export function presentDrawingBuffer(gl: ContextBase): void {
+  const s = contextState(gl);
+  if (!s.destroyed) native.presentDrawingBuffer(s.index, s.version);
+}
+
+/**
  * The drawing buffer of the oxgl context on `canvas` as unpremultiplied
  * RGBA8, top row first, or `undefined` when no oxgl context draws for it:
  * what a host that displays or exports canvases (the conformance runner's

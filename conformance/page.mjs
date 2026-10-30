@@ -246,7 +246,7 @@ function contextSource() {
     parts.push(body);
   };
   inline(CONTEXT_URL);
-  return `${parts.join('\n')}\nreturn { createContext, canvasPixels, ${INTERFACES.join(', ')} };`;
+  return `${parts.join('\n')}\nreturn { createContext, canvasPixels, presentDrawingBuffer, ${INTERFACES.join(', ')} };`;
 }
 
 /**
@@ -376,11 +376,37 @@ function installShim(window, state) {
     return gl;
   };
   forwardResizes(window, contexts);
+  compositeEachFrame(window, own, oxgl.presentDrawingBuffer);
   for (const name of INTERFACES) window[name] = oxgl[name];
   window.ImageData = canvasPackage().ImageData;
   if (state.root !== undefined) window.CLOSURE_IMPORT_SCRIPT = closureImport(window, state.root);
   deliverMessages(window);
   failMedia(window);
+}
+
+/**
+ * Composites the page's WebGL canvases at the start of each animation frame,
+ * before that frame's callbacks, as a browser presents what the previous
+ * frame drew: drawing buffers without preserveDrawingBuffer are cleared.
+ * Canvases outside the document are never composited.
+ */
+function compositeEachFrame(window, own, present) {
+  const requestAnimationFrame = window.requestAnimationFrame;
+  let scheduled = false;
+  const composite = () => {
+    scheduled = false;
+    for (const ref of own) {
+      const gl = ref.deref();
+      if (gl?.canvas.isConnected === true) present(gl);
+    }
+  };
+  window.requestAnimationFrame = function (callback) {
+    if (!scheduled) {
+      scheduled = true;
+      requestAnimationFrame.call(window, composite);
+    }
+    return requestAnimationFrame.call(window, callback);
+  };
 }
 
 /**

@@ -35,6 +35,10 @@ Covers texture and sampler objects, texture uploads from views, pixel unpack buf
 - **WHEN** `texImage2D` of a 4×4 `RGBA`/`UNSIGNED_BYTE` image is given 63 bytes
 - **THEN** `INVALID_OPERATION` is generated and nothing past the view is read
 
+#### Scenario: Offset past the view
+- **WHEN** `texImage3D` on WebGL 2 is given a view and a `srcOffset` past its end
+- **THEN** `INVALID_OPERATION` is generated (cf. Khronos `conformance2/misc/views-with-offsets.html`)
+
 ### Requirement: WebGL unpack parameters
 `UNPACK_FLIP_Y_WEBGL` and `UNPACK_PREMULTIPLY_ALPHA_WEBGL` SHALL apply to every `texImage2D` and `texSubImage2D` source, views included (WebGL 1.0 §5.14.3 `pixelStorei`). On WebGL 2, either one set with a 3D or 2D-array upload from a view, or with a pixel unpack buffer bound, SHALL generate `INVALID_OPERATION` (WebGL 2.0 §5.36). `UNPACK_COLORSPACE_CONVERSION_WEBGL` SHALL have no effect on oxgl's sources.
 

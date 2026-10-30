@@ -163,6 +163,7 @@ export interface NativeBinding {
   multiDraw: (index: number, version: number, mode: number, firstsOrOffsets: number[], counts: number[], instances: number[], type: number) => void;
   translatedShaderSource: (index: number, version: number, oi: number, ov: number) => string | null;
   loseContext: (index: number, version: number) => void;
+  presentDrawingBuffer: (index: number, version: number) => void;
   drawRangeElements: (index: number, version: number, mode: number, start: number, end: number, count: number, type: number, offset: number) => void;
   resize(index: number, version: number, width: number, height: number): { width: number; height: number };
   destroy(index: number, version: number): void;
@@ -225,7 +226,7 @@ export interface NativeBinding {
 }
 
 /** Version of the JS ↔ native interface this package was built for. */
-export const NATIVE_ABI_VERSION = 10;
+export const NATIVE_ABI_VERSION = 11;
 
 function nativeMissing(detail: string, cause?: unknown): Error {
   const error = new Error(

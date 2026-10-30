@@ -122,3 +122,10 @@ pub fn translated_shader_source(
 pub fn lose_context(env: Env, index: u32, version: u32) -> napi::Result<()> {
     with_context(env, index, version, oxgl_core::Context::lose_context)
 }
+
+/// Clears a drawing buffer without `preserveDrawingBuffer`, as compositing
+/// does in a browser; for hosts that composite.
+#[napi]
+pub fn present_drawing_buffer(env: Env, index: u32, version: u32) -> napi::Result<()> {
+    with_context(env, index, version, oxgl_core::Context::present)
+}
