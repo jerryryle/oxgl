@@ -6,7 +6,7 @@ Covers reading pixels from the current framebuffer back into JavaScript memory v
 ## Requirements
 
 ### Requirement: readPixels into an ArrayBufferView
-`readPixels(x, y, width, height, format, type, pixels)` SHALL behave as specified in WebGL 1.0 §5.14.12 "Read Operations" and OpenGL ES 2.0 §4.3.1 (WebGL 2: the `ArrayBufferView` overload without `dstOffset` in WebGL 2.0 §4.7.10 "Reading back pixels", OpenGL ES 3.0 §4.3.2). Rows SHALL be written bottom-to-top as in OpenGL, honoring the default `PACK_ALIGNMENT` of 4.
+`readPixels(x, y, width, height, format, type, pixels)` SHALL behave as specified in WebGL 1.0 §5.14.12 "Read Operations" and OpenGL ES 2.0 §4.3.1 (WebGL 2: the `ArrayBufferView` overload without `dstOffset` in WebGL 2.0 §4.7.10 "Reading back pixels", OpenGL ES 3.0 §4.3.2). Rows SHALL be written bottom-to-top as in OpenGL, laid out by the current `PACK_ALIGNMENT` and, on WebGL 2, `PACK_ROW_LENGTH`, `PACK_SKIP_PIXELS` and `PACK_SKIP_ROWS`.
 
 #### Scenario: Read after clear
 - **WHEN** the buffer is cleared to `(0, 1, 0, 1)` and `readPixels(0, 0, w, h, RGBA, UNSIGNED_BYTE, new Uint8Array(w*h*4))` is called
@@ -15,12 +15,25 @@ Covers reading pixels from the current framebuffer back into JavaScript memory v
 #### Scenario: Exact required size
 - **WHEN** a 3×2 region is read as RGBA/UNSIGNED_BYTE into a `Uint8Array(24)`, and again into a `Uint8Array(23)`
 - **THEN** the first read succeeds and the second generates `INVALID_OPERATION` with the array unmodified (cf. Khronos `conformance/reading/read-pixels-pack-alignment.html`)
+
+#### Scenario: Pack alignment changes the required size
+- **WHEN** `pixelStorei(PACK_ALIGNMENT, 8)` is set and a 3×2 region is read as RGBA/UNSIGNED_BYTE into a `Uint8Array(28)`, and again into a `Uint8Array(27)`
+- **THEN** the first read succeeds with the second row starting at byte 16, and the second read generates `INVALID_OPERATION` with the array unmodified
+
+#### Scenario: WebGL 2 pack parameters
+- **WHEN** a WebGL 2 context sets `PACK_ROW_LENGTH` to `4` and `PACK_SKIP_PIXELS` to `1`, then reads a 2×2 RGBA/UNSIGNED_BYTE region into a `Uint8Array(28)`
+- **THEN** the read succeeds, the pixels land at bytes 4–11 and 20–27, and every other byte is unmodified (cf. Khronos `conformance2/reading/read-pixels-pack-parameters.html`)
+
 ### Requirement: Format and type validation
-The `format`/`type` pair `RGBA`/`UNSIGNED_BYTE` SHALL always be accepted for the default framebuffer. Other pairs SHALL generate the errors the WebGL and OpenGL ES specifications prescribe; until `getParameter` exposes an implementation-chosen read format, only the guaranteed pair is required to succeed.
+The `format`/`type` pair `RGBA`/`UNSIGNED_BYTE`, and the pair that `getParameter(IMPLEMENTATION_COLOR_READ_FORMAT)` and `getParameter(IMPLEMENTATION_COLOR_READ_TYPE)` report for the current framebuffer, SHALL be accepted. Other pairs SHALL generate the errors the WebGL and OpenGL ES specifications prescribe.
 
 #### Scenario: Invalid enum
 - **WHEN** `readPixels` is called with `format = 0x1234`
 - **THEN** `getError()` returns `INVALID_ENUM` and the destination is unmodified
+
+#### Scenario: Implementation read format
+- **WHEN** `readPixels` reads one pixel using the format and type `getParameter` reports as the implementation read format, into a view of the matching type and size
+- **THEN** `getError()` returns `NO_ERROR` (cf. Khronos `conformance/reading/read-pixels-test.html`)
 
 ### Requirement: Destination buffer checks
 If the `ArrayBufferView` type does not match `type`, `readPixels` SHALL generate `INVALID_OPERATION`. If the view is too small for the requested region, it SHALL generate `INVALID_OPERATION`. In WebGL 1, a `null` destination SHALL generate `INVALID_VALUE`. A destination that is not an `ArrayBufferView` or `null` SHALL throw a `TypeError` per WebIDL. In every error case the destination SHALL be unmodified.
@@ -65,3 +78,18 @@ The implementation SHALL NOT access the destination's memory after `readPixels` 
 #### Scenario: Buffer transferred after read
 - **WHEN** `readPixels` completes and the destination's `ArrayBuffer` is then transferred via `structuredClone(buf, { transfer: [buf] })`
 - **THEN** no crash or memory error occurs
+
+### Requirement: Reading framebuffer objects and into pack buffers
+`readPixels` SHALL read from the framebuffer bound for reading (WebGL 1.0 §5.14.12). On WebGL 2, the `GLintptr offset` overload SHALL write into the buffer bound to `PIXEL_PACK_BUFFER`, and either overload SHALL generate `INVALID_OPERATION` when that binding does not match it (WebGL 2.0 §3.7.10).
+
+#### Scenario: Read from a framebuffer object
+- **WHEN** a framebuffer with a texture attachment is bound and cleared to blue, and `readPixels` reads it
+- **THEN** it reads blue, while the drawing buffer is unchanged
+
+#### Scenario: Read into a pack buffer
+- **WHEN** a WebGL 2 context with a 4-byte `PIXEL_PACK_BUFFER` cleared to red calls `readPixels(0, 0, 1, 1, RGBA, UNSIGNED_BYTE, 0)` and then `getBufferSubData` on the pack buffer
+- **THEN** the buffer holds `[255, 0, 0, 255]` (cf. Khronos `conformance2/reading/read-pixels-into-pixel-pack-buffer.html`)
+
+#### Scenario: Mismatched overload
+- **WHEN** `readPixels` with an `ArrayBufferView` is called while a pixel pack buffer is bound
+- **THEN** `INVALID_OPERATION` is generated

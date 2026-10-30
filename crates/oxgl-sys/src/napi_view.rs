@@ -14,7 +14,7 @@ use std::sync::atomic::{AtomicU8, AtomicUsize, Ordering};
 use napi::bindgen_prelude::{JsValue, Unknown};
 use napi::sys;
 
-use crate::view::{PixelDestination, ViewKind};
+use crate::view::{ByteSource, PixelDestination, ViewKind};
 
 /// A typed array or `DataView` destination, valid for the current call only.
 #[derive(Debug)]
@@ -158,16 +158,17 @@ impl PixelDestination for WriteTarget<'_> {
         }
     }
 
-    fn copy_from(&self, buffer: &[u8]) {
+    fn copy_from_at(&self, offset: usize, buffer: &[u8]) {
         let mut index = 0;
         while index < buffer.len() {
+            let at = offset.saturating_add(index);
             let chunk = buffer
                 .get(index..index + WORD)
                 .and_then(|bytes| <[u8; WORD]>::try_from(bytes).ok());
-            if let (Some(word), Some(bytes)) = (self.word(index), chunk) {
+            if let (Some(word), Some(bytes)) = (self.word(at), chunk) {
                 word.store(usize::from_ne_bytes(bytes), Ordering::Relaxed);
                 index += WORD;
-            } else if let (Some(byte), Some(&value)) = (self.byte(index), buffer.get(index)) {
+            } else if let (Some(byte), Some(&value)) = (self.byte(at), buffer.get(index)) {
                 byte.store(value, Ordering::Relaxed);
                 index += 1;
             } else {
@@ -201,4 +202,203 @@ fn check(status: sys::napi_status) -> napi::Result<()> {
     } else {
         Err(napi::Error::from_status(napi::Status::from(status)))
     }
+}
+
+/// An `ArrayBuffer`, `SharedArrayBuffer`, typed array or `DataView` to read
+/// from, valid for the current call only.
+///
+/// For memory no other thread can reach (a non-shared `ArrayBuffer`), the
+/// bytes are borrowed directly: no JS runs while the source exists, so the
+/// buffer can be neither detached, resized nor collected. A
+/// `SharedArrayBuffer` may be written concurrently, so its bytes are copied
+/// with relaxed atomic loads first, never borrowed.
+#[derive(Debug)]
+pub struct ReadSource<'a> {
+    data: *const u8,
+    len: usize,
+    kind: ViewKind,
+    shared: bool,
+    scope: PhantomData<&'a ()>,
+}
+
+impl<'a> ReadSource<'a> {
+    /// Wraps `value` if it is an `ArrayBuffer`, `SharedArrayBuffer`, typed
+    /// array or `DataView`; `Ok(None)` otherwise. A bare buffer reads as
+    /// `ViewKind::Uint8`.
+    ///
+    /// # Errors
+    ///
+    /// Returns the Node-API status if a query fails.
+    pub fn new(value: &Unknown<'a>) -> napi::Result<Option<Self>> {
+        let raw = value.value();
+        let (env, value) = (raw.env, raw.value);
+        let mut is_typedarray = false;
+        // SAFETY: `env` and `value` come from a live `Unknown` of the current
+        // call; the out-pointer is valid.
+        check(unsafe { sys::napi_is_typedarray(env, value, &raw mut is_typedarray) })?;
+        if is_typedarray {
+            let mut ty: sys::napi_typedarray_type = 0;
+            let mut length = 0usize;
+            let mut data: *mut std::ffi::c_void = ptr::null_mut();
+            let mut buffer: sys::napi_value = ptr::null_mut();
+            // SAFETY: as above; `value` is a typed array and every
+            // out-pointer is valid (the offset output is optional).
+            check(unsafe {
+                sys::napi_get_typedarray_info(
+                    env,
+                    value,
+                    &raw mut ty,
+                    &raw mut length,
+                    &raw mut data,
+                    &raw mut buffer,
+                    ptr::null_mut(),
+                )
+            })?;
+            let (kind, size) = typed_array_kind(ty);
+            let shared = !is_plain_buffer(env, buffer)?;
+            return Ok(Some(Self::from_parts(
+                data,
+                length.saturating_mul(size),
+                kind,
+                shared,
+            )));
+        }
+        let mut is_dataview = false;
+        // SAFETY: as above.
+        check(unsafe { sys::napi_is_dataview(env, value, &raw mut is_dataview) })?;
+        if is_dataview {
+            let mut length = 0usize;
+            let mut data: *mut std::ffi::c_void = ptr::null_mut();
+            let mut buffer: sys::napi_value = ptr::null_mut();
+            // SAFETY: as above; `value` is a DataView.
+            check(unsafe {
+                sys::napi_get_dataview_info(
+                    env,
+                    value,
+                    &raw mut length,
+                    &raw mut data,
+                    &raw mut buffer,
+                    ptr::null_mut(),
+                )
+            })?;
+            let shared = !is_plain_buffer(env, buffer)?;
+            return Ok(Some(Self::from_parts(
+                data,
+                length,
+                ViewKind::DataView,
+                shared,
+            )));
+        }
+        if is_plain_buffer(env, value)? {
+            let mut length = 0usize;
+            let mut data: *mut std::ffi::c_void = ptr::null_mut();
+            // SAFETY: as above; `value` is an ArrayBuffer.
+            check(unsafe {
+                sys::napi_get_arraybuffer_info(env, value, &raw mut data, &raw mut length)
+            })?;
+            return Ok(Some(Self::from_parts(data, length, ViewKind::Uint8, false)));
+        }
+        Ok(None)
+    }
+
+    fn from_parts(data: *mut std::ffi::c_void, len: usize, kind: ViewKind, shared: bool) -> Self {
+        // A detached buffer reports a null pointer; treat it as empty.
+        let len = if data.is_null() { 0 } else { len };
+        Self {
+            data: data.cast_const().cast(),
+            len,
+            kind,
+            shared,
+            scope: PhantomData,
+        }
+    }
+
+    /// Element type of the view.
+    #[must_use]
+    pub fn kind(&self) -> ViewKind {
+        self.kind
+    }
+
+    /// Length in bytes.
+    #[must_use]
+    pub fn byte_len(&self) -> usize {
+        self.len
+    }
+
+    /// Runs `f` on the bytes `range` of the source (clamped to its length).
+    pub fn read<R>(&self, range: std::ops::Range<usize>, f: impl FnOnce(&[u8]) -> R) -> R {
+        let end = range.end.min(self.len);
+        let start = range.start.min(end);
+        if start == end {
+            return f(&[]);
+        }
+        if self.shared {
+            let mut copy = vec![0u8; end - start];
+            self.copy_shared(start, &mut copy);
+            return f(&copy);
+        }
+        // SAFETY: `start..end` lies inside the view's memory (`end <= len`).
+        // The buffer is a non-shared ArrayBuffer, reachable only from this
+        // thread, and no JS runs during the call, so nothing writes, detaches
+        // or frees it while the slice exists; the slice does not outlive `f`.
+        let bytes =
+            unsafe { std::slice::from_raw_parts(self.data.wrapping_add(start), end - start) };
+        f(bytes)
+    }
+}
+
+impl ReadSource<'_> {
+    /// Copies `out.len()` bytes from `start` (inside the view) with relaxed
+    /// atomic loads, word-sized where aligned, as `WriteTarget` writes.
+    fn copy_shared(&self, start: usize, out: &mut [u8]) {
+        let mut index = 0;
+        while index < out.len() {
+            let at = self.data.wrapping_add(start + index).cast_mut();
+            let word_fits = start + index + WORD <= self.len && index + WORD <= out.len();
+            if word_fits && at.align_offset(WORD) == 0 {
+                #[allow(clippy::cast_ptr_alignment, reason = "alignment checked above")]
+                let word = at.cast::<usize>();
+                // SAFETY: the word lies inside the view's live memory
+                // (`start + index + WORD <= len`) and is aligned (checked);
+                // other threads may write it, so it is read atomically.
+                let value = unsafe { AtomicUsize::from_ptr(word) }.load(Ordering::Relaxed);
+                if let Some(bytes) = out.get_mut(index..index + WORD) {
+                    bytes.copy_from_slice(&value.to_ne_bytes());
+                }
+                index += WORD;
+            } else {
+                // SAFETY: `start + index < len` (the caller clamps the range
+                // to the view), inside its live memory; read atomically.
+                let value = unsafe { AtomicU8::from_ptr(at) }.load(Ordering::Relaxed);
+                if let Some(byte) = out.get_mut(index) {
+                    *byte = value;
+                }
+                index += 1;
+            }
+        }
+    }
+}
+
+impl ByteSource for ReadSource<'_> {
+    fn kind(&self) -> ViewKind {
+        self.kind
+    }
+
+    fn byte_len(&self) -> usize {
+        self.len
+    }
+
+    fn with_bytes(&self, range: std::ops::Range<usize>, f: &mut dyn FnMut(&[u8])) {
+        self.read(range, f);
+    }
+}
+
+/// Whether `value` is a non-shared `ArrayBuffer` (`napi_is_arraybuffer` is
+/// `false` for a `SharedArrayBuffer`).
+fn is_plain_buffer(env: sys::napi_env, value: sys::napi_value) -> napi::Result<bool> {
+    let mut plain = false;
+    // SAFETY: `env` and `value` belong to the current call; the out-pointer
+    // is valid.
+    check(unsafe { sys::napi_is_arraybuffer(env, value, &raw mut plain) })?;
+    Ok(plain)
 }

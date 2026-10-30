@@ -28,15 +28,30 @@ The runner SHALL provide two suites, each selected by the suite's own test lists
 - **THEN** no page under `conformance2/` is run
 
 ### Requirement: Pages obtain oxgl contexts through canvas
-Within a page, `getContext` on a canvas element SHALL return an oxgl context for `'webgl'` and `'experimental-webgl'` (WebGL 1) and for `'webgl2'` (WebGL 2), sized to the canvas's `width` and `height` when it is first created. It SHALL return the same context on later calls for that canvas, and `null` for any other context type. The page's global scope SHALL expose oxgl's `WebGLRenderingContext` and `WebGL2RenderingContext`.
+In a page, `getContext` on a canvas SHALL return an oxgl context for `'webgl'` and `'experimental-webgl'` (WebGL 1) and `'webgl2'` (WebGL 2), created with the canvas's size, the `getContext` attributes and the element as its `canvas`, and a working 2D context for `'2d'`. Later calls SHALL return the same context, and `null` for other types. The page's global scope SHALL expose oxgl's `WebGLRenderingContext` and `WebGL2RenderingContext`.
 
 #### Scenario: Default canvas size
 - **WHEN** a page calls `getContext('webgl')` on a canvas with no size attributes
 - **THEN** it receives an oxgl `WebGLRenderingContext` with a 300×150 drawing buffer (cf. Khronos `conformance/canvas/drawingbuffer-test.html`)
 
+#### Scenario: Context belongs to its canvas
+- **WHEN** a page calls `canvas.getContext('webgl', { alpha: false })`
+- **THEN** `gl.canvas === canvas` and `gl.getContextAttributes().alpha` is `false`
+
 #### Scenario: Unsupported context type
-- **WHEN** a page calls `getContext('2d')`
-- **THEN** it receives `null`, and a page that needs a 2D context fails rather than the runner crashing
+- **WHEN** a page calls `getContext('bitmaprenderer')`
+- **THEN** it receives `null`, and a page that needs that context fails rather than the runner crashing
+
+#### Scenario: 2D context
+- **WHEN** a page calls `getContext('2d')`, fills a rectangle red, and reads it with `getImageData`
+- **THEN** it receives a 2D context and reads back `[255, 0, 0, 255]`
+
+### Requirement: One context type per canvas
+A canvas that returned a context of one type SHALL return `null` from `getContext` for any other type, in both directions between oxgl's WebGL contexts and the 2D context (HTML §4.12.5, `getContext`).
+
+#### Scenario: One context type per canvas
+- **WHEN** a page calls `getContext('2d')` on a canvas, then `getContext('webgl')` on it, and does the same in the other order on a second canvas
+- **THEN** both second calls return `null`
 
 ### Requirement: oxgl objects belong to the page
 As in a browser, oxgl's context classes, the contexts a page creates and the errors oxgl's API throws SHALL belong to the page's own JavaScript realm.
@@ -49,19 +64,8 @@ As in a browser, oxgl's context classes, the contexts a page creates and the err
 When oxgl rejects a context creation requested through `getContext`, `getContext` SHALL return `null`, as a browser does when creation fails, and the rejection message SHALL be recorded with the page's results.
 
 #### Scenario: Creation rejected by oxgl
-- **WHEN** a page calls `getContext('webgl')` on a 0×0 canvas and oxgl's `createContext` throws
+- **WHEN** a page running on the software backend calls `getContext('webgl', { failIfMajorPerformanceCaveat: true })` and oxgl's `createContext` throws
 - **THEN** `getContext` returns `null` instead of throwing, and the report's entry for the page includes oxgl's error message
-
-### Requirement: Unsupported media fails promptly
-Image, video and audio elements in a page SHALL report a load error shortly after a source is set, instead of never loading, so pages that depend on decoded media fail without waiting for the time limit. The runner SHALL NOT add or change any member of an oxgl context object; pages see oxgl's API as shipped.
-
-#### Scenario: Texture upload from an image
-- **WHEN** a page sets an `<img>` source and waits for its load event before uploading a texture
-- **THEN** the image fires `error`, and the page fails or reports its own failure well before the time limit
-
-#### Scenario: Member oxgl lacks
-- **WHEN** a page reads `gl.canvas` and oxgl does not provide it
-- **THEN** the page sees `undefined`, as it would from oxgl outside the runner
 
 ### Requirement: Closure-loaded scripts run in browser order
 When a page loads scripts through the Closure Library's uncompiled loader (`goog.require` in `closure-library/closure/goog/base.js`, as every `deqp/` page does), each file the loader imports SHALL run before the import returns, dependencies first, as a script written with `document.write` during parsing runs in a browser (HTML Standard §8.4.3).
@@ -194,11 +198,15 @@ The root `package.json` SHALL expose `npm run conformance`, which runs both suit
 - **THEN** the run is judged against the expectations it writes, the expectations entries for the pages that ran are replaced with their outcomes, existing reasons are kept for entries whose outcome is unchanged, entries for pages that now pass are removed, on a run of whole suites entries for pages those suites no longer contain are removed, and new or changed entries take the page's first escaped error as their reason, or its first failure message when it has none (for `TIMEOUT` and `CRASH`, `no new result within the time limit` / `crashed`, followed by the first escaped error's message when there is one), reduced to its first line and at most 200 characters; the command then exits zero unless the expectations file could not be parsed or a page had a harness error
 
 ### Requirement: Pages run in parallel
-The conformance command SHALL accept an option setting how many pages run at once, defaulting to the number of CPUs available to the process (at least one).
+The conformance command SHALL accept an option setting how many pages run at once, defaulting to the number of CPUs available to the process, but no more than one page per GiB of memory available to it (at least one).
 
 #### Scenario: Default parallelism
 - **WHEN** a developer runs the command without the parallelism option on a machine where 4 CPUs are available to the process
 - **THEN** up to 4 pages run at once, and the report records 4 as the number of pages run in parallel
+
+#### Scenario: Memory bounds the default
+- **WHEN** a developer runs the command without the parallelism option on a machine with 16 CPUs and 8 GiB of memory
+- **THEN** up to 8 pages run at once, so pages do not stall while the machine swaps
 
 ### Requirement: Backend follows the environment
 The runner SHALL create contexts with the backend selected by `OXGL_BACKEND` (backend-selection), and the report SHALL record that requested backend (`auto` when unset). Under `auto` the report does not say which backend served each context; runs meant to be compared set `OXGL_BACKEND` explicitly.
@@ -206,3 +214,180 @@ The runner SHALL create contexts with the backend selected by `OXGL_BACKEND` (ba
 #### Scenario: Software run
 - **WHEN** the command runs with `OXGL_BACKEND=software`
 - **THEN** every context the pages create renders with SwiftShader and the report records `software`
+
+### Requirement: Images load and decode
+Image elements in a page SHALL load their source from the suite, fire `load` with their natural size, and be drawable into a 2D context, which then reads back their decoded pixels. An image whose source cannot be loaded or decoded SHALL fire `error`.
+
+#### Scenario: Image drawn into a 2D canvas
+- **WHEN** a page loads a suite PNG into an `<img>`, waits for `load`, draws it into a 2D canvas and calls `getImageData`
+- **THEN** the pixels match the PNG's (cf. Khronos `conformance/textures/image/tex-2d-rgba-rgba-unsigned_byte.html`)
+
+#### Scenario: Missing image
+- **WHEN** a page sets an `<img>` source to a path the suite does not have
+- **THEN** the image fires `error`
+
+### Requirement: Messages carry their source
+A message posted with `window.postMessage` SHALL be delivered once, in a task, as a `message` event whose `source` is the receiving window, when the `targetOrigin` is `'*'`, `'/'` or the receiving window's origin. Its `data` SHALL be the posted value itself, as jsdom delivers it.
+
+Accepted trade-off (HTML §9.3.3 differs): a frame posting to its parent gets the parent as `source`, and objects are not cloned. The suite reads `source` only for self-posts and posts only strings.
+
+#### Scenario: Zero-timeout helper
+- **WHEN** a page queues a callback with a helper that, like the suite's `setZeroTimeout` in `js/webgl-test-utils.js`, posts a message to its own window and runs the callback only when `event.source == window`
+- **THEN** the callback runs (cf. Khronos `conformance/context/context-creation.html`)
+
+#### Scenario: Message from a frame
+- **WHEN** a frame calls `parent.postMessage('Ready', '*')`
+- **THEN** the page's `message` listener receives `'Ready'` exactly once (cf. Khronos `conformance/context/context-release-upon-reload.html`)
+
+#### Scenario: Mismatched target origin
+- **WHEN** a page posts to its own window with a `targetOrigin` of another origin
+- **THEN** no `message` event is delivered
+
+### Requirement: ImageData in pages
+The page's global scope SHALL expose a working `ImageData` constructor, and the 2D context's `createImageData` and `getImageData` SHALL return instances of it.
+
+Accepted trade-off: the constructor is the canvas package's, which its `putImageData` requires, so instances and their `data` belong to the runner's realm, not the page's.
+
+#### Scenario: Constructed ImageData
+- **WHEN** a page evaluates `new ImageData(2, 1)`
+- **THEN** it receives an object with `width` `2`, `height` `1`, and a 8-byte `Uint8ClampedArray` `data` of zeros, and `ctx.getImageData(0, 0, 1, 1) instanceof ImageData` is `true`
+
+### Requirement: The runner requires the canvas package
+The runner SHALL refuse to run pages when the `canvas` package cannot be loaded, reporting a runner error that names the package and how to install it, instead of running pages without 2D canvases or images.
+
+#### Scenario: Canvas package missing
+- **WHEN** `npm run conformance` runs and `require('canvas')` fails
+- **THEN** the run stops before any page with an error naming `canvas` and `npm ci`, and no page outcome is recorded
+
+### Requirement: Canvas resizes reach the drawing buffer
+When a page changes the `width` or `height` of a canvas that has an oxgl context, through the property or the content attribute, the context's drawing buffer SHALL be resized to the canvas's new size before that call returns, as a browser does (WebGL 1.0 §2.2).
+
+#### Scenario: Page resizes its canvas
+- **WHEN** a page sets `canvas.width = 20` on a canvas with a WebGL context
+- **THEN** `gl.drawingBufferWidth` is `20` (cf. Khronos `conformance/canvas/drawingbuffer-test.html`)
+
+#### Scenario: Page resizes through the attribute
+- **WHEN** a page calls `canvas.setAttribute('height', '30')` and then `canvas.removeAttribute('width')` on a canvas with a WebGL context
+- **THEN** `gl.drawingBufferHeight` is `30` right after the first call, and `gl.drawingBufferWidth` is `300` right after the second
+
+### Requirement: WebGL canvases in the runner's DOM
+In the conformance runner, drawing a canvas that has an oxgl context into a 2D canvas, or calling its `toDataURL`, SHALL use the context's drawing buffer, unpremultiplied, top row first; `HTMLImageElement.decode()` SHALL resolve once the image has loaded and reject when it fails to.
+
+#### Scenario: WebGL canvas drawn into a 2D canvas
+- **WHEN** a page clears a WebGL canvas to a color and draws it into a 2D canvas
+- **THEN** the 2D canvas reads back that color (cf. Khronos `conformance/canvas/draw-webgl-to-canvas-test.html`)
+
+### Requirement: Canvases are composited each frame
+At the start of each animation frame, before that frame's callbacks, the runner SHALL present the drawing buffer of every WebGL canvas in the document, as a browser composites it. Canvases outside the document SHALL NOT be presented.
+
+#### Scenario: On-screen and off-screen canvases
+- **WHEN** a page clears an on-screen and an off-screen canvas to red and waits for a composite
+- **THEN** the on-screen canvas reads transparent black and the off-screen one still reads red (cf. Khronos `conformance/canvas/buffer-offscreen-test.html`)
+
+### Requirement: Long-running pages load later resources
+The runner's server SHALL keep a page's idle connections open however long the page runs synchronously, so a resource requested afterwards (such as `js-test-post.js`) loads instead of failing on a connection the server closed.
+
+#### Scenario: Page busy for longer than five seconds
+- **WHEN** a page runs synchronously for more than five seconds and then calls `finishTest()`
+- **THEN** the page completes instead of timing out (cf. Khronos `conformance/reading/read-pixels-test.html`)
+
+### Requirement: Tainted 2D canvases in the runner
+In the runner's DOM, a 2D canvas that draws a cross-origin image without CORS, or a tainted canvas, SHALL become tainted, and its `getImageData` and `toDataURL` SHALL throw a `SecurityError` (HTML §4.12.5.1.7). The suite's cross-origin images come from its server under the other loopback name (`127.0.0.1` or `localhost`).
+
+#### Scenario: Canvas drawn with a cross-origin image
+- **WHEN** a page draws a cross-origin image into a 2D canvas and uploads the canvas with `texImage2D`
+- **THEN** a `SecurityError` is thrown (cf. Khronos `conformance/more/functions/texImage2DHTML.html`)
+
+### Requirement: Workers in pages
+The runner SHALL provide `Worker` for classic scripts, run on worker threads, with `postMessage` in both directions, `onmessage` and `message` listeners, `close` and `terminate`. Messages reaching the page SHALL be structured clones rebuilt in the page's realm. Workers SHALL have no `importScripts`, WebGL or `OffscreenCanvas`.
+
+#### Scenario: Page with a worker
+- **WHEN** a page creates a `Worker` whose script posts a message and closes
+- **THEN** the page receives the message, and its WebGL contexts are released across reloads as without the worker (cf. Khronos `conformance/context/context-release-with-workers.html`)
+
+#### Scenario: Typed arrays through a worker
+- **WHEN** a page sends typed arrays to a worker and receives them back
+- **THEN** they arrive with their contents, as instances of the page's own constructors (cf. Khronos `conformance/typedarrays/typed-arrays-in-workers.html`)
+
+### Requirement: Window load fires once
+The runner SHALL deliver a window's `load` event to the page once, as browsers do, even when jsdom fires it again after later image loads.
+
+#### Scenario: Images created after load
+- **WHEN** a page's `<body onload>` handler creates images, and they finish loading
+- **THEN** the handler has run once (cf. Khronos `conformance/textures/misc/tex-image-with-format-and-type.html`)
+
+### Requirement: Images decoded as for WebGL
+The runner SHALL decode PNG images it fetched for WebGL uploads itself: gamma and color profiles ignored, alpha unpremultiplied, 16-bit samples kept. It SHALL rasterize SVG images at the element's size, and write a WebGL canvas's `toDataURL` PNG from its unpremultiplied pixels. Other images SHALL go through the canvas package.
+
+#### Scenario: Gamma and 16-bit PNGs
+- **WHEN** a page uploads PNGs with gamma chunks, color profiles, palettes and 16-bit samples
+- **THEN** the textures hold the stored values (cf. Khronos `conformance/textures/misc/gl-teximage.html`)
+
+#### Scenario: Resized SVG image
+- **WHEN** a page doubles an SVG image's `width` and `height` and uploads it
+- **THEN** the texture has the doubled size (cf. Khronos `conformance/textures/misc/texture-upload-size.html`)
+
+### Requirement: Image width changes do not reload
+In the runner, changing an image's `width` attribute SHALL NOT reload it unless it has `srcset` or `sizes`, as in Chromium.
+
+#### Scenario: Width doubled in the load handler
+- **WHEN** a page's image load handler doubles the image's `width`
+- **THEN** the handler is not called again
+
+### Requirement: ImageBitmaps in pages
+The runner SHALL provide `createImageBitmap` for Blobs, images, ImageData and canvases, honoring `imageOrientation: 'flipY'` and `premultiplyAlpha: 'premultiply'`, and `fetch` when jsdom has none. Image bitmaps SHALL upload with the pixels they were created from, JPEGs upright for their EXIF orientation.
+
+#### Scenario: Bitmap from a fetched JPEG
+- **WHEN** a page fetches a JPEG with an EXIF orientation, creates an ImageBitmap from its Blob and uploads it
+- **THEN** the texture shows the image upright (cf. Khronos `conformance/textures/misc/exif-orientation.html`)
+
+### Requirement: SVG images at the element's size
+The runner SHALL draw SVG images for uploads from their bytes at the element's size, and SHALL load an SVG whose root has no `width` or `height` with no natural size instead of failing.
+
+#### Scenario: Unsized SVG
+- **WHEN** a page loads an SVG with only a `viewBox`
+- **THEN** its `load` event fires and its natural size is 0×0
+
+### Requirement: OffscreenCanvas in pages and workers
+The runner SHALL provide `OffscreenCanvas` in pages and workers, with oxgl WebGL contexts, 2D contexts, `transferToImageBitmap` (which leaves a cleared drawing buffer), `convertToBlob`, and `HTMLCanvasElement.transferControlToOffscreen`, whose canvas is composited when its placeholder is in the document.
+
+#### Scenario: WebGL on an OffscreenCanvas in a worker
+- **WHEN** a worker creates a WebGL context on an OffscreenCanvas and checks its creation
+- **THEN** the page receives the worker's result (cf. Khronos `conformance/offscreencanvas/context-creation-worker.html`)
+
+#### Scenario: Transferred canvas without preserveDrawingBuffer
+- **WHEN** a page draws to the OffscreenCanvas of a placeholder in the document and waits for frames
+- **THEN** the drawing buffer is cleared (cf. Khronos `conformance/offscreencanvas/context-attribute-preserve-drawing-buffer.html`)
+
+### Requirement: Worker globals
+The runner's workers SHALL load oxgl in their thread and have the WebGL interfaces, `OffscreenCanvas`, `ImageBitmap`, `ImageData`, `requestAnimationFrame`, nested `Worker`s, Blob URLs, and `importScripts` of the suite's own files. ImageBitmaps SHALL cross threads as their pixels.
+
+#### Scenario: ImageBitmap from a nested worker
+- **WHEN** a worker starts a worker from a Blob URL, which transfers an ImageBitmap back
+- **THEN** the page receives an ImageBitmap with the drawn pixels (cf. Khronos `conformance/offscreencanvas/offscreencanvas-transfer-image-bitmap.html`)
+
+### Requirement: Video plays through ffmpeg
+Video elements in a page SHALL load, play and report their size, duration and current time, decoded by ffmpeg with rotation applied. `canPlayType` SHALL answer "maybe" for video types, `play()` SHALL resolve once the video has loaded, and `requestVideoFrameCallback` SHALL call back on the next frame. A source that does not decode SHALL fire `error` and reject `play()` promptly.
+
+#### Scenario: Video in a 2D canvas and an ImageBitmap
+- **WHEN** a page draws a playing video into a 2D canvas, or creates an ImageBitmap from it
+- **THEN** the current frame is drawn, or held (cf. Khronos `conformance/textures/image_bitmap_from_video/tex-2d-rgba-rgba-unsigned_byte.html`)
+
+#### Scenario: Missing video
+- **WHEN** a page sets a `<video>` source that does not exist and calls `play()`
+- **THEN** `error` fires and `play()` rejects with `NotSupportedError` well before the time limit
+
+#### Scenario: Texture upload from a video
+- **WHEN** a page plays a red-above-green video and uploads it with `texImage2D`
+- **THEN** the texture's top rows are red and its bottom rows green (cf. Khronos `conformance/textures/video/tex-2d-rgba-rgba-unsigned_byte.html`)
+
+#### Scenario: Rotated video
+- **WHEN** a page uploads a video with rotation metadata
+- **THEN** the frame uploads upright (cf. Khronos `conformance/textures/misc/video-rotation.html`)
+
+### Requirement: The runner requires ffmpeg
+The runner SHALL refuse to run pages when `ffmpeg` or `ffprobe` cannot be run, reporting a runner error that names them, instead of running video pages that would skip their video cases.
+
+#### Scenario: ffmpeg missing
+- **WHEN** `npm run conformance` runs and `ffprobe -version` fails
+- **THEN** the run stops before any page with an error naming ffmpeg, and no page outcome is recorded

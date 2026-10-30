@@ -33,11 +33,31 @@ pub fn key_from_parts([index, version]: [u32; 2]) -> ContextKey {
     KeyData::from_ffi((u64::from(version) << 32) | u64::from(index)).into()
 }
 
+/// [`key_to_parts`] for object keys.
+#[must_use]
+pub fn object_key_to_parts(key: crate::context::ObjectKey) -> [u32; 2] {
+    let ffi = key.data().as_ffi();
+    #[allow(
+        clippy::cast_possible_truncation,
+        reason = "splitting a u64 into halves"
+    )]
+    [ffi as u32, (ffi >> 32) as u32]
+}
+
+/// [`key_from_parts`] for object keys; `[0, 0]` (never a live key, as
+/// occupied slots have odd versions) stands for `null`.
+#[must_use]
+pub fn object_key_from_parts([index, version]: [u32; 2]) -> Option<crate::context::ObjectKey> {
+    (version != 0).then(|| KeyData::from_ffi((u64::from(version) << 32) | u64::from(index)).into())
+}
+
 /// Work deferred from garbage collection to a safe point on the owning thread.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Deferred {
     /// Destroy a context whose JS object was collected.
     Context(ContextKey),
+    /// Delete a WebGL object whose JS object was collected.
+    Object(ContextKey, crate::context::ObjectKey),
 }
 
 /// The contexts of one environment. Contexts are thread-affine, so a
@@ -95,12 +115,27 @@ impl Runtime {
         self.drain();
     }
 
-    /// Performs all deferred deletions.
+    /// Defers deletion of a garbage-collected object and drains the queue.
+    pub fn release_object(&mut self, context: ContextKey, object: crate::context::ObjectKey) {
+        self.deletion_queue.push(Deferred::Object(context, object));
+        self.drain();
+    }
+
+    /// Performs all deferred deletions. An object whose context is gone is
+    /// skipped: destroying the context freed it.
     pub fn drain(&mut self) {
+        if self.deletion_queue.is_empty() {
+            return;
+        }
         for deferred in std::mem::take(&mut self.deletion_queue) {
             match deferred {
                 Deferred::Context(key) => {
                     self.contexts.remove(key);
+                }
+                Deferred::Object(context, object) => {
+                    if let Some(context) = self.contexts.get_mut(context) {
+                        context.delete_object(object);
+                    }
                 }
             }
         }
@@ -110,6 +145,12 @@ impl Runtime {
     pub fn destroy_all(&mut self) {
         self.deletion_queue.clear();
         self.contexts.clear();
+    }
+
+    /// Number of live WebGL objects across every context (for tests).
+    #[must_use]
+    pub fn live_objects(&self) -> usize {
+        self.contexts.values().map(Context::object_count).sum()
     }
 
     /// Number of live contexts.
@@ -137,6 +178,14 @@ mod tests {
         assert_eq!(key_to_parts(key_from_parts(parts)), parts);
         let parts = [u32::MAX - 1, u32::MAX];
         assert_eq!(key_to_parts(key_from_parts(parts)), parts);
+    }
+
+    #[test]
+    fn object_keys_round_trip_and_zero_is_null() {
+        let mut map: SlotMap<crate::context::ObjectKey, ()> = SlotMap::with_key();
+        let key = map.insert(());
+        assert_eq!(object_key_from_parts(object_key_to_parts(key)), Some(key));
+        assert_eq!(object_key_from_parts([0, 0]), None);
     }
 
     #[test]

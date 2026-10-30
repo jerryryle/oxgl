@@ -15,6 +15,7 @@ fn gpu_contexts_leave_the_environment_alone() {
         width: 4.0,
         height: 4.0,
         webgl2: false,
+        attributes: oxgl_core::Attributes::DEFAULT,
     };
     // Initializes the GPU display before watching; skip without a GPU.
     match runtime.create_context(RequestedBackend::Gpu, &request) {

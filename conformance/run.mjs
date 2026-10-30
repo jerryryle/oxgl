@@ -2,6 +2,7 @@
 // the outcomes against conformance/expectations.txt and writes
 // conformance-results.json.
 import { existsSync, readFileSync, writeFileSync } from 'node:fs';
+import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 
@@ -10,6 +11,7 @@ import { listPages, SUITES } from './lists.mjs';
 import { defaultJobs, runPages } from './pool.mjs';
 import { startServer } from './server.mjs';
 import { ensureSuite, readPin, REPO_ROOT } from './suite.mjs';
+import { ffmpegAvailable } from './video.mjs';
 
 export const EXPECTATIONS_PATH = join(REPO_ROOT, 'conformance', 'expectations.txt');
 export const REPORT_PATH = join(REPO_ROOT, 'conformance-results.json');
@@ -137,7 +139,35 @@ const USAGE = `usage: npm run conformance -- [--suite webgl1|webgl2] [--filter <
  * The command: parses `argv`, then runs the selected suites. Resolves to the
  * exit code; throws on bad options or expectations, before fetching anything.
  */
-export async function main(argv = process.argv.slice(2), { expectationsPath = EXPECTATIONS_PATH, fetchSuite = ensureSuite } = {}) {
+/**
+ * Loads the `canvas` package, which jsdom needs for 2D contexts and images.
+ * Without it about 200 pages would fail in the runner rather than in oxgl.
+ */
+export function requireCanvas(load = () => createRequire(import.meta.url)('canvas')) {
+  try {
+    load();
+  } catch (error) {
+    throw new Error(
+      `the 'canvas' package (a devDependency jsdom uses for 2D canvases and images) cannot be loaded; run \`npm ci\`: ${error instanceof Error ? error.message : String(error)}`,
+      { cause: error },
+    );
+  }
+}
+
+/**
+ * Checks for ffmpeg and ffprobe, which decode the pages' videos. Without
+ * them the video pages would skip their video cases and pass.
+ */
+export function requireFfmpeg(available = ffmpegAvailable) {
+  if (!available) {
+    throw new Error('ffmpeg and ffprobe, which decode the pages\' videos, cannot be run; install ffmpeg (for example `apt-get install ffmpeg`)');
+  }
+}
+
+export async function main(
+  argv = process.argv.slice(2),
+  { expectationsPath = EXPECTATIONS_PATH, fetchSuite = ensureSuite, loadCanvas, hasFfmpeg } = {},
+) {
   const { values } = parseArgs({
     args: argv,
     options: {
@@ -163,6 +193,9 @@ export async function main(argv = process.argv.slice(2), { expectationsPath = EX
   if (!existsSync(join(REPO_ROOT, 'dist', 'index.js'))) {
     throw new Error('dist/ is not built; run `npm run build` first');
   }
+
+  requireCanvas(loadCanvas);
+  requireFfmpeg(hasFfmpeg);
 
   // Parse before fetching or running anything, so a bad entry fails fast.
   const expectations = parseExpectations(readFileSync(expectationsPath, 'utf8'), expectationsPath);

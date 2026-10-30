@@ -10,8 +10,11 @@
 use std::path::Path;
 
 use oxgl_sys::bindings::{
-    GL_COLOR_BUFFER_BIT, GL_INVALID_OPERATION, GL_MAX_RENDERBUFFER_SIZE, GL_MAX_VIEWPORT_DIMS,
-    GL_NO_ERROR, GL_RENDERER, GL_RGBA, GL_UNSIGNED_BYTE,
+    GL_COLOR_ATTACHMENT0, GL_COLOR_BUFFER_BIT, GL_DEPTH_ATTACHMENT, GL_DEPTH_COMPONENT24,
+    GL_DEPTH_STENCIL_ATTACHMENT, GL_DEPTH24_STENCIL8, GL_FRAMEBUFFER, GL_FRAMEBUFFER_COMPLETE,
+    GL_INVALID_OPERATION, GL_MAX_RENDERBUFFER_SIZE, GL_MAX_VIEWPORT_DIMS, GL_NO_ERROR,
+    GL_RENDERBUFFER, GL_RENDERER, GL_RGB8, GL_RGBA, GL_RGBA8, GL_STENCIL_ATTACHMENT,
+    GL_STENCIL_INDEX8, GL_UNSIGNED_BYTE,
 };
 use oxgl_sys::test_support::bundle_dir;
 use oxgl_sys::{
@@ -63,7 +66,7 @@ fn swiftshader_clear_and_bounded_read() {
 fn swiftshader_clear_and_bounded_read_body() {
     let angle = Angle::load(&bundle_dir()).unwrap();
     let display = Display::open(&angle, DisplayKind::SwiftShader).unwrap();
-    let mut context = display.create_context(ClientVersion::Es2).unwrap();
+    let context = display.create_context(ClientVersion::Es2).unwrap();
     {
         let current = context.make_current().unwrap();
         let Some(Values::Integers([max_rb, ..])) =
@@ -78,8 +81,18 @@ fn swiftshader_clear_and_bounded_read_body() {
         };
         assert!(max_rb > 0 && vw > 0 && vh > 0);
     }
-    context.attach_pbuffer(4, 4).unwrap();
     let current = context.make_current().unwrap();
+    current.request_extension(c"GL_OES_rgb8_rgba8");
+    let framebuffer = current.gen_framebuffer();
+    let color = current.gen_renderbuffer();
+    current.bind_framebuffer(GL_FRAMEBUFFER, framebuffer);
+    current.bind_renderbuffer(GL_RENDERBUFFER, color);
+    current.renderbuffer_storage(GL_RENDERBUFFER, GL_RGBA8, 4, 4);
+    current.framebuffer_renderbuffer(GL_FRAMEBUFFER, GL_COLOR_ATTACHMENT0, GL_RENDERBUFFER, color);
+    assert_eq!(
+        current.check_framebuffer_status(GL_FRAMEBUFFER),
+        GL_FRAMEBUFFER_COMPLETE
+    );
     let renderer = current.get_string(GL_RENDERER).unwrap();
     assert!(renderer.contains("SwiftShader"), "{renderer}");
     current.clear_color(0.0, 1.0, 0.0, 1.0);
@@ -110,4 +123,274 @@ fn swiftshader_clear_and_bounded_read_body() {
     };
     let n = current.read_pixels(partial, &mut outside);
     eprintln!("partial read length {n}: {outside:?}");
+}
+
+#[test]
+fn drawing_buffer_attachment_combinations_are_complete() {
+    on_lasting_thread(drawing_buffer_attachment_combinations_body);
+}
+
+/// Every attachment combination of the drawing-buffer design's table, single-
+/// sampled and with 4 samples, on ES2 (with the requested ANGLE extensions)
+/// and ES3 `SwiftShader`.
+fn drawing_buffer_attachment_combinations_body() {
+    let angle = Angle::load(&bundle_dir()).unwrap();
+    let display = Display::open(&angle, DisplayKind::SwiftShader).unwrap();
+    for version in [ClientVersion::Es2, ClientVersion::Es3] {
+        let context = display.create_context(version).unwrap();
+        let current = context.make_current().unwrap();
+        if version == ClientVersion::Es2 {
+            current.request_extension(c"GL_OES_rgb8_rgba8");
+            current.request_extension(c"GL_ANGLE_framebuffer_multisample");
+            current.request_extension(c"GL_ANGLE_framebuffer_blit");
+        }
+        for color_format in [GL_RGBA8, GL_RGB8] {
+            for depth_stencil in [
+                None,
+                Some((GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL_ATTACHMENT)),
+                Some((GL_DEPTH_COMPONENT24, GL_DEPTH_ATTACHMENT)),
+                Some((GL_STENCIL_INDEX8, GL_STENCIL_ATTACHMENT)),
+            ] {
+                for samples in [0, 4] {
+                    let framebuffer = current.gen_framebuffer();
+                    current.bind_framebuffer(GL_FRAMEBUFFER, framebuffer);
+                    let storage = |format| {
+                        let renderbuffer = current.gen_renderbuffer();
+                        current.bind_renderbuffer(GL_RENDERBUFFER, renderbuffer);
+                        match (samples, version) {
+                            (0, _) => current.renderbuffer_storage(GL_RENDERBUFFER, format, 8, 8),
+                            (_, ClientVersion::Es2) => current
+                                .renderbuffer_storage_multisample_angle(
+                                    GL_RENDERBUFFER,
+                                    samples,
+                                    format,
+                                    8,
+                                    8,
+                                ),
+                            (_, ClientVersion::Es3) => current.renderbuffer_storage_multisample(
+                                GL_RENDERBUFFER,
+                                samples,
+                                format,
+                                8,
+                                8,
+                            ),
+                        }
+                        renderbuffer
+                    };
+                    let color = storage(color_format);
+                    current.framebuffer_renderbuffer(
+                        GL_FRAMEBUFFER,
+                        GL_COLOR_ATTACHMENT0,
+                        GL_RENDERBUFFER,
+                        color,
+                    );
+                    let other = depth_stencil.map(|(format, attachment)| {
+                        let renderbuffer = storage(format);
+                        current.framebuffer_renderbuffer(
+                            GL_FRAMEBUFFER,
+                            attachment,
+                            GL_RENDERBUFFER,
+                            renderbuffer,
+                        );
+                        renderbuffer
+                    });
+                    assert_eq!(
+                        current.check_framebuffer_status(GL_FRAMEBUFFER),
+                        GL_FRAMEBUFFER_COMPLETE,
+                        "{version:?} {color_format:#x} {depth_stencil:?} {samples} samples"
+                    );
+                    assert_eq!(current.get_error(), GL_NO_ERROR);
+                    current.delete_framebuffer(framebuffer);
+                    current.delete_renderbuffer(color);
+                    if let Some(renderbuffer) = other {
+                        current.delete_renderbuffer(renderbuffer);
+                    }
+                }
+            }
+        }
+    }
+}
+
+#[test]
+fn swiftshader_draws_a_triangle() {
+    on_lasting_thread(swiftshader_draws_a_triangle_body);
+}
+
+/// Compiles, links and draws a full-viewport triangle into an RGBA8
+/// framebuffer through the safe wrappers, on ES2 and ES3.
+fn swiftshader_draws_a_triangle_body() {
+    use oxgl_sys::bindings::{
+        GL_ARRAY_BUFFER, GL_COMPILE_STATUS, GL_FLOAT, GL_FRAGMENT_SHADER, GL_LINK_STATUS,
+        GL_STATIC_DRAW, GL_TRIANGLES, GL_VERTEX_SHADER,
+    };
+    let angle = Angle::load(&bundle_dir()).unwrap();
+    let display = Display::open(&angle, DisplayKind::SwiftShader).unwrap();
+    for version in [ClientVersion::Es2, ClientVersion::Es3] {
+        let context = display.create_context(version).unwrap();
+        let current = context.make_current().unwrap();
+        current.request_extension(c"GL_OES_rgb8_rgba8");
+        let framebuffer = current.gen_framebuffer();
+        let color = current.gen_renderbuffer();
+        current.bind_framebuffer(GL_FRAMEBUFFER, framebuffer);
+        current.bind_renderbuffer(GL_RENDERBUFFER, color);
+        current.renderbuffer_storage(GL_RENDERBUFFER, GL_RGBA8, 2, 2);
+        current.framebuffer_renderbuffer(
+            GL_FRAMEBUFFER,
+            GL_COLOR_ATTACHMENT0,
+            GL_RENDERBUFFER,
+            color,
+        );
+        current.apply(oxgl_sys::StateCall::Viewport(0, 0, 2, 2));
+
+        let compile = |kind, source| {
+            let shader = current.create_shader(kind);
+            current.shader_source(shader, source);
+            current.compile_shader(shader);
+            assert_eq!(
+                current.shader_parameter(shader, GL_COMPILE_STATUS),
+                Some(1),
+                "{:?}",
+                current.shader_info_log(shader)
+            );
+            shader
+        };
+        let vertex = compile(
+            GL_VERTEX_SHADER,
+            "attribute vec2 p; void main() { gl_Position = vec4(p, 0.0, 1.0); }",
+        );
+        let fragment = compile(
+            GL_FRAGMENT_SHADER,
+            "precision mediump float; void main() { gl_FragColor = vec4(1.0, 0.0, 1.0, 1.0); }",
+        );
+        let program = current.create_program();
+        current.attach_shader(program, vertex);
+        current.attach_shader(program, fragment);
+        current.link_program(program);
+        assert_eq!(current.program_parameter(program, GL_LINK_STATUS), Some(1));
+        current.use_program(program);
+
+        let buffer = current.gen_buffer();
+        current.bind_buffer(GL_ARRAY_BUFFER, buffer);
+        let vertices: Vec<u8> = [-1f32, -1.0, 3.0, -1.0, -1.0, 3.0]
+            .iter()
+            .flat_map(|v| v.to_ne_bytes())
+            .collect();
+        current.buffer_data(GL_ARRAY_BUFFER, &vertices, GL_STATIC_DRAW);
+        let location = u32::try_from(current.attrib_location(program, c"p")).unwrap();
+        current.enable_vertex_attrib_array(location);
+        current.vertex_attrib_pointer(location, 2, GL_FLOAT, false, 0, 0);
+        current.draw_arrays(GL_TRIANGLES, 0, 3);
+
+        let mut pixels = [0u8; 16];
+        let args = ReadPixels {
+            x: 0,
+            y: 0,
+            width: 2,
+            height: 2,
+            format: GL_RGBA,
+            ty: GL_UNSIGNED_BYTE,
+        };
+        assert_eq!(current.read_pixels(args, &mut pixels), 16);
+        assert!(
+            pixels.chunks(4).all(|p| p == [255, 0, 255, 255]),
+            "{version:?}: {pixels:?}"
+        );
+        assert_eq!(current.get_error(), GL_NO_ERROR);
+    }
+}
+
+#[test]
+fn requestable_extensions_are_listed() {
+    on_lasting_thread(|| {
+        use oxgl_sys::bindings::{GL_EXTENSIONS, GL_REQUESTABLE_EXTENSIONS_ANGLE};
+        let angle = Angle::load(&bundle_dir()).unwrap();
+        let display = Display::open(&angle, DisplayKind::SwiftShader).unwrap();
+        for version in [ClientVersion::Es2, ClientVersion::Es3] {
+            let context = display.create_context(version).unwrap();
+            let current = context.make_current().unwrap();
+            let requestable = current.get_string(GL_REQUESTABLE_EXTENSIONS_ANGLE).unwrap();
+            let enabled = current.get_string(GL_EXTENSIONS).unwrap();
+            eprintln!("{version:?} requestable: {requestable}");
+            eprintln!("{version:?} enabled: {enabled}");
+            assert!(
+                requestable.contains("GL_CHROMIUM_lose_context"),
+                "{requestable}"
+            );
+        }
+    });
+}
+
+/// The draw rate of ANGLE on `SwiftShader` without oxgl's layers, for
+/// comparison with `npm run bench`'s "drawArrays (1 small triangle)":
+/// `cargo test -p oxgl-sys --test angle --release raw_draw_rate -- --ignored --nocapture`.
+#[test]
+#[ignore = "a benchmark, run on demand"]
+fn raw_draw_rate() {
+    on_lasting_thread(|| {
+        use oxgl_sys::bindings::{
+            GL_ARRAY_BUFFER, GL_FLOAT, GL_FRAGMENT_SHADER, GL_STATIC_DRAW, GL_TRIANGLES,
+            GL_VERTEX_SHADER,
+        };
+        let angle = Angle::load(&bundle_dir()).unwrap();
+        let display = Display::open(&angle, DisplayKind::SwiftShader).unwrap();
+        let context = display.create_context(ClientVersion::Es3).unwrap();
+        let current = context.make_current().unwrap();
+        let framebuffer = current.gen_framebuffer();
+        let color = current.gen_renderbuffer();
+        current.bind_framebuffer(GL_FRAMEBUFFER, framebuffer);
+        current.bind_renderbuffer(GL_RENDERBUFFER, color);
+        current.renderbuffer_storage(GL_RENDERBUFFER, GL_RGBA8, 256, 256);
+        current.framebuffer_renderbuffer(
+            GL_FRAMEBUFFER,
+            GL_COLOR_ATTACHMENT0,
+            GL_RENDERBUFFER,
+            color,
+        );
+        current.apply(oxgl_sys::StateCall::Viewport(0, 0, 256, 256));
+        let compile = |kind, source| {
+            let shader = current.create_shader(kind);
+            current.shader_source(shader, source);
+            current.compile_shader(shader);
+            shader
+        };
+        let program = current.create_program();
+        current.attach_shader(
+            program,
+            compile(
+                GL_VERTEX_SHADER,
+                "attribute vec2 a; void main() { gl_Position = vec4(a * 0.01, 0.0, 1.0); }",
+            ),
+        );
+        current.attach_shader(
+            program,
+            compile(
+                GL_FRAGMENT_SHADER,
+                "precision mediump float; void main() { gl_FragColor = vec4(1.0); }",
+            ),
+        );
+        current.link_program(program);
+        current.use_program(program);
+        let buffer = current.gen_buffer();
+        current.bind_buffer(GL_ARRAY_BUFFER, buffer);
+        let vertices: Vec<u8> = [0f32, 0.0, 1.0, 0.0, 0.0, 1.0]
+            .iter()
+            .flat_map(|v| v.to_ne_bytes())
+            .collect();
+        current.buffer_data(GL_ARRAY_BUFFER, &vertices, GL_STATIC_DRAW);
+        current.enable_vertex_attrib_array(0);
+        current.vertex_attrib_pointer(0, 2, GL_FLOAT, false, 0, 0);
+        let run = |draws: u32| {
+            let start = std::time::Instant::now();
+            for i in 0..draws {
+                current.draw_arrays(GL_TRIANGLES, 0, 3);
+                if i % 100 == 99 {
+                    current.apply(oxgl_sys::StateCall::Finish);
+                }
+            }
+            current.apply(oxgl_sys::StateCall::Finish);
+            f64::from(draws) / start.elapsed().as_secs_f64()
+        };
+        run(20_000);
+        eprintln!("raw ANGLE drawArrays: {:.1} draws/s", run(100_000));
+    });
 }

@@ -3,8 +3,10 @@
 //! Invariants upheld here, so callers in `unsafe`-free crates cannot break them:
 //! - A [`Display`] is an initialized ANGLE display. Displays are process-global
 //!   in EGL and are never terminated.
-//! - A [`GlContext`] owns its EGL context and pbuffer and destroys both on drop.
-//!   It is not `Send`: it is created, used, and dropped on one thread.
+//! - A [`GlContext`] owns its EGL context and destroys it on drop. Contexts
+//!   are always current without a surface (`EGL_KHR_surfaceless_context`);
+//!   rendering goes to framebuffer objects. A context is not `Send`: it is
+//!   created, used, and dropped on one thread.
 //! - GLES calls are methods of [`Current`], which can only be obtained from
 //!   [`GlContext::make_current`] and borrows the context, so GLES is only
 //!   called while a context of this crate is current on the calling thread.
@@ -18,34 +20,36 @@ use std::marker::PhantomData;
 use std::ptr;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
+use std::cell::Cell;
+
 use crate::bindings::{
-    EGL_ALPHA_SIZE, EGL_BLUE_SIZE, EGL_CONTEXT_BIND_GENERATES_RESOURCE_CHROMIUM,
-    EGL_CONTEXT_CLIENT_ARRAYS_ENABLED_ANGLE, EGL_CONTEXT_CLIENT_VERSION, EGL_CONTEXT_LOST,
+    EGL_CONTEXT_BIND_GENERATES_RESOURCE_CHROMIUM, EGL_CONTEXT_CLIENT_ARRAYS_ENABLED_ANGLE,
+    EGL_CONTEXT_CLIENT_VERSION, EGL_CONTEXT_LOST,
     EGL_CONTEXT_OPENGL_RESET_NOTIFICATION_STRATEGY_EXT, EGL_CONTEXT_OPENGL_ROBUST_ACCESS_EXT,
-    EGL_CONTEXT_WEBGL_COMPATIBILITY_ANGLE, EGL_DEPTH_SIZE, EGL_DRAW, EGL_FALSE, EGL_GREEN_SIZE,
-    EGL_HEIGHT, EGL_LOSE_CONTEXT_ON_RESET_EXT, EGL_MAX_PBUFFER_HEIGHT, EGL_MAX_PBUFFER_WIDTH,
-    EGL_NONE, EGL_OPENGL_ES2_BIT, EGL_OPENGL_ES3_BIT, EGL_PBUFFER_BIT, EGL_PLATFORM_ANGLE_ANGLE,
+    EGL_CONTEXT_WEBGL_COMPATIBILITY_ANGLE, EGL_FALSE, EGL_LOSE_CONTEXT_ON_RESET_EXT, EGL_NONE,
+    EGL_OPENGL_ES2_BIT, EGL_OPENGL_ES3_BIT, EGL_PLATFORM_ANGLE_ANGLE,
     EGL_PLATFORM_ANGLE_DEVICE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_DEVICE_TYPE_HARDWARE_ANGLE,
     EGL_PLATFORM_ANGLE_DEVICE_TYPE_SWIFTSHADER_ANGLE, EGL_PLATFORM_ANGLE_TYPE_ANGLE,
-    EGL_PLATFORM_ANGLE_TYPE_VULKAN_ANGLE, EGL_RED_SIZE, EGL_RENDERABLE_TYPE,
-    EGL_ROBUST_RESOURCE_INITIALIZATION_ANGLE, EGL_STENCIL_SIZE, EGL_SURFACE_TYPE, EGL_TRUE,
-    EGL_WIDTH, EGLConfig, EGLContext, EGLDisplay, EGLSurface, EGLint, GLenum, GLsizei,
+    EGL_PLATFORM_ANGLE_TYPE_VULKAN_ANGLE, EGL_RENDERABLE_TYPE,
+    EGL_ROBUST_RESOURCE_INITIALIZATION_ANGLE, EGL_TRUE, EGLConfig, EGLContext, EGLDisplay, EGLint,
+    GLenum, GLsizei,
 };
 use crate::loader::Angle;
 
 static LIVE_CONTEXTS: AtomicUsize = AtomicUsize::new(0);
-static LIVE_SURFACES: AtomicUsize = AtomicUsize::new(0);
+
+thread_local! {
+    /// The context this crate last made current on this thread, or null.
+    /// Every `eglMakeCurrent` in the process goes through this crate (the
+    /// bundle is private to oxgl), so this mirrors EGL's current context
+    /// without querying it on every GL call.
+    static CURRENT: Cell<EGLContext> = const { Cell::new(ptr::null_mut()) };
+}
 
 /// Number of EGL contexts created by this crate and not yet destroyed.
 #[must_use]
 pub fn live_contexts() -> usize {
     LIVE_CONTEXTS.load(Ordering::SeqCst)
-}
-
-/// Number of EGL surfaces created by this crate and not yet destroyed.
-#[must_use]
-pub fn live_surfaces() -> usize {
-    LIVE_SURFACES.load(Ordering::SeqCst)
 }
 
 /// A failed EGL call.
@@ -168,7 +172,7 @@ impl Display {
         })
     }
 
-    /// Creates a WebGL-compatible context (no surface yet) for `version`.
+    /// Creates a WebGL-compatible, surfaceless context for `version`.
     ///
     /// # Errors
     ///
@@ -208,34 +212,16 @@ impl Display {
         LIVE_CONTEXTS.fetch_add(1, Ordering::SeqCst);
         Ok(GlContext {
             display: self.clone(),
-            config,
             raw,
-            surface: ptr::null_mut(),
             not_send: PhantomData,
         })
     }
 
-    /// Picks an RGBA8 config with a depth buffer, preferring one without
-    /// stencil.
+    /// Picks a config that can create a context of the `renderable` API. The
+    /// context is used surfaceless, so the config's buffers are irrelevant.
     fn choose_config(&self, renderable: EGLint) -> Result<EGLConfig, EglError> {
         let fns = self.angle.fns();
-        let attribs = [
-            EGL_SURFACE_TYPE,
-            EGL_PBUFFER_BIT,
-            EGL_RENDERABLE_TYPE,
-            renderable,
-            EGL_RED_SIZE,
-            8,
-            EGL_GREEN_SIZE,
-            8,
-            EGL_BLUE_SIZE,
-            8,
-            EGL_ALPHA_SIZE,
-            8,
-            EGL_DEPTH_SIZE,
-            24,
-            EGL_NONE,
-        ];
+        let attribs = [EGL_RENDERABLE_TYPE, renderable, EGL_NONE];
         let mut configs: [EGLConfig; 64] = [ptr::null_mut(); 64];
         let mut count: EGLint = 0;
         // SAFETY: `configs` has room for the 64 entries the call may write and
@@ -252,29 +238,13 @@ impl Display {
         if ok == EGL_FALSE.cast_unsigned() {
             return Err(egl_error(&self.angle, "eglChooseConfig"));
         }
-        let found = configs
+        configs
             .get(..usize::try_from(count).unwrap_or(0))
-            .unwrap_or(&[]);
-        let exact = found.iter().copied().find(|&config| {
-            [EGL_RED_SIZE, EGL_GREEN_SIZE, EGL_BLUE_SIZE, EGL_ALPHA_SIZE]
-                .iter()
-                .all(|&a| self.config_attrib(config, a) == Some(8))
-                && self.config_attrib(config, EGL_STENCIL_SIZE) == Some(0)
-        });
-        exact.or_else(|| found.first().copied()).ok_or(EglError {
-            call: "eglChooseConfig",
-            code: crate::bindings::EGL_BAD_MATCH,
-        })
-    }
-
-    fn config_attrib(&self, config: EGLConfig, attribute: EGLint) -> Option<EGLint> {
-        let mut value: EGLint = 0;
-        // SAFETY: display and config are valid and `value` is a valid
-        // out-pointer for one EGLint.
-        let ok = unsafe {
-            (self.angle.fns().eglGetConfigAttrib)(self.raw, config, attribute, &raw mut value)
-        };
-        (ok != EGL_FALSE.cast_unsigned()).then_some(value)
+            .and_then(|found| found.first().copied())
+            .ok_or(EglError {
+                call: "eglChooseConfig",
+                code: crate::bindings::EGL_BAD_MATCH,
+            })
     }
 }
 
@@ -284,12 +254,10 @@ fn egl_error(angle: &Angle, call: &'static str) -> EglError {
     EglError { call, code }
 }
 
-/// An EGL context with its (optional) pbuffer surface, destroyed on drop.
+/// An EGL context, destroyed on drop.
 pub struct GlContext {
     display: Display,
-    config: EGLConfig,
     raw: EGLContext,
-    surface: EGLSurface,
     // Contexts are thread-affine: raw pointers already make this !Send/!Sync;
     // the marker documents it.
     not_send: PhantomData<*mut ()>,
@@ -299,118 +267,63 @@ impl fmt::Debug for GlContext {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         f.debug_struct("GlContext")
             .field("raw", &self.raw)
-            .field("surface", &self.surface)
             .finish_non_exhaustive()
     }
 }
 
 impl GlContext {
-    /// Largest pbuffer the context's config supports, `(width, height)`;
-    /// `None` if EGL cannot report it.
-    #[must_use]
-    pub fn max_pbuffer_size(&self) -> Option<(i32, i32)> {
-        self.display
-            .config_attrib(self.config, EGL_MAX_PBUFFER_WIDTH)
-            .zip(
-                self.display
-                    .config_attrib(self.config, EGL_MAX_PBUFFER_HEIGHT),
-            )
-    }
-
-    /// Creates the context's pbuffer, replacing any previous one. Its initial
-    /// contents are undefined. Must not be
-    /// called while a [`Current`] for this context is alive (enforced by
-    /// `&mut self`).
-    ///
-    /// # Errors
-    ///
-    /// Returns the failing EGL call and error code.
-    pub fn attach_pbuffer(&mut self, width: i32, height: i32) -> Result<(), EglError> {
-        let fns = self.display.angle.fns();
-        // No EGL_ROBUST_RESOURCE_INITIALIZATION_ANGLE here: on the Metal
-        // backend it crashes the first clear. Callers clear a new pbuffer.
-        let attribs = [EGL_WIDTH, width, EGL_HEIGHT, height, EGL_NONE];
-        // SAFETY: display and config are valid; the attribute list is
-        // EGL_NONE-terminated and outlives the call.
-        let surface = unsafe {
-            (fns.eglCreatePbufferSurface)(self.display.raw, self.config, attribs.as_ptr())
-        };
-        if surface.is_null() {
-            return Err(egl_error(&self.display.angle, "eglCreatePbufferSurface"));
-        }
-        LIVE_SURFACES.fetch_add(1, Ordering::SeqCst);
-        self.release_if_current();
-        self.destroy_surface();
-        self.surface = surface;
-        Ok(())
-    }
-
-    /// Makes this context current on the calling thread (with its pbuffer, or
-    /// surfaceless before one is attached). Skips the EGL call when it already
-    /// is current.
+    /// Makes this context current on the calling thread, without a surface.
+    /// Skips the EGL call when it already is current.
     ///
     /// # Errors
     ///
     /// Returns the EGL error; [`EglError::is_context_lost`] reports device loss.
     pub fn make_current(&self) -> Result<Current<'_>, EglError> {
-        if !self.is_current() {
+        if CURRENT.get() != self.raw {
             let fns = self.display.angle.fns();
-            // SAFETY: display, surface (or EGL_NO_SURFACE, allowed by
-            // EGL_KHR_surfaceless_context) and context are valid and owned by
-            // this object; the context is only used on this thread.
+            // SAFETY: display and context are valid and owned by this object;
+            // EGL_NO_SURFACE for both surfaces is allowed by
+            // EGL_KHR_surfaceless_context, which ANGLE always exposes. The
+            // context is only used on this thread.
             let ok = unsafe {
-                (fns.eglMakeCurrent)(self.display.raw, self.surface, self.surface, self.raw)
+                (fns.eglMakeCurrent)(self.display.raw, ptr::null_mut(), ptr::null_mut(), self.raw)
             };
             if ok == EGL_FALSE.cast_unsigned() {
-                return Err(egl_error(&self.display.angle, "eglMakeCurrent"));
+                let error = egl_error(&self.display.angle, "eglMakeCurrent");
+                // The previous context usually stays current, but not after
+                // every error; ask EGL which one is.
+                // SAFETY: no preconditions.
+                CURRENT.set(unsafe { (fns.eglGetCurrentContext)() });
+                return Err(error);
             }
+            CURRENT.set(self.raw);
         }
         Ok(Current { context: self })
     }
 
-    fn is_current(&self) -> bool {
-        let fns = self.display.angle.fns();
-        // SAFETY: both queries have no preconditions.
-        let context = unsafe { (fns.eglGetCurrentContext)() };
-        // SAFETY: as above; EGL_DRAW is a valid argument.
-        let surface = unsafe { (fns.eglGetCurrentSurface)(EGL_DRAW) };
-        context == self.raw && surface == self.surface
-    }
-
     fn release_if_current(&self) {
-        let fns = self.display.angle.fns();
-        // SAFETY: no preconditions.
-        if unsafe { (fns.eglGetCurrentContext)() } == self.raw {
-            // SAFETY: releasing the current context of the calling thread with
-            // null surfaces and context is always valid. A failure leaves the
-            // context current, and EGL then defers its destruction until it is
-            // released, so nothing dangles.
-            unsafe {
-                (fns.eglMakeCurrent)(
-                    self.display.raw,
-                    ptr::null_mut(),
-                    ptr::null_mut(),
-                    ptr::null_mut(),
-                )
-            };
+        if CURRENT.get() != self.raw {
+            return;
         }
-    }
-
-    fn destroy_surface(&mut self) {
-        if !self.surface.is_null() {
-            // SAFETY: the surface was created by this object and is destroyed
-            // once; it is no longer current (released by the caller).
-            unsafe { (self.display.angle.fns().eglDestroySurface)(self.display.raw, self.surface) };
-            self.surface = ptr::null_mut();
-            LIVE_SURFACES.fetch_sub(1, Ordering::SeqCst);
-        }
+        CURRENT.set(ptr::null_mut());
+        // SAFETY: releasing the current context of the calling thread with
+        // null surfaces and context is always valid. A failure leaves the
+        // context current, and EGL then defers its destruction until it is
+        // released, so nothing dangles.
+        unsafe {
+            (self.display.angle.fns().eglMakeCurrent)(
+                self.display.raw,
+                ptr::null_mut(),
+                ptr::null_mut(),
+                ptr::null_mut(),
+            )
+        };
     }
 }
 
 impl Drop for GlContext {
     fn drop(&mut self) {
         self.release_if_current();
-        self.destroy_surface();
         // SAFETY: the context was created by this object, is destroyed once,
         // and is no longer current on this thread.
         unsafe { (self.display.angle.fns().eglDestroyContext)(self.display.raw, self.raw) };

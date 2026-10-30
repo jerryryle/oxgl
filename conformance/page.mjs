@@ -9,16 +9,23 @@
 // errors, at that first error; { type: 'harness-error', message } when the
 // runner itself fails. A page that never completes sends
 // nothing: the parent's time limit decides it.
-import { readFileSync } from 'node:fs';
+import { resolveObjectURL } from 'node:buffer';
+import { appendFileSync, readFileSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { resolve } from 'node:path';
 import { compileFunction } from 'node:vm';
 
-import { JSDOM, VirtualConsole } from 'jsdom';
+import jsdom from 'jsdom';
 
 import { native } from '../dist/native.js';
 
+import { bitmapPixels, imageBitmapClass, offscreenCanvasClass } from './offscreen.mjs';
+import { decodePng, encodePng } from './png.mjs';
 import { resolveFile } from './server.mjs';
+import { frameAt, probe, videoFile } from './video.mjs';
+import { decodeMessage, workerClass } from './workers.mjs';
+
+const { JSDOM, VirtualConsole, requestInterceptor } = jsdom;
 
 const CONTEXT_URL = new URL('../dist/context.js', import.meta.url);
 const CONSTANTS_URL = new URL('../dist/generated/webgl-constants.js', import.meta.url);
@@ -26,6 +33,21 @@ const CONSTANTS_URL = new URL('../dist/generated/webgl-constants.js', import.met
 // jsdom gives a frame a new window each time it navigates, through this
 // module's createWindow, and offers no public hook for it.
 const jsdomWindow = createRequire(import.meta.url)('jsdom/lib/jsdom/browser/Window.js');
+
+// jsdom reloads an image, and fires load again, when its width attribute
+// changes; browsers do that only for responsive images (srcset or sizes),
+// and pages that resize an image in its load handler would loop.
+const ImageImpl = createRequire(import.meta.url)('jsdom/lib/jsdom/living/nodes/HTMLImageElement-impl.js').implementation;
+const imageAttributeChange = ImageImpl.prototype._attributeChangeSteps;
+const elementAttributeChange = Object.getPrototypeOf(ImageImpl.prototype)._attributeChangeSteps;
+if (typeof imageAttributeChange !== 'function' || typeof elementAttributeChange !== 'function') {
+  throw new Error('jsdom no longer has _attributeChangeSteps on images; update the image shim');
+}
+ImageImpl.prototype._attributeChangeSteps = function (localName, oldValue, value, namespace) {
+  const responsive = this.hasAttributeNS(null, 'srcset') || this.hasAttributeNS(null, 'sizes');
+  const steps = namespace === null && localName === 'width' && !responsive ? elementAttributeChange : imageAttributeChange;
+  return steps.call(this, localName, oldValue, value, namespace);
+};
 
 /**
  * Runs the page at `url`. `hooks.beforeParse(window)` runs after the shim is
@@ -108,7 +130,11 @@ export async function runPage(url, { endEarly = false, root } = {}, hooks = {}) 
   // Rejections in the page's realm reach Node's process-wide handling, whose
   // default ends the process. Browsers, and the official harness, ignore
   // them; so does this runner. The runner's own async work is awaited.
-  process.on('unhandledRejection', () => {});
+  // OXGL_CONFORMANCE_TRACE records them, a debugging aid for pages that hang.
+  process.on('unhandledRejection', (reason) => {
+    const trace = process.env.OXGL_CONFORMANCE_TRACE;
+    if (trace) appendFileSync(trace, `UNHANDLED REJECTION: ${describe(reason)}\n`);
+  });
 
   // Frames the page opens get the same shim before their documents parse,
   // and a console of their own: as in the official harness, a frame's
@@ -133,7 +159,7 @@ export async function runPage(url, { endEarly = false, root } = {}, hooks = {}) 
 
   await JSDOM.fromURL(url, {
     runScripts: 'dangerously',
-    resources: 'usable',
+    resources: { interceptors: [keepImageBytes] },
     pretendToBeVisual: true,
     virtualConsole,
     beforeParse(window) {
@@ -146,6 +172,10 @@ export async function runPage(url, { endEarly = false, root } = {}, hooks = {}) 
           else {
             state.failed += 1;
             state.firstFailure ??= String(msg);
+            // A debugging aid: OXGL_CONFORMANCE_TRACE names a file that
+            // collects every failed assertion, not only the first.
+            const trace = process.env.OXGL_CONFORMANCE_TRACE;
+            if (trace) appendFileSync(trace, `FAILED ${url}: ${String(msg)}\n${String(new Error().stack)}\n`);
           }
           sendCounts();
         },
@@ -185,25 +215,64 @@ function loadOxgl(window) {
 
 let contextBody;
 
+/** The globals the JS layer defines in a page, beside `createContext`. */
+const INTERFACES = [
+  'WebGLRenderingContext',
+  'WebGL2RenderingContext',
+  'WebGLContextEvent',
+  'WebGLShaderPrecisionFormat',
+  'WebGLObject',
+  'WebGLBuffer',
+  'WebGLProgram',
+  'WebGLShader',
+  'WebGLTexture',
+  'WebGLSampler',
+  'WebGLFramebuffer',
+  'WebGLRenderbuffer',
+  'WebGLVertexArrayObject',
+  'WebGLTransformFeedback',
+  'WebGLQuery',
+  'WebGLSync',
+  'WebGLUniformLocation',
+  'WebGLActiveInfo',
+];
+
 /**
- * dist/context.js as a function body returning its exports; computed once per
- * process. The generated constants module it imports is inlined on the import's
- * line, joined into one line so stack traces keep context.js line numbers.
+ * dist/context.js and the local modules it imports, as one function body
+ * returning its exports; computed once per process. Modules are inlined in
+ * dependency order with their `import` statements removed and `export`
+ * keywords stripped, so names must be unique across modules. Import
+ * statements leave their lines behind and the generated constants collapse
+ * to one line, so a stack trace's line numbers are those of the concatenated
+ * body. `./native.js` is the function's `native` parameter.
  */
 function contextSource() {
-  const constants = readFileSync(CONSTANTS_URL, 'utf8')
-    // The generated module holds no strings, so every `//` starts a comment.
-    .replace(/\/\/.*$/gm, '')
-    .replace(/^export const /gm, 'const ')
-    .replace(/\s*\n\s*/g, ' ');
-  const body = readFileSync(CONTEXT_URL, 'utf8')
-    .replace("import { native } from './native.js';", '')
-    .replace(/^import \{[^}]*\} from '\.\/generated\/webgl-constants\.js';$/m, constants)
-    .replace(/^export (class|function|const) /gm, '$1 ');
-  if (/^\s*(import|export)\b/m.test(body)) {
-    throw new Error('dist/context.js has imports or exports the conformance runner does not handle');
-  }
-  return `${body}\nreturn { createContext, WebGLRenderingContext, WebGL2RenderingContext, WebGLShaderPrecisionFormat };`;
+  const seen = new Set();
+  const parts = [];
+  const inline = (url) => {
+    if (seen.has(url.href)) return;
+    seen.add(url.href);
+    const source = readFileSync(url, 'utf8');
+    const imports = [...source.matchAll(/^import (?:type )?\{[^}]*\} from '(\.[^']+)';$/gms)].map((m) => m[1]);
+    for (const path of imports) {
+      if (path === './native.js' || path === './load-native.js') continue;
+      inline(new URL(path, url));
+    }
+    let body = source
+      .replace(/^import (?:type )?\{[^}]*\} from '[^']+';$/gms, (statement) => statement.replace(/[^\n]/g, ''))
+      .replace(/^export (class|function|const|let) /gm, '$1 ')
+      .replace(/^export \{[^}]*\}(?: from '[^']+')?;$/gms, '');
+    if (url.href === CONSTANTS_URL.href) {
+      // The generated module holds no strings, so every `//` starts a comment.
+      body = body.replace(/\/\/.*$/gm, '').replace(/\s*\n\s*/g, ' ');
+    }
+    if (/^\s*(import|export)\b/m.test(body)) {
+      throw new Error(`${url.pathname} has imports or exports the conformance runner does not handle`);
+    }
+    parts.push(body);
+  };
+  inline(CONTEXT_URL);
+  return `${parts.join('\n')}\nreturn { createContext, canvasPixels, presentDrawingBuffer, setImageDecoder, ${INTERFACES.join(', ')} };`;
 }
 
 /**
@@ -220,9 +289,10 @@ function release(state, ref) {
   }
 }
 
-/** Installs the canvas shim, the context class globals, Closure's loader hook and failing media. */
+/** Installs the canvas shim, the context class globals, ImageData, message delivery, Closure's loader hook and failing media. */
 function installShim(window, state) {
-  const { createContext, WebGLRenderingContext, WebGL2RenderingContext, WebGLShaderPrecisionFormat } = loadOxgl(window);
+  const oxgl = loadOxgl(window);
+  const { createContext } = oxgl;
   const contexts = new WeakMap();
   // jsdom closes a frame's window when the frame navigates; its contexts go
   // with it, as a browser releases them with the document. Contexts are held
@@ -234,14 +304,150 @@ function installShim(window, state) {
     own.clear();
     return close.call(this);
   };
-  window.HTMLCanvasElement.prototype.getContext = function getContext(type) {
+  // jsdom's images have no decode() (HTML §4.8.4.3.4), which the suite's
+  // image loaders await: resolve when the image has loaded, reject when it
+  // fails, as browsers do.
+  if (typeof window.HTMLImageElement.prototype.decode !== 'function') {
+    window.HTMLImageElement.prototype.decode = function decode() {
+      return new window.Promise((resolve, reject) => {
+        const settle = () => {
+          if (this.complete && this.naturalWidth > 0) resolve(undefined);
+          else reject(new window.DOMException('The source image cannot be decoded.', 'EncodingError'));
+        };
+        // complete is true with no src as well; settle() rejects that.
+        if (this.complete) {
+          settle();
+          return;
+        }
+        this.addEventListener('load', settle, { once: true });
+        this.addEventListener('error', settle, { once: true });
+      });
+    };
+  }
+  // jsdom does no layout, so an element's client size is 0. A canvas's is
+  // its inline CSS size in pixels when it has one, else its width and
+  // height, which is what an unstyled canvas shows.
+  for (const [client, size] of [['clientWidth', 'width'], ['clientHeight', 'height']]) {
+    Object.defineProperty(window.HTMLCanvasElement.prototype, client, {
+      configurable: true,
+      enumerable: true,
+      get() {
+        const css = /^(\d+(?:\.\d+)?)px$/.exec(this.style[size]);
+        return css ? Math.floor(Number(css[1])) : this[size];
+      },
+    });
+  }
+  // A WebGL canvas drawn into a 2D canvas, or exported with toDataURL,
+  // shows its drawing buffer, which jsdom's own canvas does not have.
+  const { canvasPixels } = oxgl;
+  // A WebGL canvas, a video or an ImageBitmap, which the canvas package
+  // cannot draw, as a 2D canvas of its pixels.
+  const asImage = (source) => {
+    const pixels =
+      source instanceof window.HTMLCanvasElement ? canvasPixels(source)
+      : source instanceof window.HTMLVideoElement ? videoFrame(source)
+      : bitmapPixels.get(source);
+    if (pixels === undefined) return undefined;
+    const scratch = window.document.createElement('canvas');
+    scratch.width = pixels.width;
+    scratch.height = pixels.height;
+    if (pixels.width > 0 && pixels.height > 0) {
+      const data = new Uint8ClampedArray(pixels.data.buffer, pixels.data.byteOffset, pixels.data.byteLength);
+      getContext2d.call(scratch, '2d').putImageData(new window.ImageData(data, pixels.width, pixels.height), 0, 0);
+    }
+    return scratch;
+  };
+  // A 2D canvas that draws an image from another origin is no longer
+  // origin-clean, and its pixels cannot be read (HTML §4.12.5.1.7). The
+  // suite's cross-origin images come from 127.0.0.1 and localhost swapped.
+  const tainted = new WeakSet();
+  const originClean = (image) => {
+    if (image instanceof window.HTMLCanvasElement) return !tainted.has(image);
+    if (!(image instanceof window.HTMLImageElement) || image.crossOrigin !== null) return true;
+    const url = new window.URL(image.src, window.document.URL);
+    return url.protocol === 'data:' || url.origin === window.location.origin;
+  };
+  const securityError = (method) =>
+    new window.DOMException(`Failed to execute '${method}': The canvas has been tainted by cross-origin data.`, 'SecurityError');
+  // jsdom sets drawImage and getImageData on each 2D context it creates, so
+  // getContext below wraps that instance's.
+  const wrapContext2d = (context) => {
+    const own = context.drawImage;
+    context.drawImage = function (image, ...rest) {
+      if (!originClean(image)) tainted.add(this.canvas);
+      return own.call(this, asImage(image) ?? image, ...rest);
+    };
+    const getImageData = context.getImageData;
+    context.getImageData = function (...args) {
+      if (tainted.has(this.canvas)) throw securityError('getImageData');
+      return getImageData.apply(this, args);
+    };
+  };
+  // A WebGL canvas's PNG is written from its unpremultiplied pixels, as
+  // browsers do; through the canvas package it would be premultiplied.
+  const toDataURL = window.HTMLCanvasElement.prototype.toDataURL;
+  window.HTMLCanvasElement.prototype.toDataURL = function (type, ...rest) {
+    if (tainted.has(this)) throw securityError('toDataURL');
+    const pixels = canvasPixels(this);
+    if (pixels !== undefined && pixels.width > 0 && pixels.height > 0 && (type === undefined || String(type).toLowerCase() === 'image/png')) {
+      return `data:image/png;base64,${encodePng(pixels).toString('base64')}`;
+    }
+    return toDataURL.call(asImage(this) ?? this, type, ...rest);
+  };
+  oxgl.setImageDecoder((image) => {
+    const bitmap = bitmapPixels.get(image);
+    if (bitmap !== undefined) return bitmap;
+    if (image instanceof window.HTMLVideoElement) return videoFrame(image);
+    if (!(image instanceof window.HTMLImageElement)) return undefined;
+    let fetched = imageBytes.get(image);
+    if (fetched?.url !== image.src) {
+      const bytes = dataUrlBytes(image.src);
+      if (bytes === undefined) return undefined;
+      fetched = { url: image.src, bytes, decoded: undefined };
+      imageBytes.set(image, fetched);
+    }
+    // An SVG image is drawn at the element's size (HTML §4.8.4.3.6).
+    if (isSvg(fetched.bytes)) return rasterizeSvg(fetched.bytes, image.width, image.height);
+    fetched.decoded ??= decodeImage(fetched.bytes) ?? null;
+    return fetched.decoded ?? undefined;
+  });
+  installImageBitmap(window, (image) => {
+    const fetched = imageBytes.get(image);
+    const bytes = fetched?.url === image.src ? fetched.bytes : dataUrlBytes(image.src);
+    return bytes === undefined ? undefined : decodeImage(bytes);
+  }, canvasPixels);
+  // An OffscreenCanvas from transferControlToOffscreen shows its frames in
+  // its placeholder canvas, and is composited as that canvas would be.
+  const placeholders = new WeakMap();
+  window.OffscreenCanvas = offscreenCanvasClass(window, oxgl, window.ImageBitmap, (canvas, gl) => {
+    if (placeholders.has(canvas)) own.add(new WeakRef(gl));
+  });
+  // jsdom's own getContext gives 2D contexts (through the canvas package).
+  // It does not know oxgl's contexts, so one type per canvas is enforced here
+  // in both directions (HTML §4.12.5).
+  const getContext2d = window.HTMLCanvasElement.prototype.getContext;
+  const canvases2d = new WeakSet();
+  window.HTMLCanvasElement.prototype.getContext = function getContext(type, ...rest) {
     const version = WEBGL_TYPES[String(type)];
+    const [attributes] = rest;
     const existing = contexts.get(this);
     if (existing) return existing.version === version ? existing.gl : null;
-    if (version === undefined) return null;
+    if (version === undefined) {
+      const context = getContext2d.call(this, type, ...rest);
+      if (context !== null && context !== undefined && !canvases2d.has(this)) {
+        canvases2d.add(this);
+        wrapContext2d(context);
+      }
+      return context ?? null;
+    }
+    if (canvases2d.has(this) || placeholders.has(this)) return null;
+    // WebIDL converts the attributes dictionary before anything else.
+    if (attributes !== undefined && attributes !== null && typeof attributes !== 'object' && typeof attributes !== 'function') {
+      throw new window.TypeError("Failed to execute 'getContext': The provided value is not of type 'WebGLContextAttributes'.");
+    }
     let gl;
     try {
-      gl = createContext({ width: this.width, height: this.height, webgl2: version === 2 });
+      gl = createContext({ width: this.width, height: this.height, webgl2: version === 2, canvas: this, attributes });
     } catch (error) {
       // A browser's getContext returns null when creation fails.
       state.contextErrors.push(String(error?.message ?? error));
@@ -253,11 +459,151 @@ function installShim(window, state) {
     own.add(ref);
     return gl;
   };
-  window.WebGLRenderingContext = WebGLRenderingContext;
-  window.WebGL2RenderingContext = WebGL2RenderingContext;
-  window.WebGLShaderPrecisionFormat = WebGLShaderPrecisionFormat;
+  forwardResizes(window, contexts);
+  window.HTMLCanvasElement.prototype.transferControlToOffscreen = function () {
+    if (contexts.has(this) || canvases2d.has(this) || placeholders.has(this)) {
+      throw new window.DOMException("Failed to execute 'transferControlToOffscreen': Cannot transfer control from a canvas that has a rendering context.", 'InvalidStateError');
+    }
+    const offscreen = new window.OffscreenCanvas(this.width, this.height);
+    placeholders.set(this, offscreen);
+    placeholders.set(offscreen, this);
+    return offscreen;
+  };
+  compositeEachFrame(window, own, oxgl.presentDrawingBuffer, placeholders);
+  for (const name of INTERFACES) window[name] = oxgl[name];
+  window.ImageData = canvasPackage().ImageData;
   if (state.root !== undefined) window.CLOSURE_IMPORT_SCRIPT = closureImport(window, state.root);
-  failMedia(window);
+  deliverMessages(window);
+  playMedia(window);
+  installWorkers(window, state.root);
+  loadOnce(window);
+}
+
+/**
+ * Lets a window's load event through once, as browsers fire it (HTML
+ * §8.4.1, "the end"). jsdom fires it again when images created after the
+ * first one finish loading, which runs `<body onload>` handlers twice.
+ */
+function loadOnce(window) {
+  let loaded = false;
+  window.addEventListener(
+    'load',
+    (event) => {
+      if (event.target !== window.document) return;
+      if (loaded) event.stopImmediatePropagation();
+      loaded = true;
+    },
+    true,
+  );
+}
+
+/**
+ * Composites the page's WebGL canvases at the start of each animation frame,
+ * before that frame's callbacks, as a browser presents what the previous
+ * frame drew: drawing buffers without preserveDrawingBuffer are cleared.
+ * Canvases outside the document are never composited; an OffscreenCanvas
+ * from transferControlToOffscreen is, when its placeholder is in it.
+ */
+function compositeEachFrame(window, own, present, placeholders) {
+  const requestAnimationFrame = window.requestAnimationFrame;
+  let scheduled = false;
+  const composite = () => {
+    scheduled = false;
+    for (const ref of own) {
+      const gl = ref.deref();
+      const shown = placeholders.get(gl?.canvas) ?? gl?.canvas;
+      if (shown?.isConnected === true) present(gl);
+    }
+  };
+  window.requestAnimationFrame = function (callback) {
+    if (!scheduled) {
+      scheduled = true;
+      requestAnimationFrame.call(window, composite);
+    }
+    return requestAnimationFrame.call(window, callback);
+  };
+}
+
+/**
+ * Resizes a canvas's oxgl drawing buffer synchronously whenever its `width`
+ * or `height` changes, through the property or the content attribute, as a
+ * browser does (WebGL 1.0 §2.2). jsdom's property setters write the attribute
+ * internally, so both paths are wrapped.
+ */
+function forwardResizes(window, contexts) {
+  const resize = (canvas) => {
+    const entry = contexts.get(canvas);
+    entry?.gl.resize(canvas.width, canvas.height);
+  };
+  const proto = window.HTMLCanvasElement.prototype;
+  for (const name of ['width', 'height']) {
+    const descriptor = Object.getOwnPropertyDescriptor(proto, name);
+    if (!descriptor?.set) throw new Error(`jsdom's HTMLCanvasElement has no ${name} accessor; update the resize shim`);
+    Object.defineProperty(proto, name, {
+      ...descriptor,
+      set(value) {
+        descriptor.set.call(this, value);
+        resize(this);
+      },
+    });
+  }
+  const isSize = (element, name) =>
+    element instanceof window.HTMLCanvasElement && ['width', 'height'].includes(String(name).toLowerCase());
+  const element = window.Element.prototype;
+  for (const method of ['setAttribute', 'removeAttribute', 'toggleAttribute']) {
+    const original = element[method];
+    element[method] = function (name, ...rest) {
+      const result = original.call(this, name, ...rest);
+      if (isSize(this, name)) resize(this);
+      return result;
+    };
+  }
+  const setAttributeNS = element.setAttributeNS;
+  element.setAttributeNS = function (namespace, name, ...rest) {
+    const result = setAttributeNS.call(this, namespace, name, ...rest);
+    if (namespace === null && isSize(this, name)) resize(this);
+    return result;
+  };
+}
+
+/** The `canvas` package, which jsdom uses for 2D contexts and images. */
+function canvasPackage() {
+  if (canvasModule === undefined) {
+    canvasModule = createRequire(import.meta.url)('canvas');
+    loadUnsizedSvgEmpty();
+  }
+  return canvasModule;
+}
+
+let canvasModule;
+
+/**
+ * jsdom delivers `postMessage` with `source: null`, so the suite's
+ * `setZeroTimeout`, which checks `event.source == window`, never runs its
+ * callbacks. Deliver once, in a task, with the receiving window as `source`,
+ * after jsdom's `targetOrigin` check. `data` is passed as is, as jsdom does.
+ */
+function deliverMessages(window) {
+  window.postMessage = function postMessage(message, targetOrigin = '/') {
+    const origin = window.location.origin;
+    // postMessage(message, options) carries the origin in a dictionary.
+    const target =
+      typeof targetOrigin === 'object' && targetOrigin !== null
+        ? String(targetOrigin.targetOrigin ?? '/')
+        : String(targetOrigin);
+    if (target !== '*' && target !== '/') {
+      let parsed;
+      try {
+        parsed = new URL(target).origin;
+      } catch {
+        throw new window.DOMException(`Invalid target origin '${target}'`, 'SyntaxError');
+      }
+      if (parsed !== origin) return;
+    }
+    window.setTimeout(() => {
+      window.dispatchEvent(new window.MessageEvent('message', { data: message, origin, source: window }));
+    }, 0);
+  };
 }
 
 /**
@@ -290,49 +636,420 @@ function closureImport(window, root) {
 }
 
 /**
- * Without the optional `canvas` package jsdom never loads images or media,
- * and never fires `load` or `error`. Fire `error` on the next task after a
- * source is set, so pages that wait for media fail promptly.
+ * jsdom has no video or audio decoding and never fires `load` or `error` for
+ * media. Behave like a browser without codecs: `play()` rejects with
+ * `NotSupportedError`, and `error` fires on the next task after a source is
+ * set, so pages that wait for media fail promptly. Images load through jsdom
+ * and the canvas package.
  */
-function failMedia(window) {
-  const failed = new WeakSet();
-  const fail = (element) => {
-    failed.add(element);
-    window.setTimeout(() => element.dispatchEvent(new window.Event('error')), 0);
-  };
-  const isMedia = (node) =>
-    node instanceof window.HTMLImageElement || node instanceof window.HTMLMediaElement;
+/** The bytes each image element last fetched, by element: `{ url, bytes, decoded }`. */
+const imageBytes = new WeakMap();
 
-  for (const proto of [window.HTMLImageElement.prototype, window.HTMLMediaElement.prototype]) {
-    const descriptor = Object.getOwnPropertyDescriptor(proto, 'src');
-    if (!descriptor?.set) continue;
+/** Keeps the bytes images fetch, for WebGL's decoding of them. */
+const keepImageBytes = requestInterceptor(async (request, { element }) => {
+  if (element?.localName !== 'img') return undefined;
+  const response = await fetch(request.url);
+  const bytes = Buffer.from(await response.arrayBuffer());
+  imageBytes.set(element, { url: request.url, bytes, decoded: undefined });
+  return new Response(bytes, { status: response.status, headers: response.headers });
+});
+
+/**
+ * Image bytes decoded as browsers do for WebGL: PNGs by the runner's own
+ * decoder; others (JPEG) by the canvas package, which applies EXIF
+ * orientation as browsers do. `undefined` for bytes neither can decode.
+ */
+function decodeImage(bytes) {
+  const png = decodePng(bytes);
+  if (png !== undefined) return png;
+  const { Image, createCanvas } = canvasPackage();
+  const image = new Image();
+  try {
+    image.src = bytes;
+  } catch {
+    return undefined;
+  }
+  if (!(image.width > 0 && image.height > 0)) return undefined;
+  const canvas = createCanvas(image.width, image.height);
+  const context = canvas.getContext('2d');
+  context.drawImage(image, 0, 0);
+  const { data } = context.getImageData(0, 0, image.width, image.height);
+  return { data, width: image.width, height: image.height };
+}
+
+/** RGBA8 `{ data, width, height }` with color multiplied by alpha. */
+function premultiply({ data, width, height }) {
+  const out = new Uint8ClampedArray(data.length);
+  for (let i = 0; i < data.length; i += 4) {
+    const a = data[i + 3];
+    out[i] = Math.round((data[i] * a) / 255);
+    out[i + 1] = Math.round((data[i + 1] * a) / 255);
+    out[i + 2] = Math.round((data[i + 2] * a) / 255);
+    out[i + 3] = a;
+  }
+  return { data: out, width, height };
+}
+
+/** The rows of `{ data, width, height }` in reverse order. */
+function flipRows({ data, width, height }) {
+  const out = new data.constructor(data.length);
+  const row = width * 4;
+  for (let y = 0; y < height; y++) out.set(data.subarray(y * row, (y + 1) * row), (height - 1 - y) * row);
+  return { data: out, width, height };
+}
+
+/**
+ * `createImageBitmap` from a Blob, an image, ImageData or a canvas, with the
+ * `imageOrientation` and `premultiplyAlpha` options (HTML §8.10; `default`
+ * keeps alpha unpremultiplied), and `fetch` when jsdom has none:
+ * enough for pages that upload ImageBitmaps. `decodeElement` decodes an
+ * image element's bytes; `canvasPixels` reads a WebGL canvas.
+ */
+function installImageBitmap(window, decodeElement, canvasPixels) {
+  const ImageBitmap = imageBitmapClass();
+  window.ImageBitmap = ImageBitmap;
+  window.createImageBitmap = async (source, options = {}) => {
+    let pixels;
+    if (bitmapPixels.has(source)) pixels = bitmapPixels.get(source);
+    else if (typeof source?.arrayBuffer === 'function') pixels = decodeImage(Buffer.from(await source.arrayBuffer()));
+    else if (source instanceof window.HTMLImageElement) pixels = decodeElement(source);
+    else if (source instanceof window.HTMLVideoElement) pixels = videoFrame(source);
+    else if (ArrayBuffer.isView(source?.data)) pixels = { data: source.data, width: source.width, height: source.height };
+    else if (source instanceof window.HTMLCanvasElement || source instanceof window.OffscreenCanvas) {
+      pixels = canvasPixels(source) ?? source.getContext('2d')?.getImageData(0, 0, source.width, source.height);
+    }
+    if (pixels === undefined || pixels === null) throw new window.DOMException('The source image could not be decoded.', 'InvalidStateError');
+    // An ImageData's fields are accessors, which a spread does not copy.
+    pixels = { data: pixels.data, width: pixels.width, height: pixels.height };
+    if (options?.imageOrientation === 'flipY') pixels = flipRows(pixels);
+    if (options?.premultiplyAlpha === 'premultiply') pixels = premultiply(pixels);
+    return new ImageBitmap(pixels);
+  };
+  if (typeof window.fetch !== 'function') {
+    window.fetch = (input, init) => fetch(new URL(String(input), window.document.baseURI), init);
+  }
+}
+
+/** An SVG document's root `<svg ...>` tag, or `undefined`. */
+function svgRoot(text) {
+  return /<svg\b[^>]*>/i.exec(text)?.[0];
+}
+
+/**
+ * An SVG drawn at `width × height`, as an image element shows it: its root
+ * is given that size, and a viewBox of its own size when it has none, so
+ * its content scales. `undefined` for an empty size.
+ */
+function rasterizeSvg(bytes, width, height) {
+  if (width === 0 || height === 0) return undefined;
+  const text = bytes.toString('utf8');
+  const root = svgRoot(text);
+  if (root === undefined) return undefined;
+  const size = (name) => new RegExp(`\\s${name}\\s*=\\s*["']([^"']*)["']`, 'i').exec(root)?.[1];
+  const viewBox = /\sviewBox\s*=/i.test(root) || size('width') === undefined || size('height') === undefined ? '' : ` viewBox="0 0 ${parseFloat(size('width'))} ${parseFloat(size('height'))}"`;
+  const sized = root
+    .replace(/\s(width|height)\s*=\s*("[^"]*"|'[^']*')/gi, '')
+    .replace(/^<svg\b/i, `<svg width="${width}" height="${height}"${viewBox}`);
+  const { Image, createCanvas } = canvasPackage();
+  const image = new Image();
+  try {
+    image.src = Buffer.from(text.replace(root, sized), 'utf8');
+  } catch {
+    return undefined;
+  }
+  const canvas = createCanvas(width, height);
+  const context = canvas.getContext('2d');
+  context.drawImage(image, 0, 0, width, height);
+  return { data: context.getImageData(0, 0, width, height).data, width, height };
+}
+
+/**
+ * The canvas package refuses an SVG whose root has no width or height;
+ * a browser loads it with no natural size (0×0). Such an SVG is not handed
+ * to the package, so the image loads empty.
+ */
+function loadUnsizedSvgEmpty() {
+  const { Image } = canvasPackage();
+  const descriptor = Object.getOwnPropertyDescriptor(Image.prototype, 'src');
+  if (descriptor?.set === undefined || descriptor.get === undefined) {
+    throw new Error('the canvas package no longer has an Image src accessor; update the SVG shim');
+  }
+  Object.defineProperty(Image.prototype, 'src', {
+    ...descriptor,
+    set(value) {
+      if (Buffer.isBuffer(value) && isSvg(value)) {
+        const root = svgRoot(value.toString('utf8')) ?? '';
+        if (!/\swidth\s*=/i.test(root) || !/\sheight\s*=/i.test(root)) return;
+      }
+      descriptor.set.call(this, value);
+    },
+  });
+}
+
+/** Whether image bytes are an SVG document. */
+function isSvg(bytes) {
+  return /^\s*(<\?xml[^>]*>\s*)?(<!--[\s\S]*?-->\s*|<!DOCTYPE[^>]*>\s*)*<svg[\s>]/i.test(bytes.subarray(0, 1024).toString('latin1'));
+}
+
+/** The bytes of a `data:` URL, base64 or percent-encoded, or `undefined`. */
+function dataUrlBytes(url) {
+  const match = /^data:([^,]*),(.*)$/s.exec(url);
+  if (match === null) return undefined;
+  if (/;base64$/i.test(match[1])) return Buffer.from(match[2], 'base64');
+  try {
+    return Buffer.from(decodeURIComponent(match[2]), 'utf8');
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Workers on worker threads (workers.mjs), whose `importScripts` reads the
+ * suite's files under `root`, and Blob URLs for their scripts:
+ * a page's Blob URL is one of Node's, so the thread that starts a worker
+ * can read it.
+ */
+function installWorkers(window, root) {
+  window.Worker = workerClass({
+    root,
+    EventTarget: window.EventTarget,
+    messageEvent: (data) => new window.MessageEvent('message', { data }),
+    errorEvent: (message) => new window.ErrorEvent('error', { message }),
+    base: () => window.document.baseURI,
+    receive: (data) => toRealm(window, decodeMessage(data, window.ImageBitmap)),
+  });
+  window.URL.createObjectURL = (blob) => URL.createObjectURL(new Blob([blobBytes(blob)], { type: blob.type }));
+  window.URL.revokeObjectURL = (url) => URL.revokeObjectURL(String(url));
+}
+
+/** The bytes of a jsdom Blob, which has no synchronous reader. */
+function blobBytes(blob) {
+  const bytes = blobImpl(blob)?._bytes;
+  if (!(bytes instanceof Uint8Array)) throw new TypeError('URL.createObjectURL: not a Blob');
+  return bytes;
+}
+
+const blobImpl = createRequire(import.meta.url)('jsdom/lib/generated/idl/utils.js').implForWrapper;
+
+/** A structured-cloned value from Node's realm, rebuilt in `window`'s. */
+function toRealm(window, value) {
+  if (typeof value !== 'object' || value === null) return value;
+  if (value instanceof ArrayBuffer) {
+    const copy = new window.ArrayBuffer(value.byteLength);
+    new window.Uint8Array(copy).set(new Uint8Array(value));
+    return copy;
+  }
+  if (ArrayBuffer.isView(value)) {
+    const buffer = toRealm(window, value.buffer);
+    if (value instanceof DataView) return new window.DataView(buffer, value.byteOffset, value.byteLength);
+    return new window[value.constructor.name](buffer, value.byteOffset, value.length);
+  }
+  if (Array.isArray(value)) return window.Array.from(value, (item) => toRealm(window, item));
+  if (Object.getPrototypeOf(value) === Object.prototype) {
+    const copy = new window.Object();
+    for (const [key, item] of Object.entries(value)) copy[key] = toRealm(window, item);
+    return copy;
+  }
+  return value;
+}
+
+/** Media elements' loaded videos, by element. */
+const mediaState = new WeakMap();
+
+/**
+ * The current frame of a playing video element, as RGBA8 top row first, or
+ * `undefined` before it has loaded. Frames are decoded once per half second
+ * of media time.
+ */
+function videoFrame(video) {
+  const state = mediaState.get(video);
+  if (state?.info === undefined) return undefined;
+  const time = Math.floor(currentTime(state) * 2) / 2;
+  let frame = state.frames.get(time);
+  if (frame === undefined) {
+    frame = frameAt(state.file, time, state.info);
+    state.frames.set(time, frame);
+  }
+  return frame;
+}
+
+/** A media element's position in seconds, looping while it plays. */
+function currentTime(state) {
+  if (state.paused || state.info === undefined) return state.position;
+  const elapsed = state.position + (performance.now() - state.started) / 1000;
+  return state.loop ? elapsed % state.info.duration : Math.min(elapsed, state.info.duration);
+}
+
+/**
+ * Media elements that load, play and report their video's size, decoded by
+ * ffmpeg (HTML §4.8.11), enough for pages that upload video frames:
+ * `canPlayType` answers "maybe" for video types, `play()` resolves once
+ * the video has loaded, and `requestVideoFrameCallback` calls back on the
+ * next frame. Audio does not play.
+ */
+function playMedia(window) {
+  const proto = window.HTMLMediaElement.prototype;
+  const videoProto = window.HTMLVideoElement.prototype;
+  const stateOf = (element) => {
+    let state = mediaState.get(element);
+    if (state === undefined) {
+      state = { file: undefined, info: undefined, error: null, loading: undefined, paused: true, position: 0, started: 0, loop: false, frames: new Map(), timer: undefined };
+      mediaState.set(element, state);
+    }
+    return state;
+  };
+  const fire = (element, type) => element.dispatchEvent(new window.Event(type));
+  // A browser takes the first <source> whose type it can play (HTML §4.8.11.5).
+  const playable = (type) => type === null || canPlay(type);
+  const sourceOf = (element) =>
+    element.getAttribute('src') ||
+    [...element.querySelectorAll('source[src]')].find((source) => playable(source.getAttribute('type')))?.getAttribute('src') ||
+    '';
+  const bytesOf = async (href) => {
+    if (href.startsWith('data:')) return dataUrlBytes(href);
+    if (href.startsWith('blob:')) return Buffer.from(await resolveObjectURL(href)?.arrayBuffer() ?? new ArrayBuffer(0));
+    const response = await fetch(href);
+    if (!response.ok) throw new Error(`HTTP ${String(response.status)}`);
+    return Buffer.from(await response.arrayBuffer());
+  };
+  const load = (element) => {
+    const state = stateOf(element);
+    const src = sourceOf(element);
+    Object.assign(state, { file: undefined, info: undefined, error: null, paused: true, position: 0, frames: new Map(), loop: element.hasAttribute('loop') });
+    if (src === '') return;
+    const href = new URL(src, window.document.baseURI).href;
+    state.loading = (async () => {
+      const bytes = await bytesOf(href);
+      const file = videoFile(bytes ?? Buffer.alloc(0));
+      const info = probe(file);
+      if (info === undefined) throw new Error('no decodable video');
+      if (sourceOf(element) !== src) return;
+      Object.assign(state, { file, info });
+      for (const type of ['loadstart', 'durationchange', 'loadedmetadata', 'loadeddata', 'canplay', 'canplaythrough']) fire(element, type);
+    })().catch(() => {
+      state.error = { code: 4, message: 'MEDIA_ERR_SRC_NOT_SUPPORTED' };
+      fire(element, 'error');
+    });
+  };
+  const define = (target, name, get, set) => Object.defineProperty(target, name, { configurable: true, enumerable: true, get, set });
+  // Video, but not HEVC, whose alpha this ffmpeg does not decode: Chrome on
+  // Linux does not play it either.
+  const canPlay = (type) => /^video\//i.test(String(type)) && !/\b(hvc1|hev1)\b/i.test(String(type));
+  proto.canPlayType = function canPlayType(type) {
+    return canPlay(type) ? 'maybe' : '';
+  };
+  proto.load = function () {
+    load(this);
+  };
+  proto.play = function play() {
+    const state = stateOf(this);
+    if (state.loading === undefined) load(this);
+    // Without a source yet, play() waits for one to load or fail.
+    const loaded =
+      state.loading ??
+      new Promise((resolve) => {
+        this.addEventListener('loadeddata', resolve, { once: true });
+        this.addEventListener('error', resolve, { once: true });
+      });
+    return loaded.then(() => {
+      if (state.error !== null) throw new window.DOMException('The element has no supported sources.', 'NotSupportedError');
+      if (!state.paused) return;
+      state.paused = false;
+      state.started = performance.now();
+      fire(this, 'play');
+      fire(this, 'playing');
+      state.timer = setInterval(() => fire(this, 'timeupdate'), 250);
+      state.timer.unref?.();
+    });
+  };
+  proto.pause = function pause() {
+    const state = stateOf(this);
+    if (state.paused) return;
+    state.position = currentTime(state);
+    state.paused = true;
+    clearInterval(state.timer);
+    fire(this, 'pause');
+  };
+  define(proto, 'paused', function () {
+    return stateOf(this).paused;
+  });
+  define(proto, 'ended', () => false);
+  define(proto, 'error', function () {
+    return stateOf(this).error;
+  });
+  define(proto, 'readyState', function () {
+    return stateOf(this).info === undefined ? 0 : 4;
+  });
+  define(proto, 'duration', function () {
+    return stateOf(this).info?.duration ?? Number.NaN;
+  });
+  define(
+    proto,
+    'loop',
+    function () {
+      return this.hasAttribute('loop');
+    },
+    function (value) {
+      stateOf(this).loop = Boolean(value);
+      this.toggleAttribute('loop', Boolean(value));
+    },
+  );
+  define(
+    proto,
+    'currentTime',
+    function () {
+      return currentTime(stateOf(this));
+    },
+    function (value) {
+      const state = stateOf(this);
+      state.position = Number(value) || 0;
+      state.started = performance.now();
+      fire(this, 'seeking');
+      fire(this, 'seeked');
+      fire(this, 'timeupdate');
+    },
+  );
+  define(videoProto, 'videoWidth', function () {
+    return stateOf(this).info?.width ?? 0;
+  });
+  define(videoProto, 'videoHeight', function () {
+    return stateOf(this).info?.height ?? 0;
+  });
+  videoProto.requestVideoFrameCallback = function (callback) {
+    return setTimeout(() => {
+      const state = stateOf(this);
+      callback(performance.now(), { mediaTime: currentTime(state), width: state.info?.width ?? 0, height: state.info?.height ?? 0, presentedFrames: 1 });
+    }, 16);
+  };
+  videoProto.cancelVideoFrameCallback = (handle) => clearTimeout(handle);
+  // A new source loads the element, through the property or the attribute,
+  // and so does a parsed or inserted element that has one.
+  const descriptor = Object.getOwnPropertyDescriptor(proto, 'src');
+  if (descriptor?.set) {
     Object.defineProperty(proto, 'src', {
       ...descriptor,
       set(value) {
         descriptor.set.call(this, value);
-        if (String(value) !== '') fail(this);
+        load(this);
       },
     });
   }
   const setAttribute = window.Element.prototype.setAttribute;
   window.Element.prototype.setAttribute = function (name, value) {
     setAttribute.call(this, name, value);
-    if (isMedia(this) && String(name).toLowerCase() === 'src' && String(value) !== '') fail(this);
+    if (this instanceof window.HTMLMediaElement && String(name).toLowerCase() === 'src') load(this);
   };
-  // Elements from markup get their src without the setters above. The
-  // parser's are failed once parsing is done: in a browser their load ends
-  // after the scripts before them have run, which jsdom does not guarantee.
-  // Later ones (innerHTML) fail as they are inserted.
-  const failInserted = (node) => {
-    if (isMedia(node) && !failed.has(node) && node.getAttribute('src')) fail(node);
+  const loadInserted = (node) => {
+    if (node instanceof window.HTMLMediaElement && stateOf(node).loading === undefined && sourceOf(node) !== '') load(node);
   };
   window.document.addEventListener('DOMContentLoaded', () => {
-    window.document.querySelectorAll('img, video, audio').forEach(failInserted);
+    window.document.querySelectorAll('video, audio').forEach(loadInserted);
     new window.MutationObserver((records) => {
-      for (const record of records) record.addedNodes.forEach(failInserted);
+      for (const record of records) record.addedNodes.forEach(loadInserted);
     }).observe(window.document, { childList: true, subtree: true });
   });
 }
+
 
 /** The child's entry point: runs the page named on the command line. */
 export async function main(hooks = {}) {

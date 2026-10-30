@@ -3,9 +3,27 @@
 import {
   createContext,
   type ContextOptions,
+  HeadlessCanvas,
+  type WebGLContextAttributes,
   WebGL2RenderingContext,
   WebGLRenderingContext,
   WebGLShaderPrecisionFormat,
+  WebGLContextEvent,
+  type WebGLActiveInfo,
+  type WebGLBuffer,
+  type WebGLFramebuffer,
+  type WebGLRenderbuffer,
+  type WebGLObject,
+  type WebGLProgram,
+  type WebGLQuery,
+  type WebGLSync,
+  type WebGLTransformFeedback,
+  type WebGLVertexArrayObject,
+  type WebGLVertexArrayObjectOES,
+  type WebGLSampler,
+  type WebGLShader,
+  type WebGLTexture,
+  type WebGLUniformLocation,
 } from '../src/index.js';
 
 /* eslint-disable @typescript-eslint/no-unnecessary-type-parameters -- the standard type-equality idiom */
@@ -73,3 +91,84 @@ declare const precision: WebGLShaderPrecisionFormat;
 expectType<Equal<typeof precision.rangeMin, number>>();
 // @ts-expect-error -- the attributes are read-only
 precision.precision = 1;
+
+// drawing-buffer: attributes, canvas, resize.
+const withAttributes = createContext({
+  width: 0,
+  height: 4,
+  attributes: { alpha: false, powerPreference: 'low-power' },
+  canvas: {},
+});
+expectType<Equal<ReturnType<typeof withAttributes.getContextAttributes>, WebGLContextAttributes | null>>();
+expectType<Equal<typeof withAttributes.canvas, object>>();
+withAttributes.resize(8, 8);
+declare const headless: HeadlessCanvas;
+expectType<Equal<typeof headless.width, number>>();
+const asTarget: EventTarget = headless;
+export { asTarget };
+// @ts-expect-error -- unknown power preference
+createContext({ width: 1, height: 1, attributes: { powerPreference: 'fast' } });
+// @ts-expect-error -- HeadlessCanvas is not constructible from user code
+new HeadlessCanvas();
+
+// core-rendering: objects and their methods.
+const glr = createContext({ width: 1, height: 1, webgl2: true });
+const buffer: WebGLBuffer = glr.createBuffer();
+const shaderOrNull: WebGLShader | null = glr.createShader(glr.VERTEX_SHADER);
+const programObject: WebGLProgram = glr.createProgram();
+glr.bindBuffer(glr.ARRAY_BUFFER, buffer);
+glr.bufferData(glr.ARRAY_BUFFER, new Float32Array(4), glr.STATIC_DRAW);
+glr.bufferData(glr.ARRAY_BUFFER, 16, glr.STATIC_DRAW);
+glr.getBufferSubData(glr.ARRAY_BUFFER, 0, new Uint8Array(4));
+const where: WebGLUniformLocation | null = glr.getUniformLocation(programObject, 'u');
+glr.uniform4fv(where, [1, 2, 3, 4]);
+glr.uniform2ui(where, 1, 2);
+const info: WebGLActiveInfo | null = glr.getActiveUniform(programObject, 0);
+const asObject: WebGLObject = buffer;
+export { shaderOrNull, info, asObject };
+// @ts-expect-error -- a shader is not a buffer
+glr.bindBuffer(glr.ARRAY_BUFFER, shaderOrNull as WebGLShader);
+
+// textures.
+const texture: WebGLTexture = glr.createTexture();
+glr.bindTexture(glr.TEXTURE_2D, texture);
+glr.texImage2D(glr.TEXTURE_2D, 0, glr.RGBA, 1, 1, 0, glr.RGBA, glr.UNSIGNED_BYTE, new Uint8Array(4));
+glr.texImage2D(glr.TEXTURE_2D, 0, glr.RGBA, glr.RGBA, glr.UNSIGNED_BYTE, { width: 1, height: 1, data: new Uint8ClampedArray(4) });
+glr.texStorage2D(glr.TEXTURE_2D, 1, glr.RGBA8, 1, 1);
+const sampler: WebGLSampler = glr.createSampler();
+glr.bindSampler(0, sampler);
+// @ts-expect-error -- a texture is not a sampler
+glr.bindSampler(0, texture);
+
+// framebuffers.
+const framebuffer: WebGLFramebuffer = glr.createFramebuffer();
+const renderbuffer: WebGLRenderbuffer = glr.createRenderbuffer();
+glr.bindFramebuffer(glr.FRAMEBUFFER, framebuffer);
+glr.bindRenderbuffer(glr.RENDERBUFFER, renderbuffer);
+glr.framebufferRenderbuffer(glr.FRAMEBUFFER, glr.COLOR_ATTACHMENT0, glr.RENDERBUFFER, renderbuffer);
+glr.drawBuffers([glr.COLOR_ATTACHMENT0]);
+glr.blitFramebuffer(0, 0, 1, 1, 0, 0, 1, 1, glr.COLOR_BUFFER_BIT, glr.NEAREST);
+glr.readPixels(0, 0, 1, 1, glr.RGBA, glr.UNSIGNED_BYTE, 0);
+// @ts-expect-error -- a renderbuffer is not a framebuffer
+glr.bindFramebuffer(glr.FRAMEBUFFER, renderbuffer);
+
+// webgl2-objects.
+const vao: WebGLVertexArrayObject = glr.createVertexArray();
+glr.bindVertexArray(vao);
+glr.drawArraysInstanced(glr.TRIANGLES, 0, 3, 2);
+const query: WebGLQuery = glr.createQuery();
+glr.beginQuery(glr.ANY_SAMPLES_PASSED, query);
+const sync: WebGLSync | null = glr.fenceSync(glr.SYNC_GPU_COMMANDS_COMPLETE, 0);
+const feedback: WebGLTransformFeedback = glr.createTransformFeedback();
+
+
+// extensions.
+const instancing = gl1.getExtension('ANGLE_instanced_arrays');
+instancing?.drawArraysInstancedANGLE(gl1.TRIANGLES, 0, 3, 2);
+const oesVao = gl1.getExtension('OES_vertex_array_object');
+const vaoOES: WebGLVertexArrayObjectOES | undefined = oesVao?.createVertexArrayOES();
+const anisotropy: number | undefined = gl1.getExtension('EXT_texture_filter_anisotropic')?.TEXTURE_MAX_ANISOTROPY_EXT;
+const anyExtension: object | null = gl1.getExtension('SOME_EXTENSION');
+const lostEvent: WebGLContextEvent = new WebGLContextEvent('webglcontextlost', { statusMessage: '' });
+const statusMessage: string = lostEvent.statusMessage;
+export { sync, feedback, vaoOES, anisotropy, anyExtension, statusMessage };
