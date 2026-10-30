@@ -288,7 +288,8 @@ function installShim(window, state) {
           if (this.complete && this.naturalWidth > 0) resolve(undefined);
           else reject(new window.DOMException('The source image cannot be decoded.', 'EncodingError'));
         };
-        if (this.complete && this.src !== '') {
+        // complete is true with no src as well; settle() rejects that.
+        if (this.complete) {
           settle();
           return;
         }

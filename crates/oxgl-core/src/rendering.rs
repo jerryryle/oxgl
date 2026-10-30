@@ -1072,12 +1072,10 @@ impl Context {
             self.errors.synthesize(GL_INVALID_VALUE);
             return false;
         }
+        let array = crate::drawing_buffer::integers(&current, GL_ARRAY_BUFFER_BINDING);
         // Without an ARRAY_BUFFER only offset 0 is valid (WebGL 1.0 §6.4);
         // ANGLE checks the float form but not vertexAttribIPointer.
-        if offset != 0
-            && crate::drawing_buffer::integers(&current, GL_ARRAY_BUFFER_BINDING)
-                .is_some_and(|[name, _]| name == 0)
-        {
+        if offset != 0 && array.is_some_and(|[name, _]| name == 0) {
             self.errors.synthesize(GL_INVALID_OPERATION);
             return false;
         }
@@ -1087,7 +1085,6 @@ impl Context {
             }
             None => current.vertex_attrib_i_pointer(index, size, ty, stride, offset),
         }
-        let array = crate::drawing_buffer::integers(&current, GL_ARRAY_BUFFER_BINDING);
         let attrib = current.vertex_attrib(
             index,
             GL_VERTEX_ATTRIB_ARRAY_BUFFER_BINDING,
