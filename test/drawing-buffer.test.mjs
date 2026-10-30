@@ -276,12 +276,14 @@ test('resize keeps the viewport and clears', () => {
   gl.destroy();
 });
 
-test('resize to the same size clears', () => {
+test('resize to the same size keeps the contents', () => {
   const gl = createContext({ width: 4, height: 4 });
   gl.clearColor(1, 0, 0, 1);
   gl.clear(gl.COLOR_BUFFER_BIT);
   gl.resize(4, 4);
-  assert.ok(allPixels(readAll(gl), [0, 0, 0, 0]));
+  assert.ok(allPixels(readAll(gl), [255, 0, 0, 255]));
+  gl.canvas.width = 4;
+  assert.ok(allPixels(readAll(gl), [255, 0, 0, 255]));
   gl.destroy();
 });
 

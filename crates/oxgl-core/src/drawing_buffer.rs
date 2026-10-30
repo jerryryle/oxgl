@@ -164,6 +164,8 @@ pub struct DrawingBuffer {
     draw_buffer: std::cell::Cell<u32>,
     /// The default framebuffer's read buffer (WebGL 2): `BACK` or `NONE`.
     read_buffer: std::cell::Cell<u32>,
+    /// The size last asked for, before limits and fallbacks.
+    size_request: (f64, f64),
 }
 
 impl DrawingBuffer {
@@ -217,6 +219,7 @@ impl DrawingBuffer {
             },
             draw_buffer: std::cell::Cell::new(GL_BACK),
             read_buffer: std::cell::Cell::new(GL_BACK),
+            size_request: (request.width, request.height),
         };
         let mut errors = ErrorState::default();
         buffer
@@ -398,6 +401,14 @@ impl DrawingBuffer {
     /// creation) and clears. Errors pending before the call stay pending.
     /// `false` if not even 1×1 could be allocated.
     pub fn resize(&mut self, width: f64, height: f64, errors: &mut ErrorState) -> bool {
+        // Setting a canvas to the size it has keeps the buffer and its
+        // contents, as Chromium does (Khronos
+        // `conformance/canvas/render-after-resize-test.html`).
+        #[allow(clippy::float_cmp, reason = "the same converted sizes")]
+        if (width, height) == self.size_request {
+            return true;
+        }
+        self.size_request = (width, height);
         self.allocate(width, height, errors).is_some()
     }
 

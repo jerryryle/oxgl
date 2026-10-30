@@ -294,6 +294,19 @@ function context2d(canvas: unknown): Canvas2D | null {
 }
 
 /**
+ * The drawing buffer of the oxgl context on `canvas` as unpremultiplied
+ * RGBA8, top row first, or `undefined` when no oxgl context draws for it:
+ * what a host that displays or exports canvases (the conformance runner's
+ * DOM) shows for a WebGL canvas.
+ */
+export function canvasPixels(canvas: object): Pixels | undefined {
+  const owner = canvasContexts.get(canvas);
+  if (owner === undefined) return undefined;
+  if (owner.destroyed) return EMPTY;
+  return native.drawingBufferPixels(owner.index, owner.version) ?? EMPTY;
+}
+
+/**
  * A `TexImageSource` as RGBA8, top row first (design: "TexImageSource"):
  * an `ImageData`-shaped object, an oxgl context's canvas, an object with a
  * 2D context, or a document image. Anything else is a `TypeError`.

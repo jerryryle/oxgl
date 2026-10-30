@@ -246,7 +246,7 @@ function contextSource() {
     parts.push(body);
   };
   inline(CONTEXT_URL);
-  return `${parts.join('\n')}\nreturn { createContext, ${INTERFACES.join(', ')} };`;
+  return `${parts.join('\n')}\nreturn { createContext, canvasPixels, ${INTERFACES.join(', ')} };`;
 }
 
 /**
@@ -278,6 +278,52 @@ function installShim(window, state) {
     own.clear();
     return close.call(this);
   };
+  // jsdom's images have no decode() (HTML §4.8.4.3.4), which the suite's
+  // image loaders await: resolve when the image has loaded, reject when it
+  // fails, as browsers do.
+  if (typeof window.HTMLImageElement.prototype.decode !== 'function') {
+    window.HTMLImageElement.prototype.decode = function decode() {
+      return new window.Promise((resolve, reject) => {
+        const settle = () => {
+          if (this.complete && this.naturalWidth > 0) resolve(undefined);
+          else reject(new window.DOMException('The source image cannot be decoded.', 'EncodingError'));
+        };
+        if (this.complete && this.src !== '') {
+          settle();
+          return;
+        }
+        this.addEventListener('load', settle, { once: true });
+        this.addEventListener('error', settle, { once: true });
+      });
+    };
+  }
+  // A WebGL canvas drawn into a 2D canvas, or exported with toDataURL,
+  // shows its drawing buffer, which jsdom's own canvas does not have.
+  const { canvasPixels } = oxgl;
+  const asImage = (canvas) => {
+    const pixels = canvasPixels(canvas);
+    if (pixels === undefined) return undefined;
+    const scratch = window.document.createElement('canvas');
+    scratch.width = pixels.width;
+    scratch.height = pixels.height;
+    if (pixels.width > 0 && pixels.height > 0) {
+      const data = new Uint8ClampedArray(pixels.data.buffer, pixels.data.byteOffset, pixels.data.byteLength);
+      getContext2d.call(scratch, '2d').putImageData(new window.ImageData(data, pixels.width, pixels.height), 0, 0);
+    }
+    return scratch;
+  };
+  // jsdom sets drawImage on each 2D context it creates, so getContext below
+  // wraps that instance's.
+  const wrapDrawImage = (context) => {
+    const own = context.drawImage;
+    context.drawImage = function (image, ...rest) {
+      return own.call(this, (image instanceof window.HTMLCanvasElement && asImage(image)) || image, ...rest);
+    };
+  };
+  const toDataURL = window.HTMLCanvasElement.prototype.toDataURL;
+  window.HTMLCanvasElement.prototype.toDataURL = function (...args) {
+    return toDataURL.apply(asImage(this) ?? this, args);
+  };
   // jsdom's own getContext gives 2D contexts (through the canvas package).
   // It does not know oxgl's contexts, so one type per canvas is enforced here
   // in both directions (HTML §4.12.5).
@@ -290,7 +336,10 @@ function installShim(window, state) {
     if (existing) return existing.version === version ? existing.gl : null;
     if (version === undefined) {
       const context = getContext2d.call(this, type, ...rest);
-      if (context !== null && context !== undefined) canvases2d.add(this);
+      if (context !== null && context !== undefined && !canvases2d.has(this)) {
+        canvases2d.add(this);
+        wrapDrawImage(context);
+      }
       return context ?? null;
     }
     if (canvases2d.has(this)) return null;
