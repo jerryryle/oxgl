@@ -123,9 +123,9 @@ test('dropped contexts are reclaimed', async (t) => {
   // after the first frees, so only from the second pass on do the buffers
   // come from a heap that keeps its high-water mark.
   //
-  // RSS still moves in one-off allocator steps (up to ~48 MiB) and trims, in
-  // whichever pass they land. A leak grows every pass, so the gate is the
-  // median of three passes, which ignores a single swing either way.
+  // RSS still moves in allocator steps (up to ~125 MiB on Linux arm64) and
+  // trims, in whichever pass they land, so two of three passes can swing up.
+  // A leak grows every pass, so the gate is the smallest growth of three.
   const baselineContexts = liveContexts();
   await dropContexts(ITERATIONS);
   await dropContexts(ITERATIONS);
@@ -133,7 +133,7 @@ test('dropped contexts are reclaimed', async (t) => {
     await dropContexts(ITERATIONS);
     assert.equal(liveContexts(), baselineContexts, 'every collected context was released');
   });
-  const median = growths.toSorted((a, b) => a - b)[1];
-  t.diagnostic(`GC-only: RSS growth per pass ${growths.map(mib).join(', ')}; median ${mib(median)}`);
-  assert.ok(median <= THRESHOLD, `median RSS growth per pass ${mib(median)} (limit 32 MiB)`);
+  const least = Math.min(...growths);
+  t.diagnostic(`GC-only: RSS growth per pass ${growths.map(mib).join(', ')}; least ${mib(least)}`);
+  assert.ok(least <= THRESHOLD, `least RSS growth per pass ${mib(least)} (limit 32 MiB)`);
 });

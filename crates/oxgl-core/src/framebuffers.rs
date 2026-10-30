@@ -143,6 +143,7 @@ impl Context {
                 GL_R16F | GL_RG16F | GL_RGBA16F => {
                     enabled("EXT_color_buffer_float") || enabled("EXT_color_buffer_half_float")
                 }
+                GL_R16_EXT | GL_RG16_EXT | GL_RGBA16_EXT => enabled("EXT_texture_norm16"),
                 GL_R32F | GL_RG32F | GL_RGBA32F | GL_R11F_G11F_B10F => {
                     enabled("EXT_color_buffer_float")
                 }
@@ -169,10 +170,19 @@ impl Context {
 
     /// Whether `attachment` is an attachment point here: WebGL 1's list,
     /// grown by `WEBGL_draw_buffers` (ANGLE checks the maximum).
-    fn attachment_allowed(&self, attachment: u32) -> bool {
-        is_attachment(attachment, self.webgl2)
-            || (self.extensions.is_enabled("WEBGL_draw_buffers")
-                && (GL_COLOR_ATTACHMENT0..=GL_COLOR_ATTACHMENT15).contains(&attachment))
+    fn attachment_allowed(&self, current: &Current<'_>, attachment: u32) -> bool {
+        // Color attachment points past MAX_COLOR_ATTACHMENTS are INVALID_ENUM
+        // in WebGL, checked here: ANGLE's own error for them would come with
+        // a second one from `attach`'s query of the attachment.
+        let color = (GL_COLOR_ATTACHMENT0..=GL_COLOR_ATTACHMENT31).contains(&attachment);
+        if !color {
+            return is_attachment(attachment, self.webgl2);
+        }
+        if !self.webgl2 && !self.extensions.is_enabled("WEBGL_draw_buffers") {
+            return attachment == GL_COLOR_ATTACHMENT0;
+        }
+        let max = integers(current, GL_MAX_COLOR_ATTACHMENTS).map_or(1, |[max, _]| max);
+        attachment - GL_COLOR_ATTACHMENT0 < max.cast_unsigned()
     }
 
     fn framebuffer_name(&self, key: ObjectKey) -> Option<u32> {
@@ -346,7 +356,9 @@ impl Context {
         let Some(current) = current(&self.buffer, &mut self.errors) else {
             return false;
         };
-        if !is_framebuffer_target(target, self.webgl2) || !self.attachment_allowed(attachment) {
+        if !is_framebuffer_target(target, self.webgl2)
+            || !self.attachment_allowed(&current, attachment)
+        {
             self.errors.synthesize(GL_INVALID_ENUM);
             return false;
         }
@@ -431,7 +443,9 @@ impl Context {
         if !self.default_bound(&current, target) {
             // The default framebuffer's buffer names are not attachments of
             // a framebuffer object (OpenGL ES 3.0 §6.1.13).
-            if !self.attachment_allowed(attachment) || default_attachment(attachment).is_some() {
+            if !self.attachment_allowed(&current, attachment)
+                || default_attachment(attachment).is_some()
+            {
                 self.errors.synthesize(GL_INVALID_ENUM);
                 return None;
             }

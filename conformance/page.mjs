@@ -149,7 +149,7 @@ export async function runPage(url, { endEarly = false, root } = {}, hooks = {}) 
             // A debugging aid: OXGL_CONFORMANCE_TRACE names a file that
             // collects every failed assertion, not only the first.
             const trace = process.env.OXGL_CONFORMANCE_TRACE;
-            if (trace) appendFileSync(trace, `FAILED ${url}: ${String(msg)}\n`);
+            if (trace) appendFileSync(trace, `FAILED ${url}: ${String(msg)}\n${String(new Error().stack)}\n`);
           }
           sendCounts();
         },

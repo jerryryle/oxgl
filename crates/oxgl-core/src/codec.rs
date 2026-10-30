@@ -18,8 +18,9 @@ pub const HALF_FLOAT_OES: u32 = 0x8D61;
 /// (`L` reads R, as browsers do for luminance from color sources).
 fn channels(format: u32) -> Option<&'static [usize]> {
     Some(match format {
-        GL_RGBA | GL_RGBA_INTEGER => &[0, 1, 2, 3],
-        GL_RGB | GL_RGB_INTEGER => &[0, 1, 2],
+        // EXT_sRGB's formats (WebGL 1) store bytes like RGB and RGBA.
+        GL_RGBA | GL_RGBA_INTEGER | GL_SRGB_ALPHA_EXT => &[0, 1, 2, 3],
+        GL_RGB | GL_RGB_INTEGER | GL_SRGB_EXT => &[0, 1, 2],
         GL_RG | GL_RG_INTEGER => &[0, 1],
         GL_RED | GL_RED_INTEGER | GL_LUMINANCE => &[0],
         GL_ALPHA => &[3],
