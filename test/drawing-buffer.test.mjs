@@ -377,3 +377,16 @@ test('compositing keeps per-draw-buffer color masks', async (t) => {
   assert.equal(gl.getError(), gl.NO_ERROR);
   gl.destroy();
 });
+
+test('compositing clears even with the draw buffer set to NONE', async () => {
+  const { presentDrawingBuffer } = await import('../dist/context.js');
+  const gl = createContext({ width: 2, height: 2, webgl2: true });
+  gl.clearColor(1, 1, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.drawBuffers([gl.NONE]);
+  presentDrawingBuffer(gl);
+  assert.equal(gl.getParameter(gl.DRAW_BUFFER0), gl.NONE);
+  assert.ok(allPixels(readAll(gl), [0, 0, 0, 0]));
+  assert.equal(gl.getError(), gl.NO_ERROR);
+  gl.destroy();
+});

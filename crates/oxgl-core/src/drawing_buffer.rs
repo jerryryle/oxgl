@@ -307,7 +307,12 @@ impl DrawingBuffer {
         if let Ok(current) = self.context.make_current() {
             drain_into(&current, errors);
             let saved = Bindings::save(&current);
-            clear(&current, self.names.draw, self.webgl2);
+            clear(
+                &current,
+                self.names.draw,
+                self.webgl2,
+                self.draw_buffer.get() == GL_NONE,
+            );
             discard_errors(&current);
             saved.restore(&current, self.names.draw);
         }
@@ -477,7 +482,12 @@ impl DrawingBuffer {
         });
         if let Some(attempt) = result {
             self.allocated = attempt;
-            clear(&current, self.names.draw, self.webgl2);
+            clear(
+                &current,
+                self.names.draw,
+                self.webgl2,
+                self.draw_buffer.get() == GL_NONE,
+            );
         }
         saved.restore(&current, self.names.draw);
         discard_errors(&current);
@@ -686,8 +696,9 @@ pub(crate) fn discard_errors(current: &Current<'_>) {
 
 /// Clears `framebuffer`'s color, depth and stencil to their defaults with
 /// default masks and no scissor test, restoring that state afterwards
-/// (design: "Clearing a new or resized buffer").
-fn clear(current: &Current<'_>, framebuffer: u32, webgl2: bool) {
+/// (design: "Clearing a new or resized buffer"). `draw_none`: the page set
+/// the drawing buffer's draw buffer to `NONE`, which must not stop the clear.
+fn clear(current: &Current<'_>, framebuffer: u32, webgl2: bool, draw_none: bool) {
     let floats = |pname| match current.get_values(pname, ValueType::Float) {
         Some(Values::Floats(values)) => values,
         _ => [0.0; 4],
@@ -732,7 +743,21 @@ fn clear(current: &Current<'_>, framebuffer: u32, webgl2: bool) {
     current.apply(StateCall::DepthMask(true));
     current.apply(StateCall::ClearStencil(0));
     current.apply(StateCall::StencilMask(u32::MAX));
+    // WebGL 1 can set NONE only through WEBGL_draw_buffers.
+    let draw_buffer = |buffer| {
+        if webgl2 {
+            current.draw_buffers(&[buffer]);
+        } else {
+            current.draw_buffers_ext(&[buffer]);
+        }
+    };
+    if draw_none {
+        draw_buffer(GL_COLOR_ATTACHMENT0);
+    }
     current.clear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT | GL_STENCIL_BUFFER_BIT);
+    if draw_none {
+        draw_buffer(GL_NONE);
+    }
 
     current.clear_color(color[0], color[1], color[2], color[3]);
     color_mask(mask);

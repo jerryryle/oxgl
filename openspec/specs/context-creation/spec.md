@@ -307,7 +307,7 @@ A context's non-standard `resize(width, height)` SHALL reallocate its drawing bu
 - **THEN** `gl.canvas.width` is `max + 100` and `gl.drawingBufferWidth` is at most `max`
 
 ### Requirement: Compositing clears the drawing buffer
-A host that composites a canvas (the conformance runner) SHALL be able to present a context's drawing buffer. Without `preserveDrawingBuffer`, presenting SHALL clear color, depth and stencil to their defaults (WebGL 1.0 §2.2) and leave every piece of context state unchanged, indexed color masks and framebuffer bindings included. It SHALL NOT be part of the public API; headless contexts are never composited.
+A host that composites a canvas (the conformance runner) SHALL be able to present a context's drawing buffer. Without `preserveDrawingBuffer`, presenting SHALL clear color, depth and stencil to their defaults (WebGL 1.0 §2.2) whatever the draw buffer, and leave every piece of context state unchanged, indexed color masks and framebuffer bindings included. It SHALL NOT be part of the public API; headless contexts are never composited.
 
 #### Scenario: Presented without preserveDrawingBuffer
 - **WHEN** a context with a red-cleared drawing buffer, a scissor test enabled and a framebuffer object bound is presented
@@ -320,3 +320,7 @@ A host that composites a canvas (the conformance runner) SHALL be able to presen
 #### Scenario: Indexed color masks survive
 - **WHEN** a WebGL 2 context with `OES_draw_buffers_indexed` has different color masks on draw buffers 0 and 1 and is presented
 - **THEN** `getIndexedParameter(COLOR_WRITEMASK, i)` returns each buffer's own mask (cf. Khronos `conformance2/extensions/oes-draw-buffers-indexed.html`)
+
+#### Scenario: Draw buffer set to NONE
+- **WHEN** a WebGL 2 context's drawing buffer is cleared to yellow, its draw buffer is set to `NONE`, and it is presented
+- **THEN** the drawing buffer reads transparent black and `DRAW_BUFFER0` is still `NONE` (cf. Khronos `conformance/extensions/webgl-draw-buffers.html`)
