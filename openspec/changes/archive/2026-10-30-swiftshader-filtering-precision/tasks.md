@@ -18,4 +18,4 @@ Pushing either repository, running `angle-build` and publishing the release are 
 ## 3. oxgl
 
 - [x] 3.1 Remove the `uniform-default-values` entries from `conformance/expectations.txt` (via `--update`) and its row from "Known upstream issues" in `angle/README.md`.
-- [ ] 3.2 After `angle-8078.3` is released (user's go-ahead), copy its URLs and digests into `angle/bundles.toml` and run `python3 angle/scripts/check_pin.py`; CI then runs the conformance suites against it.
+- [x] 3.2 After `angle-8078.3` is released (user's go-ahead), copy its URLs and digests into `angle/bundles.toml` and run `python3 angle/scripts/check_pin.py`; CI then runs the conformance suites against it.
