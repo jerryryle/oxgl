@@ -915,7 +915,7 @@ function playMedia(window) {
   const load = (element) => {
     const state = stateOf(element);
     const src = sourceOf(element);
-    Object.assign(state, { file: undefined, info: undefined, error: null, paused: true, position: 0, frames: new Map() });
+    Object.assign(state, { file: undefined, info: undefined, error: null, paused: true, position: 0, frames: new Map(), loop: element.hasAttribute('loop') });
     if (src === '') return;
     const href = new URL(src, window.document.baseURI).href;
     state.loading = (async () => {

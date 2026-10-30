@@ -3,7 +3,7 @@
 // frame as RGBA8 for uploads. Without ffmpeg, media elements fail to load,
 // and pages skip their video cases.
 import { execFileSync } from 'node:child_process';
-import { mkdtempSync, writeFileSync } from 'node:fs';
+import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
@@ -20,9 +20,13 @@ export const ffmpegAvailable = (() => {
 
 let directory;
 
-/** Writes video bytes to a temporary file for ffmpeg. */
+/** Writes video bytes to a temporary file for ffmpeg, removed at exit. */
 export function videoFile(bytes) {
-  directory ??= mkdtempSync(join(tmpdir(), 'oxgl-video-'));
+  if (directory === undefined) {
+    const made = mkdtempSync(join(tmpdir(), 'oxgl-video-'));
+    directory = made;
+    process.on('exit', () => rmSync(made, { recursive: true, force: true }));
+  }
   const file = join(directory, `${String(Date.now())}-${Math.random().toString(36).slice(2)}`);
   writeFileSync(file, bytes);
   return file;
