@@ -220,7 +220,7 @@ function release(state, ref) {
   }
 }
 
-/** Installs the canvas shim, the context class globals, Closure's loader hook and failing media. */
+/** Installs the canvas shim, the context class globals, ImageData, message delivery, Closure's loader hook and failing media. */
 function installShim(window, state) {
   const { createContext, WebGLRenderingContext, WebGL2RenderingContext, WebGLShaderPrecisionFormat } = loadOxgl(window);
   const contexts = new WeakMap();
@@ -234,11 +234,21 @@ function installShim(window, state) {
     own.clear();
     return close.call(this);
   };
-  window.HTMLCanvasElement.prototype.getContext = function getContext(type) {
+  // jsdom's own getContext gives 2D contexts (through the canvas package).
+  // It does not know oxgl's contexts, so one type per canvas is enforced here
+  // in both directions (HTML §4.12.5).
+  const getContext2d = window.HTMLCanvasElement.prototype.getContext;
+  const canvases2d = new WeakSet();
+  window.HTMLCanvasElement.prototype.getContext = function getContext(type, ...rest) {
     const version = WEBGL_TYPES[String(type)];
     const existing = contexts.get(this);
     if (existing) return existing.version === version ? existing.gl : null;
-    if (version === undefined) return null;
+    if (version === undefined) {
+      const context = getContext2d.call(this, type, ...rest);
+      if (context !== null && context !== undefined) canvases2d.add(this);
+      return context ?? null;
+    }
+    if (canvases2d.has(this)) return null;
     let gl;
     try {
       gl = createContext({ width: this.width, height: this.height, webgl2: version === 2 });
@@ -256,8 +266,47 @@ function installShim(window, state) {
   window.WebGLRenderingContext = WebGLRenderingContext;
   window.WebGL2RenderingContext = WebGL2RenderingContext;
   window.WebGLShaderPrecisionFormat = WebGLShaderPrecisionFormat;
+  window.ImageData = canvasPackage().ImageData;
   if (state.root !== undefined) window.CLOSURE_IMPORT_SCRIPT = closureImport(window, state.root);
+  deliverMessages(window);
   failMedia(window);
+}
+
+/** The `canvas` package, which jsdom uses for 2D contexts and images. */
+function canvasPackage() {
+  canvasModule ??= createRequire(import.meta.url)('canvas');
+  return canvasModule;
+}
+
+let canvasModule;
+
+/**
+ * jsdom delivers `postMessage` with `source: null`, so the suite's
+ * `setZeroTimeout`, which checks `event.source == window`, never runs its
+ * callbacks. Deliver once, in a task, with the receiving window as `source`,
+ * after jsdom's `targetOrigin` check. `data` is passed as is, as jsdom does.
+ */
+function deliverMessages(window) {
+  window.postMessage = function postMessage(message, targetOrigin = '/') {
+    const origin = window.location.origin;
+    // postMessage(message, options) carries the origin in a dictionary.
+    const target =
+      typeof targetOrigin === 'object' && targetOrigin !== null
+        ? String(targetOrigin.targetOrigin ?? '/')
+        : String(targetOrigin);
+    if (target !== '*' && target !== '/') {
+      let parsed;
+      try {
+        parsed = new URL(target).origin;
+      } catch {
+        throw new window.DOMException(`Invalid target origin '${target}'`, 'SyntaxError');
+      }
+      if (parsed !== origin) return;
+    }
+    window.setTimeout(() => {
+      window.dispatchEvent(new window.MessageEvent('message', { data: message, origin, source: window }));
+    }, 0);
+  };
 }
 
 /**
@@ -290,9 +339,11 @@ function closureImport(window, root) {
 }
 
 /**
- * Without the optional `canvas` package jsdom never loads images or media,
- * and never fires `load` or `error`. Fire `error` on the next task after a
- * source is set, so pages that wait for media fail promptly.
+ * jsdom has no video or audio decoding and never fires `load` or `error` for
+ * media. Behave like a browser without codecs: `play()` rejects with
+ * `NotSupportedError`, and `error` fires on the next task after a source is
+ * set, so pages that wait for media fail promptly. Images load through jsdom
+ * and the canvas package.
  */
 function failMedia(window) {
   const failed = new WeakSet();
@@ -300,12 +351,13 @@ function failMedia(window) {
     failed.add(element);
     window.setTimeout(() => element.dispatchEvent(new window.Event('error')), 0);
   };
-  const isMedia = (node) =>
-    node instanceof window.HTMLImageElement || node instanceof window.HTMLMediaElement;
-
-  for (const proto of [window.HTMLImageElement.prototype, window.HTMLMediaElement.prototype]) {
-    const descriptor = Object.getOwnPropertyDescriptor(proto, 'src');
-    if (!descriptor?.set) continue;
+  const isMedia = (node) => node instanceof window.HTMLMediaElement;
+  const proto = window.HTMLMediaElement.prototype;
+  proto.play = function play() {
+    return window.Promise.reject(new window.DOMException('The element has no supported sources.', 'NotSupportedError'));
+  };
+  const descriptor = Object.getOwnPropertyDescriptor(proto, 'src');
+  if (descriptor?.set) {
     Object.defineProperty(proto, 'src', {
       ...descriptor,
       set(value) {
@@ -327,7 +379,7 @@ function failMedia(window) {
     if (isMedia(node) && !failed.has(node) && node.getAttribute('src')) fail(node);
   };
   window.document.addEventListener('DOMContentLoaded', () => {
-    window.document.querySelectorAll('img, video, audio').forEach(failInserted);
+    window.document.querySelectorAll('video, audio').forEach(failInserted);
     new window.MutationObserver((records) => {
       for (const record of records) record.addedNodes.forEach(failInserted);
     }).observe(window.document, { childList: true, subtree: true });

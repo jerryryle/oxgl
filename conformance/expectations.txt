@@ -33,7 +33,7 @@ webgl1 conformance/buffers/index-validation.html FAIL # TypeError: gl.createProg
 webgl1 conformance/buffers/vertex-buffer-updated-after-draw.html FAIL # TypeError: gl.createProgram is not a function
 webgl1 conformance/canvas/buffer-offscreen-test.html FAIL # TypeError: Cannot read properties of undefined (reading 'width')
 webgl1 conformance/canvas/buffer-preserve-test.html TIMEOUT # no new result within the time limit
-webgl1 conformance/canvas/canvas-test.html FAIL # TypeError: Cannot set properties of null (setting 'globalCompositeOperation')
+webgl1 conformance/canvas/canvas-test.html TIMEOUT # no new result within the time limit
 webgl1 conformance/canvas/canvas-zero-size.html FAIL # TypeError: gl.createProgram is not a function
 webgl1 conformance/canvas/draw-static-webgl-to-multiple-canvas-test.html FAIL # TypeError: Cannot read properties of null (reading 'drawImage')
 webgl1 conformance/canvas/draw-webgl-to-canvas-test.html FAIL # TypeError: Cannot read properties of null (reading 'drawImage')
@@ -53,7 +53,6 @@ webgl1 conformance/context/context-attribute-preserve-drawing-buffer-antialias.h
 webgl1 conformance/context/context-attribute-preserve-drawing-buffer.html FAIL # TypeError: Cannot read properties of null (reading 'drawImage')
 webgl1 conformance/context/context-attributes-alpha-depth-stencil-antialias.html FAIL # TypeError: Cannot read properties of undefined (reading 'width')
 webgl1 conformance/context/context-creation-and-destruction.html FAIL # TypeError: gl.createTexture is not a function
-webgl1 conformance/context/context-creation.html TIMEOUT # no new result within the time limit
 webgl1 conformance/context/context-eviction-with-garbage-collection.html FAIL # TypeError: gl.createProgram is not a function
 webgl1 conformance/context/context-hidden-alpha.html FAIL # TypeError: gl.createProgram is not a function
 webgl1 conformance/context/context-lost.html FAIL # TypeError: gl.createBuffer is not a function
@@ -653,7 +652,6 @@ webgl1 conformance/rendering/culling.html FAIL # TypeError: gl.createProgram is 
 webgl1 conformance/rendering/default-texture-draw-bug.html FAIL # TypeError: Cannot set properties of undefined (setting 'width')
 webgl1 conformance/rendering/draw-arrays-out-of-bounds.html FAIL # TypeError: gl.createProgram is not a function
 webgl1 conformance/rendering/draw-elements-out-of-bounds.html FAIL # TypeError: gl.createProgram is not a function
-webgl1 conformance/rendering/draw-webgl-to-canvas-2d-repeatedly.html FAIL # TypeError: Cannot read properties of null (reading 'clearRect')
 webgl1 conformance/rendering/draw-with-changing-start-vertex-bug.html FAIL # TypeError: gl.createProgram is not a function
 webgl1 conformance/rendering/framebuffer-switch.html FAIL # TypeError: gl.createProgram is not a function
 webgl1 conformance/rendering/framebuffer-texture-clear.html FAIL # TypeError: gl.createTexture is not a function
@@ -859,7 +857,7 @@ webgl2 conformance/buffers/index-validation.html FAIL # TypeError: gl.createProg
 webgl2 conformance/buffers/vertex-buffer-updated-after-draw.html FAIL # TypeError: gl.createProgram is not a function
 webgl2 conformance/canvas/buffer-offscreen-test.html FAIL # TypeError: Cannot read properties of undefined (reading 'width')
 webgl2 conformance/canvas/buffer-preserve-test.html TIMEOUT # no new result within the time limit
-webgl2 conformance/canvas/canvas-test.html FAIL # TypeError: Cannot set properties of null (setting 'globalCompositeOperation')
+webgl2 conformance/canvas/canvas-test.html TIMEOUT # no new result within the time limit
 webgl2 conformance/canvas/canvas-zero-size.html FAIL # TypeError: gl.createProgram is not a function
 webgl2 conformance/canvas/draw-static-webgl-to-multiple-canvas-test.html FAIL # TypeError: Cannot read properties of null (reading 'drawImage')
 webgl2 conformance/canvas/draw-webgl-to-canvas-test.html FAIL # TypeError: Cannot read properties of null (reading 'drawImage')
@@ -879,7 +877,6 @@ webgl2 conformance/context/context-attribute-preserve-drawing-buffer-antialias.h
 webgl2 conformance/context/context-attribute-preserve-drawing-buffer.html FAIL # TypeError: Cannot read properties of null (reading 'drawImage')
 webgl2 conformance/context/context-attributes-alpha-depth-stencil-antialias.html FAIL # TypeError: Cannot read properties of undefined (reading 'width')
 webgl2 conformance/context/context-creation-and-destruction.html FAIL # TypeError: gl.createTexture is not a function
-webgl2 conformance/context/context-creation.html TIMEOUT # no new result within the time limit
 webgl2 conformance/context/context-eviction-with-garbage-collection.html FAIL # TypeError: gl.createProgram is not a function
 webgl2 conformance/context/context-hidden-alpha.html FAIL # TypeError: gl.createProgram is not a function
 webgl2 conformance/context/context-lost.html FAIL # TypeError: gl.createBuffer is not a function
@@ -1457,7 +1454,6 @@ webgl2 conformance/rendering/culling.html FAIL # TypeError: gl.createProgram is 
 webgl2 conformance/rendering/default-texture-draw-bug.html FAIL # TypeError: Cannot set properties of undefined (setting 'width')
 webgl2 conformance/rendering/draw-arrays-out-of-bounds.html FAIL # TypeError: gl.createProgram is not a function
 webgl2 conformance/rendering/draw-elements-out-of-bounds.html FAIL # TypeError: gl.createProgram is not a function
-webgl2 conformance/rendering/draw-webgl-to-canvas-2d-repeatedly.html FAIL # TypeError: Cannot read properties of null (reading 'clearRect')
 webgl2 conformance/rendering/draw-with-changing-start-vertex-bug.html FAIL # TypeError: gl.createProgram is not a function
 webgl2 conformance/rendering/framebuffer-switch.html FAIL # TypeError: gl.createProgram is not a function
 webgl2 conformance/rendering/framebuffer-texture-clear.html FAIL # TypeError: gl.createTexture is not a function
@@ -2376,7 +2372,6 @@ webgl2 conformance2/wasm/teximage2d-4gb-wasm-memory.html FAIL # TypeError: gl.cr
 webgl2 conformance2/wasm/texsubimage2d-16gb-wasm-memory.html FAIL # TypeError: gl.createShader is not a function
 webgl2 conformance2/wasm/texsubimage2d-2gb-in-4gb-wasm-memory.html FAIL # TypeError: gl.createShader is not a function
 webgl2 conformance2/wasm/texsubimage2d-4gb-wasm-memory.html FAIL # TypeError: gl.createShader is not a function
-webgl2 deqp/framework/opengl/simplereference/referencecontext.html FAIL # single_reference_context.reference_context.clear_context: Cannot read properties of null (reading 'createImageData')
 webgl2 deqp/functional/gles3/attriblocation.html FAIL # attribute_location.bind.float: gl.createProgram is not a function
 webgl2 deqp/functional/gles3/booleanstatequery.html FAIL # boolean.color_writemask:
 webgl2 deqp/functional/gles3/buffercopy.html FAIL # copy.basic.array_copy_read: gl.createProgram is not a function

@@ -3,7 +3,7 @@
 <canvas id="c"></canvas>
 <script>
 var canvas = document.getElementById("c");
-if (canvas.getContext("2d") === null) testPassed("2d is null"); else testFailed("2d is not null");
+if (canvas.getContext("bitmaprenderer") === null) testPassed("bitmaprenderer is null"); else testFailed("bitmaprenderer is not null");
 var other = document.createElement("canvas");
 var gl = other.getContext("webgl");
 if (gl instanceof WebGLRenderingContext) testPassed("webgl context"); else testFailed("no webgl context");

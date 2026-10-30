@@ -1,0 +1,15 @@
+<!DOCTYPE html>
+<html><head><script src="harness.js"></script></head><body>
+<script>
+var video = document.createElement("video");
+if (video.canPlayType("video/mp4") === "") testPassed("no playable type"); else testFailed("canPlayType");
+var pending = 2;
+function done() { if (--pending === 0) finishTest(); }
+video.play().then(function () { testFailed("play resolved"); done(); }, function (e) {
+  if (e.name === "NotSupportedError") testPassed("play rejected"); else testFailed("rejected with " + e.name);
+  done();
+});
+video.onerror = function () { testPassed("error fired"); done(); };
+video.src = "missing.mp4";
+</script>
+</body></html>
