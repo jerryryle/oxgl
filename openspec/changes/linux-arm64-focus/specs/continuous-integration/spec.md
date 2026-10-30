@@ -7,7 +7,7 @@ The main CI job SHALL run on Linux arm64, the only supported platform during the
 
 #### Scenario: Windows-only failure
 - **WHEN** CI runs during the Linux arm64 focus
-- **THEN** no job that builds or tests oxgl runs on Windows, macOS or Linux x64, a test failure on Linux arm64 fails the aggregate CI check, and the disabled platforms' entries are present behind the `PLATFORM-FOCUS` marker. Host-independent checks, such as workflow lint and license checks, and the ANGLE build workflow are unaffected.
+- **THEN** no job that builds or tests oxgl runs on Windows, macOS or Linux x64, a test failure on Linux arm64 fails the aggregate CI check, and the disabled platforms' entries are present behind the `PLATFORM-FOCUS` marker. Host-independent checks, such as workflow lint and license checks, are unaffected.
 
 #### Scenario: Disabled platforms are findable
 - **WHEN** a maintainer searches the CI workflow for the `PLATFORM-FOCUS` marker

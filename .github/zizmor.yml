@@ -5,10 +5,3 @@ rules:
       # Every action, first-party included, is pinned to a full commit SHA.
       policies:
         "*": hash-pin
-  artipacked:
-    ignore:
-      # angle-build uploads only the bundle tarballs from its dist directory,
-      # never the checkout, so the persisted token can't leak through an
-      # artifact. Editing that workflow would also trigger a full ANGLE build,
-      # so it gets `persist-credentials: false` with its next recipe change.
-      - angle-build.yml

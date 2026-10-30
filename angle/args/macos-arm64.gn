@@ -1,2 +1,0 @@
-target_cpu = "arm64"
-angle_enable_metal = true
