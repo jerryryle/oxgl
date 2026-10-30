@@ -107,8 +107,10 @@ function parameterValue(result: NativeParameter | null): unknown {
       return numbers[0];
     case 'boolean':
       return numbers[0] !== 0;
+    // Arrays are built here, not taken from native code: native arrays
+    // belong to Node's main realm, and pages compare constructors.
     case 'booleans':
-      return numbers.map((n) => n !== 0);
+      return Array.from(numbers, (n) => n !== 0);
     case 'string':
       return text ?? '';
     case 'float32':
@@ -118,7 +120,7 @@ function parameterValue(result: NativeParameter | null): unknown {
     case 'uint32':
       return new Uint32Array(numbers);
     case 'numbers':
-      return numbers;
+      return Array.from(numbers);
   }
 }
 
@@ -1210,7 +1212,9 @@ abstract class ContextBase {
   /** WebGL 1.0 §5.14.14; `null` when lost. */
   getSupportedExtensions(): string[] | null {
     const s = this.#s;
-    return s.destroyed ? null : native.getSupportedExtensions(s.index, s.version);
+    if (s.destroyed) return null;
+    const names = native.getSupportedExtensions(s.index, s.version);
+    return names === null ? null : Array.from(names);
   }
 
   /**
@@ -2614,7 +2618,8 @@ abstract class WebGL2Members extends ContextBase {
     const names = toStrings(uniformNames, 'getUniformIndices');
     const p = checkObject(s, program, WebGLProgram, 'getUniformIndices', 1, false, GL.INVALID_VALUE);
     if (!p) return null;
-    return native.getUniformIndices(s.index, s.version, ...keyOf(p), names);
+    const indices = native.getUniformIndices(s.index, s.version, ...keyOf(p), names);
+    return indices === null ? null : Array.from(indices);
   }
 
   /** WebGL 2.0 §3.7.16. */

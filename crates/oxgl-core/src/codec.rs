@@ -544,6 +544,13 @@ impl Unpack {
         } else {
             self.row_length
         };
+        // A row (the row length, or the width when it is 0) shorter than the
+        // skipped and selected pixels overlaps rows: INVALID_OPERATION
+        // (WebGL 2.0 §5.35; Khronos
+        // `conformance2/textures/misc/tex-unpack-params-with-flip-y-and-premultiply-alpha.html`).
+        if pixels < width.checked_add(self.skip_pixels)? {
+            return None;
+        }
         let alignment = self.alignment.max(1);
         let unaligned = pixels.checked_mul(bpp)?;
         let stride = unaligned.checked_add(alignment - 1)? / alignment * alignment;
