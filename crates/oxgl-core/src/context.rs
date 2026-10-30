@@ -104,6 +104,10 @@ pub struct Context {
     /// program, or the current program); their slots stay until GL frees
     /// them (OpenGL ES 2.0 §2.10.1, §2.10.3).
     pub(crate) flagged: Vec<ObjectKey>,
+    /// Per linked program, the GL type of the uniform at each location, for
+    /// `getUniform`; built on first use, dropped on link and deletion.
+    pub(crate) uniform_types:
+        std::collections::HashMap<ObjectKey, std::collections::HashMap<i32, u32>>,
 }
 
 /// Makes `buffer`'s context current, setting the lost flag if that fails: a
@@ -169,6 +173,7 @@ impl Context {
             bound_renderbuffer: None,
             extensions: crate::extensions::ExtensionState::default(),
             flagged: Vec::new(),
+            uniform_types: std::collections::HashMap::new(),
         }
     }
 

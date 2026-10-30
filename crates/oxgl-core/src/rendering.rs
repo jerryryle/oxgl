@@ -353,6 +353,7 @@ impl Context {
     /// Deletes an object now (`delete*`, or a collected object). A stale key
     /// does nothing. On a lost context only the handle is dropped.
     pub fn delete_object(&mut self, key: ObjectKey) {
+        self.uniform_types.remove(&key);
         // A shader or program GL keeps alive after deletion stays in
         // `objects`, flagged, until `sweep_flagged` sees GL free it.
         if let Some(&(Object::Shader { name } | Object::Program { name })) = self.objects.get(key) {
@@ -716,6 +717,7 @@ impl Context {
         if let Some(current) = current(&self.buffer, &mut self.errors) {
             current.link_program(name);
         }
+        self.uniform_types.remove(&program);
     }
 
     /// `validateProgram`.
@@ -983,27 +985,14 @@ impl Context {
     pub fn get_uniform(&mut self, program: ObjectKey, location: i32) -> Option<Parameter> {
         let name = self.program_or_error(program)?;
         let current = current(&self.buffer, &mut self.errors)?;
-        let count = current
-            .program_parameter(name, GL_ACTIVE_UNIFORMS)
-            .unwrap_or(0);
-        let max_length = current
-            .program_parameter(name, GL_ACTIVE_UNIFORM_MAX_LENGTH)
-            .and_then(|n| usize::try_from(n).ok())
-            .unwrap_or(0);
-        let ty = (0..count.cast_unsigned()).find_map(|index| {
-            let info = current.active_variable(name, index, max_length, true);
-            let base = info.name.strip_suffix("[0]").unwrap_or(&info.name);
-            let matches = |candidate: String| {
-                std::ffi::CString::new(candidate)
-                    .is_ok_and(|c| current.uniform_location(name, &c) == location)
-            };
-            let found = if info.name.ends_with("[0]") {
-                (0..info.size).any(|element| matches(format!("{base}[{element}]")))
-            } else {
-                matches(info.name.clone())
-            };
-            found.then_some(info.ty)
-        });
+        // GL has no query from a location to its uniform, so one pass over
+        // the active uniforms maps every location of the program, once per
+        // link: a page reading each element of a large array stays linear.
+        let types = self
+            .uniform_types
+            .entry(program)
+            .or_insert_with(|| uniform_location_types(&current, name));
+        let ty = types.get(&location).copied();
         let Some(read) = ty.and_then(uniform_read) else {
             self.errors.synthesize(GL_INVALID_OPERATION);
             return None;
@@ -1226,6 +1215,41 @@ pub enum LocationKind {
     Uniform,
     /// `getFragDataLocation`.
     FragData,
+}
+
+/// The GL type of the uniform at each location of a linked program.
+fn uniform_location_types(
+    current: &oxgl_sys::Current<'_>,
+    program: u32,
+) -> std::collections::HashMap<i32, u32> {
+    let count = current
+        .program_parameter(program, GL_ACTIVE_UNIFORMS)
+        .unwrap_or(0);
+    let max_length = current
+        .program_parameter(program, GL_ACTIVE_UNIFORM_MAX_LENGTH)
+        .and_then(|n| usize::try_from(n).ok())
+        .unwrap_or(0);
+    let mut types = std::collections::HashMap::new();
+    for index in 0..count.cast_unsigned() {
+        let info = current.active_variable(program, index, max_length, true);
+        let mut add = |candidate: &str| {
+            if let Ok(c) = std::ffi::CString::new(candidate) {
+                let location = current.uniform_location(program, &c);
+                if location >= 0 {
+                    types.insert(location, info.ty);
+                }
+            }
+        };
+        match info.name.strip_suffix("[0]") {
+            Some(base) => {
+                for element in 0..info.size {
+                    add(&format!("{base}[{element}]"));
+                }
+            }
+            None => add(&info.name),
+        }
+    }
+    types
 }
 
 #[cfg(test)]

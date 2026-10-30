@@ -78,3 +78,23 @@ test('integer TexImageSource uploads are premultiplied', () => {
   assert.equal(gl.getError(), gl.NO_ERROR);
   gl.destroy();
 });
+
+test('getUniform over every element of a large array', () => {
+  const gl = createContext({ width: 1, height: 1, webgl2: true });
+  const p = program(
+    gl,
+    '#version 300 es\nin vec2 p; void main() { gl_Position = vec4(p, 0, 1); }',
+    '#version 300 es\nprecision mediump float; uniform vec4 u[200]; uniform int k; out vec4 o; void main() { o = u[k]; }',
+  );
+  gl.useProgram(p);
+  const start = performance.now();
+  for (let i = 0; i < 200; i++) {
+    const location = gl.getUniformLocation(p, `u[${String(i)}]`);
+    gl.uniform4f(location, i, 0, 0, 1);
+    assert.equal(gl.getUniform(p, location)[0], i);
+  }
+  // One pass maps the program's locations; the reads stay linear.
+  assert.ok(performance.now() - start < 2000);
+  assert.equal(gl.getError(), gl.NO_ERROR);
+  gl.destroy();
+});
