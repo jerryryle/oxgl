@@ -20,10 +20,12 @@ test('lost event after loseContext', async () => {
     assert.equal(gl.isContextLost(), true);
     fired += 1;
   });
+  const linked = program(gl);
   ext.loseContext();
   assert.equal(gl.isContextLost(), true);
   assert.equal(gl.getError(), gl.CONTEXT_LOST_WEBGL);
   assert.equal(gl.getError(), gl.NO_ERROR);
+  assert.equal(gl.getAttachedShaders(linked), null);
   gl.blendFunc(gl.TEXTURE_2D, gl.TEXTURE_CUBE_MAP);
   assert.equal(gl.getError(), gl.NO_ERROR);
   assert.equal(fired, 0);

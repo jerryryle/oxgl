@@ -28,8 +28,7 @@ webgl1 conformance/more/functions/readPixelsBadArgs.html TIMEOUT # no new result
 webgl1 conformance/more/functions/texImage2DBadArgs.html FAIL # testTexImage2D
 webgl1 conformance/more/functions/texImage2DHTML.html TIMEOUT # no new result within the time limit
 webgl1 conformance/more/functions/texSubImage2DHTML.html TIMEOUT # no new result within the time limit
-webgl1 conformance/programs/program-test.html FAIL # getError expected: NO_ERROR. Was INVALID_VALUE : The current program shouldn't be deleted
-webgl1 conformance/reading/read-pixels-test.html TIMEOUT # no new result within the time limit
+webgl1 conformance/programs/program-test.html FAIL # an attached shader shouldn't be deleted
 webgl1 conformance/renderbuffers/framebuffer-object-attachment.html FAIL # getError expected: INVALID_ENUM. Was NO_ERROR : Only OBJECT_TYPE can be queried when no image is attached
 webgl1 conformance/rendering/clear-default-framebuffer-with-scissor-test.html FAIL # The canvas color at (0, 0) is not expected
 webgl1 conformance/textures/misc/exif-orientation.html TIMEOUT # no new result within the time limit
@@ -87,7 +86,7 @@ webgl2 conformance/more/functions/readPixelsBadArgs.html TIMEOUT # no new result
 webgl2 conformance/more/functions/texImage2DBadArgs.html FAIL # testTexImage2D
 webgl2 conformance/more/functions/texImage2DHTML.html TIMEOUT # no new result within the time limit
 webgl2 conformance/more/functions/texSubImage2DHTML.html TIMEOUT # no new result within the time limit
-webgl2 conformance/programs/program-test.html FAIL # getError expected: NO_ERROR. Was INVALID_VALUE : The current program shouldn't be deleted
+webgl2 conformance/programs/program-test.html FAIL # an attached shader shouldn't be deleted
 webgl2 conformance/rendering/clear-default-framebuffer-with-scissor-test.html FAIL # The canvas color at (0, 0) is not expected
 webgl2 conformance/rendering/negative-one-index.html FAIL # should be 0,0,0,0
 webgl2 conformance/textures/misc/exif-orientation.html TIMEOUT # no new result within the time limit

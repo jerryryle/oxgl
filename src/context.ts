@@ -1565,8 +1565,10 @@ abstract class ContextBase {
   /** WebGL 1.0 §5.14.9: the attached shaders, deleted ones included. */
   getAttachedShaders(program: WebGLProgram): WebGLShader[] | null {
     requireArguments('getAttachedShaders', 1, arguments.length);
-    const p = checkObject(this.#s, program, WebGLProgram, 'getAttachedShaders', 1, false, GL.INVALID_VALUE) as ProgramState | null | undefined;
-    return p ? [...p.attached] : null;
+    const s = this.#s;
+    const p = checkObject(s, program, WebGLProgram, 'getAttachedShaders', 1, false, GL.INVALID_VALUE) as ProgramState | null | undefined;
+    // The mirror answers, so a lost context must say null itself.
+    return p && !native.isContextLost(s.index, s.version) ? [...p.attached] : null;
   }
 
   /** WebGL 1.0 §5.14.9. Invalidates the program's earlier uniform locations. */
