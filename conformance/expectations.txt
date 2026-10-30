@@ -3,10 +3,10 @@
 # rewrites this file.
 
 webgl1 conformance/glsl/misc/shader-with-double-underscore.html FAIL # [unexpected vertex shader compile status] (expected: true) fragment shader that uses double-underscore in identifier should succeed
-webgl1 conformance/typedarrays/array-large-array-tests.html FAIL # Construction of huge Float32Array should throw exception
+webgl1 conformance/typedarrays/array-large-array-tests.html FAIL # JS engine, not WebGL: expects new Float32Array(3e9) to throw (old 32-bit byteLength rule); Node's V8 allows >4 GB arrays and allocates lazily
 webgl1 conformance/uniforms/uniform-default-values.html FAIL # should be green
 webgl2 conformance/glsl/misc/shader-with-double-underscore.html FAIL # [unexpected vertex shader compile status] (expected: true) fragment shader that uses double-underscore in identifier should succeed
-webgl2 conformance/typedarrays/array-large-array-tests.html FAIL # Construction of huge Float32Array should throw exception
+webgl2 conformance/typedarrays/array-large-array-tests.html FAIL # JS engine, not WebGL: expects new Float32Array(3e9) to throw (old 32-bit byteLength rule); Node's V8 allows >4 GB arrays and allocates lazily
 webgl2 conformance/uniforms/uniform-default-values.html FAIL # should be green
 webgl2 conformance2/textures/misc/immutable-tex-render-feedback.html FAIL # checkFramebufferStatus expected: FRAMEBUFFER_INCOMPLETE_ATTACHMENT. Was FRAMEBUFFER_COMPLETE: {immutable: false, level_prime_base/max: [1, 0], minFilter: LINEAR, dest: 1}
 webgl2 deqp/functional/gles3/shaderoperator/unary_operator_00.html FAIL # shaderop.unary_operator.minus.lowp_uint_vertex: Fail
