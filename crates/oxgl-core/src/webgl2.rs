@@ -50,6 +50,8 @@ impl Context {
         if let Some(current) = current(&self.buffer, &mut self.errors) {
             if self.webgl2 {
                 current.draw_arrays_instanced(mode, first, count, instances);
+            } else if instanced_attribute_out_of_range(&current, instances) {
+                self.errors.synthesize(GL_INVALID_OPERATION);
             } else {
                 current.draw_arrays_instanced_angle(mode, first, count, instances);
             }
@@ -74,6 +76,8 @@ impl Context {
         }
         if self.webgl2 {
             current.draw_elements_instanced(mode, count, ty, offset, instances);
+        } else if instanced_attribute_out_of_range(&current, instances) {
+            self.errors.synthesize(GL_INVALID_OPERATION);
         } else {
             current.draw_elements_instanced_angle(mode, count, ty, offset, instances);
         }
@@ -526,4 +530,90 @@ pub(crate) fn linked(current: &oxgl_sys::Current<'_>, program: u32) -> bool {
     current
         .program_parameter(program, GL_LINK_STATUS)
         .is_some_and(|status| status != 0)
+}
+
+/// WebGL 1's `ANGLE_instanced_arrays`: whether an instanced attribute the
+/// current program reads would be fetched past the end of its buffer, which
+/// is `INVALID_OPERATION` (WebGL 1.0 §6.6; Khronos
+/// `conformance/extensions/angle-instanced-arrays-out-of-bounds.html`).
+/// ANGLE checks this itself only on backends without robust buffer access;
+/// with Vulkan's, the fetch is safe but reports no error. A pass over the
+/// attributes' divisors; the rest is looked at only for instanced ones.
+fn instanced_attribute_out_of_range(current: &oxgl_sys::Current<'_>, instances: i32) -> bool {
+    use crate::drawing_buffer::integers;
+    use oxgl_sys::AttribQuery;
+    let Ok(instances) = u64::try_from(instances) else {
+        return false;
+    };
+    if instances == 0 {
+        return false;
+    }
+    let max = integers(current, GL_MAX_VERTEX_ATTRIBS).map_or(0, |[n, _]| n.cast_unsigned());
+    let int = |index, pname| {
+        let quad = current.vertex_attrib(index, pname, AttribQuery::Int);
+        if quad.len > 0 { quad.bits[0] } else { 0 }
+    };
+    (0..max).any(|index| {
+        let divisor = int(index, GL_VERTEX_ATTRIB_ARRAY_DIVISOR);
+        let buffer = int(index, GL_VERTEX_ATTRIB_ARRAY_BUFFER_BINDING);
+        if divisor == 0 || buffer == 0 || int(index, GL_VERTEX_ATTRIB_ARRAY_ENABLED) == 0 {
+            return false;
+        }
+        let element = u64::from(int(index, GL_VERTEX_ATTRIB_ARRAY_SIZE))
+            * match int(index, GL_VERTEX_ATTRIB_ARRAY_TYPE) {
+                GL_BYTE | GL_UNSIGNED_BYTE => 1,
+                GL_SHORT | GL_UNSIGNED_SHORT => 2,
+                _ => 4,
+            };
+        let stride = match u64::from(int(index, GL_VERTEX_ATTRIB_ARRAY_STRIDE)) {
+            0 => element,
+            stride => stride,
+        };
+        let offset = current
+            .vertex_attrib_offset(index, GL_VERTEX_ATTRIB_ARRAY_POINTER)
+            .and_then(|offset| u64::try_from(offset).ok())
+            .unwrap_or(0);
+        let needed = offset + (instances - 1) / u64::from(divisor) * stride + element;
+        needed > buffer_size(current, buffer) && program_reads(current, index)
+    })
+}
+
+/// The size of buffer `name`, through the `ARRAY_BUFFER` binding, restored.
+fn buffer_size(current: &oxgl_sys::Current<'_>, name: u32) -> u64 {
+    let bound = crate::drawing_buffer::integers(current, GL_ARRAY_BUFFER_BINDING)
+        .map_or(0, |[n, _]| n.cast_unsigned());
+    current.bind_buffer(GL_ARRAY_BUFFER, name);
+    let size = current.buffer_parameter(GL_ARRAY_BUFFER, GL_BUFFER_SIZE);
+    current.bind_buffer(GL_ARRAY_BUFFER, bound);
+    size.and_then(|n| u64::try_from(n).ok()).unwrap_or(0)
+}
+
+/// Whether the current program has an active attribute at `location`
+/// (a matrix covers one location per column).
+fn program_reads(current: &oxgl_sys::Current<'_>, location: u32) -> bool {
+    let program = crate::drawing_buffer::integers(current, GL_CURRENT_PROGRAM)
+        .map_or(0, |[n, _]| n.cast_unsigned());
+    let count = current
+        .program_parameter(program, GL_ACTIVE_ATTRIBUTES)
+        .unwrap_or(0);
+    let max_length = current
+        .program_parameter(program, GL_ACTIVE_ATTRIBUTE_MAX_LENGTH)
+        .and_then(|n| usize::try_from(n).ok())
+        .unwrap_or(0);
+    (0..count.cast_unsigned()).any(|index| {
+        let info = current.active_variable(program, index, max_length, false);
+        let Ok(name) = std::ffi::CString::new(info.name) else {
+            return false;
+        };
+        let Ok(first) = u32::try_from(current.attrib_location(program, &name)) else {
+            return false;
+        };
+        let columns = match info.ty {
+            GL_FLOAT_MAT2 => 2,
+            GL_FLOAT_MAT3 => 3,
+            GL_FLOAT_MAT4 => 4,
+            _ => 1,
+        };
+        (first..first + columns).contains(&location)
+    })
 }

@@ -4,7 +4,6 @@
 
 webgl1 conformance/context/context-release-with-workers.html TIMEOUT # no new result within the time limit
 webgl1 conformance/context/premultiplyalpha-test.html FAIL # should draw with 255,192,128,1
-webgl1 conformance/extensions/angle-instanced-arrays-out-of-bounds.html FAIL # getError expected: INVALID_OPERATION. Was NO_ERROR : after evaluating: ext.drawArraysInstancedANGLE(gl.TRIANGLES, 0, 9, 1)
 webgl1 conformance/glsl/misc/shader-with-double-underscore.html FAIL # [unexpected vertex shader compile status] (expected: true) fragment shader that uses double-underscore in identifier should succeed
 webgl1 conformance/more/functions/readPixelsBadArgs.html FAIL # testReadPixelsSOPIMG
 webgl1 conformance/more/functions/texImage2DHTML.html FAIL # testTexImage2DNonSOP

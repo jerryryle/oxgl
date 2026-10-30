@@ -185,7 +185,8 @@ test('float color buffers on WebGL 2', () => {
 test('debug extensions', () => {
   const gl = createContext({ width: 1, height: 1 });
   const info = gl.getExtension('WEBGL_debug_renderer_info');
-  assert.match(gl.getParameter(info.UNMASKED_RENDERER_WEBGL), /SwiftShader/);
+  // SwiftShader's, or the GPU's on the GPU backend.
+  assert.match(gl.getParameter(info.UNMASKED_RENDERER_WEBGL), /^ANGLE \(/);
   assert.equal(typeof gl.getParameter(info.UNMASKED_VENDOR_WEBGL), 'string');
   const shaders = gl.getExtension('WEBGL_debug_shaders');
   const s = gl.createShader(gl.VERTEX_SHADER);
@@ -269,5 +270,43 @@ test('extension methods do nothing once lost', () => {
   assert.equal(gl.getSupportedExtensions(), null);
   vao.bindVertexArrayOES(null);
   assert.equal(gl.getError(), gl.NO_ERROR);
+  gl.destroy();
+});
+
+test('WebGL 1 instanced attributes past their buffer are INVALID_OPERATION', () => {
+  const gl = createContext({ width: 1, height: 1 });
+  const ext = gl.getExtension('ANGLE_instanced_arrays');
+  const p = gl.createProgram();
+  gl.attachShader(p, shader(gl, gl.VERTEX_SHADER, 'attribute vec2 a; attribute vec2 b; void main() { gl_Position = vec4(a + b, 0.0, 1.0); }'));
+  gl.attachShader(p, shader(gl, gl.FRAGMENT_SHADER, 'void main() { gl_FragColor = vec4(1.0); }'));
+  gl.bindAttribLocation(p, 0, 'a');
+  gl.bindAttribLocation(p, 1, 'b');
+  gl.linkProgram(p);
+  gl.useProgram(p);
+  const vertices = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, vertices);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(6), gl.STATIC_DRAW);
+  gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  gl.enableVertexAttribArray(0);
+  // Two instances' worth of `b`, one per instance.
+  const instanced = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, instanced);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array(4), gl.STATIC_DRAW);
+  gl.vertexAttribPointer(1, 2, gl.FLOAT, false, 0, 0);
+  gl.enableVertexAttribArray(1);
+  ext.vertexAttribDivisorANGLE(1, 1);
+  ext.drawArraysInstancedANGLE(gl.TRIANGLES, 0, 3, 2);
+  assert.equal(gl.getError(), gl.NO_ERROR);
+  ext.drawArraysInstancedANGLE(gl.TRIANGLES, 0, 3, 3);
+  assert.equal(gl.getError(), gl.INVALID_OPERATION);
+  ext.vertexAttribDivisorANGLE(1, 2);
+  ext.drawArraysInstancedANGLE(gl.TRIANGLES, 0, 3, 4);
+  assert.equal(gl.getError(), gl.NO_ERROR);
+  // An attribute the program does not read is not checked.
+  ext.vertexAttribDivisorANGLE(1, 1);
+  gl.useProgram(program(gl));
+  ext.drawArraysInstancedANGLE(gl.TRIANGLES, 0, 3, 3);
+  assert.equal(gl.getError(), gl.NO_ERROR);
+  assert.equal(gl.getParameter(gl.ARRAY_BUFFER_BINDING), instanced);
   gl.destroy();
 });
