@@ -227,3 +227,16 @@ test('interleaved contexts are independent', () => {
   a.destroy();
   b.destroy();
 });
+
+test('operations and attributes are enumerable, as WebIDL defines them', () => {
+  for (const webgl2 of [false, true]) {
+    const gl = createContext({ width: 1, height: 1, webgl2 });
+    const names = [];
+    for (const name in gl) names.push(name);
+    for (const name of ['clearColor', 'drawArrays', 'drawingBufferWidth', 'canvas', 'COLOR_BUFFER_BIT']) {
+      assert.ok(names.includes(name), name);
+    }
+    assert.equal(names.includes('texImage3D'), webgl2);
+    gl.destroy();
+  }
+});

@@ -1,7 +1,7 @@
 // WebGL object interfaces (WebGL 1.0 §5.3–§5.12). Each object holds its
 // owning context's state, its native slot key and its deletion flag; the
 // context classes reach them through `objectState`.
-import { CONSTRUCTING, toDOMString } from './webidl.js';
+import { CONSTRUCTING, exposeMembers, toDOMString } from './webidl.js';
 
 /** Internal state shared by every WebGL object. */
 export interface ObjectState {
@@ -171,3 +171,5 @@ export class WebGLShaderPrecisionFormat {
     return this.#precision;
   }
 }
+
+exposeMembers(WebGLObject, WebGLUniformLocation, WebGLActiveInfo, WebGLShaderPrecisionFormat);

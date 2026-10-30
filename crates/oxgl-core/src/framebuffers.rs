@@ -284,15 +284,22 @@ impl Context {
                 current.framebuffer_renderbuffer(target, attachment, rb, name);
             }
         }
-        let query = if attachment == GL_DEPTH_STENCIL_ATTACHMENT {
+        // Ask the type first: querying the name of an empty attachment point
+        // is an error in ES 2.0, which must not reach the page.
+        let point = if attachment == GL_DEPTH_STENCIL_ATTACHMENT {
             GL_DEPTH_ATTACHMENT
         } else {
             attachment
         };
-        let attached = current
-            .framebuffer_attachment_parameter(target, query, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME)
+        let ty = current
+            .framebuffer_attachment_parameter(target, point, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE)
             .unwrap_or(0);
-        attached.cast_unsigned() == name
+        if ty == 0 {
+            return name == 0;
+        }
+        current
+            .framebuffer_attachment_parameter(target, point, GL_FRAMEBUFFER_ATTACHMENT_OBJECT_NAME)
+            .is_some_and(|attached| attached.cast_unsigned() == name)
     }
 
     /// `checkFramebufferStatus`.

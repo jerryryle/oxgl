@@ -81,3 +81,20 @@ export function isBufferSource(value: unknown): value is ArrayBufferLike | Array
     (typeof SharedArrayBuffer === 'function' && value instanceof SharedArrayBuffer)
   );
 }
+
+/**
+ * Makes the operations and attributes a class's prototype defines
+ * enumerable, as WebIDL defines them on interface prototype objects
+ * (WebIDL §3.7.6, §3.7.7); JS class members are not. Pages enumerate them,
+ * for example deqp's context wrapper with `for (var i in gl)`.
+ */
+export function exposeMembers(...classes: (abstract new (...args: never[]) => unknown)[]): void {
+  for (const cls of classes) {
+    const prototype = cls.prototype as object;
+    for (const name of Object.getOwnPropertyNames(prototype)) {
+      if (name === 'constructor') continue;
+      const descriptor = Object.getOwnPropertyDescriptor(prototype, name);
+      if (descriptor !== undefined) Object.defineProperty(prototype, name, { ...descriptor, enumerable: true });
+    }
+  }
+}

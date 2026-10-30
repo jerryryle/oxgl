@@ -10,6 +10,8 @@ import {
   WebGLShaderPrecisionFormat,
   type WebGLActiveInfo,
   type WebGLBuffer,
+  type WebGLFramebuffer,
+  type WebGLRenderbuffer,
   type WebGLObject,
   type WebGLProgram,
   type WebGLSampler,
@@ -131,3 +133,15 @@ const sampler: WebGLSampler = glr.createSampler();
 glr.bindSampler(0, sampler);
 // @ts-expect-error -- a texture is not a sampler
 glr.bindSampler(0, texture);
+
+// framebuffers.
+const framebuffer: WebGLFramebuffer = glr.createFramebuffer();
+const renderbuffer: WebGLRenderbuffer = glr.createRenderbuffer();
+glr.bindFramebuffer(glr.FRAMEBUFFER, framebuffer);
+glr.bindRenderbuffer(glr.RENDERBUFFER, renderbuffer);
+glr.framebufferRenderbuffer(glr.FRAMEBUFFER, glr.COLOR_ATTACHMENT0, glr.RENDERBUFFER, renderbuffer);
+glr.drawBuffers([glr.COLOR_ATTACHMENT0]);
+glr.blitFramebuffer(0, 0, 1, 1, 0, 0, 1, 1, glr.COLOR_BUFFER_BIT, glr.NEAREST);
+glr.readPixels(0, 0, 1, 1, glr.RGBA, glr.UNSIGNED_BYTE, 0);
+// @ts-expect-error -- a renderbuffer is not a framebuffer
+glr.bindFramebuffer(glr.FRAMEBUFFER, renderbuffer);

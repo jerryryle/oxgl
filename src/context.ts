@@ -26,6 +26,7 @@ import {
 } from './objects.js';
 import {
   CONSTRUCTING,
+  exposeMembers,
   isBufferSource,
   requireArguments,
   toBoolean,
@@ -2416,6 +2417,8 @@ function setAttribList(gl: ContextBase, index: number, kind: number, values: Arr
   }
   setAttrib(gl, index, kind, values);
 }
+
+exposeMembers(ContextBase, WebGL2Members);
 
 function codedError(code: string, message: string): Error {
   return Object.assign(new Error(message), { code });
