@@ -24,7 +24,7 @@ None.
 ## Impact
 
 - New ANGLE bundles (`angle-8078.3`) for all five platforms; the GPU backends are unchanged.
-- SwiftShader's filtered sampling of 8-bit textures uses 32-bit math instead of 16-bit, which is somewhat slower; `npm run bench` measures it before and after.
+- SwiftShader's filtered sampling of 8-bit textures uses 32-bit math instead of 16-bit. It was expected to be somewhat slower; measured on Linux arm64, `LINEAR` sampling was about 5% faster and `NEAREST` unchanged (tasks 2.4). `npm run bench` gains a textured full-screen case to track it.
 - No API change.
 
 ## Out of scope
