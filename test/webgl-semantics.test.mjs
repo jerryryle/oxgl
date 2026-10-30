@@ -116,3 +116,23 @@ test('query and pointer details', () => {
   assert.equal(gl.getError(), gl.INVALID_OPERATION);
   gl.destroy();
 });
+
+test('WebGL 1 depth textures and DEPTH_STENCIL_ATTACHMENT', () => {
+  const gl = createContext({ width: 1, height: 1 });
+  gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT, 1, 1, 0, gl.DEPTH_COMPONENT, gl.UNSIGNED_SHORT, null);
+  assert.equal(gl.getError(), gl.INVALID_ENUM);
+  gl.getExtension('WEBGL_depth_texture');
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT, 1, 1, 0, gl.DEPTH_COMPONENT, gl.UNSIGNED_SHORT, new Uint16Array(1));
+  assert.equal(gl.getError(), gl.INVALID_OPERATION);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.DEPTH_COMPONENT, 1, 1, 0, gl.DEPTH_COMPONENT, gl.UNSIGNED_SHORT, null);
+  assert.equal(gl.getError(), gl.NO_ERROR);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, gl.createFramebuffer());
+  const rb = gl.createRenderbuffer();
+  gl.bindRenderbuffer(gl.RENDERBUFFER, rb);
+  gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_STENCIL, 1, 1);
+  gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.RENDERBUFFER, rb);
+  assert.equal(gl.getFramebufferAttachmentParameter(gl.FRAMEBUFFER, gl.DEPTH_STENCIL_ATTACHMENT, gl.FRAMEBUFFER_ATTACHMENT_OBJECT_NAME), rb);
+  assert.equal(gl.getError(), gl.NO_ERROR);
+  gl.destroy();
+});

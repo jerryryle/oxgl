@@ -92,3 +92,10 @@ For an empty attachment point of a framebuffer object, `getFramebufferAttachment
 #### Scenario: Multisampled alias rejected
 - **WHEN** `renderbufferStorageMultisample(RENDERBUFFER, 1, DEPTH_STENCIL, 1, 1)` is called
 - **THEN** it generates `INVALID_OPERATION` (cf. Khronos `conformance2/renderbuffers/multisampled-depth-renderbuffer-initialization.html`)
+
+### Requirement: DEPTH_STENCIL_ATTACHMENT per version
+On WebGL 1, `DEPTH_STENCIL_ATTACHMENT` SHALL be an attachment point of its own (WebGL 1.0 §6.6). On WebGL 2 it SHALL attach at the depth and stencil points, and its `OBJECT_NAME` SHALL be the object at both, `null` when both are empty, with `INVALID_OPERATION` when they differ.
+
+#### Scenario: WebGL 1 combined point
+- **WHEN** a `DEPTH_STENCIL` renderbuffer is attached at `DEPTH_STENCIL_ATTACHMENT` on WebGL 1
+- **THEN** `getFramebufferAttachmentParameter(FRAMEBUFFER, DEPTH_STENCIL_ATTACHMENT, FRAMEBUFFER_ATTACHMENT_OBJECT_NAME)` returns it (cf. Khronos `conformance/misc/expando-loss.html`)
