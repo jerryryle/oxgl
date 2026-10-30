@@ -54,9 +54,32 @@ name_calls! {
     gen_framebuffer = glGenFramebuffers, delete_framebuffer = glDeleteFramebuffers;
     gen_renderbuffer = glGenRenderbuffers, delete_renderbuffer = glDeleteRenderbuffers;
     gen_buffer = glGenBuffers, delete_buffer = glDeleteBuffers;
+    gen_texture = glGenTextures, delete_texture = glDeleteTextures;
+    gen_sampler = glGenSamplers, delete_sampler = glDeleteSamplers;
 }
 
 value_calls! {
+    bind_texture = glBindTexture(target: GLenum, texture: GLuint);
+    tex_parameter_i = glTexParameteri(target: GLenum, pname: GLenum, param: GLint);
+    tex_parameter_f = glTexParameterf(target: GLenum, pname: GLenum, param: f32);
+    generate_mipmap = glGenerateMipmap(target: GLenum);
+    copy_tex_image_2d = glCopyTexImage2D(
+        target: GLenum, level: GLint, internalformat: GLenum, x: GLint, y: GLint,
+        width: GLsizei, height: GLsizei, border: GLint);
+    copy_tex_sub_image_2d = glCopyTexSubImage2D(
+        target: GLenum, level: GLint, xoffset: GLint, yoffset: GLint, x: GLint, y: GLint,
+        width: GLsizei, height: GLsizei);
+    copy_tex_sub_image_3d = glCopyTexSubImage3D(
+        target: GLenum, level: GLint, xoffset: GLint, yoffset: GLint, zoffset: GLint,
+        x: GLint, y: GLint, width: GLsizei, height: GLsizei);
+    tex_storage_2d = glTexStorage2D(
+        target: GLenum, levels: GLsizei, internalformat: GLenum, width: GLsizei, height: GLsizei);
+    tex_storage_3d = glTexStorage3D(
+        target: GLenum, levels: GLsizei, internalformat: GLenum, width: GLsizei, height: GLsizei,
+        depth: GLsizei);
+    bind_sampler = glBindSampler(unit: GLuint, sampler: GLuint);
+    sampler_parameter_i = glSamplerParameteri(sampler: GLuint, pname: GLenum, param: GLint);
+    sampler_parameter_f = glSamplerParameterf(sampler: GLuint, pname: GLenum, param: f32);
     bind_buffer = glBindBuffer(target: GLenum, buffer: GLuint);
     copy_buffer_sub_data = glCopyBufferSubData(
         read_target: GLenum, write_target: GLenum, read_offset: GLintptr, write_offset: GLintptr,

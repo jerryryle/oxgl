@@ -264,9 +264,24 @@ const BINDING_TARGETS = new Map<number, number>([
   [GL.UNIFORM_BUFFER_BINDING, GL.UNIFORM_BUFFER],
 ]);
 
-/** A typed array or `DataView` over a bare `ArrayBuffer`/`SharedArrayBuffer` source. */
-function asView(source: ArrayBufferLike | ArrayBufferView): ArrayBufferView {
-  return ArrayBuffer.isView(source) ? source : new Uint8Array(source);
+/**
+ * A source as bytes, with WebGL 2's element `srcOffset`/`length` (when
+ * `ranged`) converted to byte counts, so native code never needs element
+ * sizes (`BYTES_PER_ELEMENT`, 1 for a `DataView` or a bare buffer).
+ */
+function byteRange(
+  source: AllowSharedBufferSource,
+  ranged: boolean,
+  srcOffset: unknown,
+  length: unknown,
+): [Uint8Array, number, number] {
+  const offset = ranged ? toUnsignedLongLong(srcOffset) : 0;
+  const count = ranged ? toUnsignedLong(length) : 0;
+  if (!ArrayBuffer.isView(source)) return [new Uint8Array(source), 0, 0];
+  const size = (source as Partial<{ BYTES_PER_ELEMENT: number }>).BYTES_PER_ELEMENT ?? 1;
+  const bytes = new Uint8Array(source.buffer, source.byteOffset, source.byteLength);
+  // An offset past the view stays past it, so native code reports INVALID_VALUE.
+  return [bytes, offset * size, count * size];
 }
 
 /** Resizes a context's drawing buffer; assigned by `ContextBase`'s static block. */
@@ -781,24 +796,32 @@ abstract class ContextBase {
    * WebGL 1.0 §5.14.5; on WebGL 2 the `ArrayBufferView` form also takes
    * `srcOffset` and `length` in elements (WebGL 2.0 §3.7.3).
    */
-  bufferData(target: number, sizeOrData: number | AllowSharedBufferSource | null, usage: number, srcOffset?: number, length?: number): void {
+  bufferData(
+    target: number,
+    sizeOrData: number | AllowSharedBufferSource | null | undefined,
+    usage: number,
+    srcOffset?: number,
+    length?: number,
+  ): void {
     requireArguments('bufferData', 3, arguments.length);
     const s = this.#s;
     const t = toUnsignedLong(target);
-    if (typeof sizeOrData === 'object' && sizeOrData !== null) {
-      if (!isBufferSource(sizeOrData)) throw typeError('bufferData', 2, 'ArrayBuffer or ArrayBufferView');
-      const u = toUnsignedLong(usage);
-      const range = s.webgl2 && arguments.length > 3 && ArrayBuffer.isView(sizeOrData);
-      const offset = range ? toUnsignedLongLong(srcOffset) : 0;
-      const count = range ? toUnsignedLong(length) : 0;
-      if (s.destroyed) return;
-      native.bufferData(s.index, s.version, t, asView(sizeOrData), u, offset, count);
+    const ranged = s.webgl2 && arguments.length > 3;
+    // WebIDL overload resolution: null or undefined selects the nullable
+    // buffer-source overload, a buffer source that overload, anything else
+    // the GLsizeiptr one.
+    if (sizeOrData === null || sizeOrData === undefined) {
+      if (ranged) throw typeError('bufferData', 2, 'ArrayBufferView');
+      toUnsignedLong(usage);
+      if (!s.destroyed) native.synthesizeError(s.index, s.version, GL.INVALID_VALUE);
       return;
     }
-    if (sizeOrData === null) {
-      toUnsignedLong(usage);
+    if (ranged || isBufferSource(sizeOrData)) {
+      if (ranged && !ArrayBuffer.isView(sizeOrData)) throw typeError('bufferData', 2, 'ArrayBufferView');
+      const u = toUnsignedLong(usage);
+      const [view, offset, count] = byteRange(sizeOrData as AllowSharedBufferSource, ranged, srcOffset, length);
       if (s.destroyed) return;
-      native.synthesizeError(s.index, s.version, GL.INVALID_VALUE);
+      native.bufferData(s.index, s.version, t, view, u, offset, count);
       return;
     }
     const size = toLongLong(sizeOrData);
@@ -813,12 +836,13 @@ abstract class ContextBase {
     const s = this.#s;
     const t = toUnsignedLong(target);
     const dst = toLongLong(offset);
-    if (!isBufferSource(data)) throw typeError('bufferSubData', 3, 'ArrayBuffer or ArrayBufferView');
-    const range = s.webgl2 && arguments.length > 3 && ArrayBuffer.isView(data);
-    const from = range ? toUnsignedLongLong(srcOffset) : 0;
-    const count = range ? toUnsignedLong(length) : 0;
+    const ranged = s.webgl2 && arguments.length > 3;
+    if (ranged ? !ArrayBuffer.isView(data) : !isBufferSource(data)) {
+      throw typeError('bufferSubData', 3, ranged ? 'ArrayBufferView' : 'ArrayBuffer or ArrayBufferView');
+    }
+    const [view, from, count] = byteRange(data, ranged, srcOffset, length);
     if (s.destroyed) return;
-    native.bufferSubData(s.index, s.version, t, dst, asView(data), from, count);
+    native.bufferSubData(s.index, s.version, t, dst, view, from, count);
   }
 
   /** WebGL 1.0 §5.14.5: `BUFFER_SIZE` or `BUFFER_USAGE`. */

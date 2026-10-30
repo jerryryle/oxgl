@@ -42,6 +42,16 @@ pub enum Object {
         /// GL name.
         name: u32,
     },
+    /// A texture.
+    Texture {
+        /// GL name.
+        name: u32,
+    },
+    /// A sampler (WebGL 2).
+    Sampler {
+        /// GL name.
+        name: u32,
+    },
 }
 
 /// A live WebGL context.

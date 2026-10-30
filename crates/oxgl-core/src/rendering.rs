@@ -37,6 +37,10 @@ pub enum ObjectType {
     Shader(u32),
     /// `createProgram`.
     Program,
+    /// `createTexture`.
+    Texture,
+    /// `createSampler` (WebGL 2).
+    Sampler,
 }
 
 /// A `getShaderParameter`/`getProgramParameter`/`getVertexAttrib` scalar.
@@ -284,9 +288,19 @@ impl Context {
             ObjectType::Program => Object::Program {
                 name: current.create_program(),
             },
+            ObjectType::Texture => Object::Texture {
+                name: current.gen_texture(),
+            },
+            ObjectType::Sampler if self.webgl2 => Object::Sampler {
+                name: current.gen_sampler(),
+            },
+            ObjectType::Sampler => return None,
         };
-        let (Object::Buffer { name, .. } | Object::Shader { name } | Object::Program { name }) =
-            object;
+        let (Object::Buffer { name, .. }
+        | Object::Shader { name }
+        | Object::Program { name }
+        | Object::Texture { name }
+        | Object::Sampler { name }) = object;
         (name != 0).then(|| self.objects.insert(object))
     }
 
@@ -303,6 +317,8 @@ impl Context {
             Object::Buffer { name, .. } => current.delete_buffer(name),
             Object::Shader { name } => current.delete_shader(name),
             Object::Program { name } => current.delete_program(name),
+            Object::Texture { name } => current.delete_texture(name),
+            Object::Sampler { name } => current.delete_sampler(name),
         }
     }
 

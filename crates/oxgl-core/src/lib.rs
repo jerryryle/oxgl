@@ -2,6 +2,7 @@
 #![forbid(unsafe_code)]
 
 pub mod backend;
+pub mod codec;
 pub mod context;
 pub mod drawing_buffer;
 pub mod error;
@@ -10,6 +11,7 @@ pub mod pixels;
 pub mod rendering;
 pub mod runtime;
 pub mod state;
+pub mod textures;
 
 pub use backend::{Backend, ContextRequest, RequestedBackend};
 pub use context::Context;

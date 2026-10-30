@@ -28,6 +28,7 @@ mod pointers;
 mod state;
 #[cfg(feature = "test-support")]
 pub mod test_support;
+mod textures;
 mod view;
 
 pub use egl::{
@@ -38,4 +39,5 @@ pub use pointers::{
     ActiveInfo, AttribQuery, Quad, UniformData, UniformMatrix, UniformOut, UniformVector,
 };
 pub use state::{PrecisionFormat, StateCall, ValueType, Values};
+pub use textures::{TexImage, Upload, UploadData};
 pub use view::{ByteSource, PixelDestination, ViewKind};

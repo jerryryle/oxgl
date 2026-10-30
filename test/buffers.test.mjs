@@ -105,6 +105,24 @@ test('null data and negative sizes', () => {
   gl.bufferSubData(gl.ARRAY_BUFFER, -1, new Uint8Array(1));
   assert.equal(gl.getError(), gl.INVALID_VALUE);
   assert.throws(() => gl.bufferSubData(gl.ARRAY_BUFFER, 0, null), TypeError);
+  gl.bufferData(gl.ARRAY_BUFFER, undefined, gl.STATIC_DRAW);
+  assert.equal(gl.getError(), gl.INVALID_VALUE);
+  // Any other object takes the size overload (ToNumber).
+  gl.bufferData(gl.ARRAY_BUFFER, { valueOf: () => 8 }, gl.STATIC_DRAW);
+  assert.equal(gl.getBufferParameter(gl.ARRAY_BUFFER, gl.BUFFER_SIZE), 8);
+  gl.destroy();
+});
+
+test('ranged forms need a view; element sizes follow the view', () => {
+  const gl = createContext({ width: 1, height: 1, webgl2: true });
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+  assert.throws(() => gl.bufferData(gl.ARRAY_BUFFER, new ArrayBuffer(4), gl.STATIC_DRAW, 1), TypeError);
+  assert.throws(() => gl.bufferSubData(gl.ARRAY_BUFFER, 0, new ArrayBuffer(4), 1), TypeError);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float64Array([1, 2, 3]), gl.STATIC_DRAW, 2);
+  assert.equal(gl.getBufferParameter(gl.ARRAY_BUFFER, gl.BUFFER_SIZE), 8);
+  const view = new DataView(new ArrayBuffer(4));
+  gl.getBufferSubData(gl.ARRAY_BUFFER, 0, view, 1, 2);
+  assert.equal(gl.getError(), gl.NO_ERROR);
   gl.destroy();
 });
 
