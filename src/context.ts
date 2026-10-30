@@ -441,6 +441,8 @@ let replaceState: (gl: ContextBase, s: ContextState) => void;
 let attachLayer: (gl: ContextBase, target: number, attachment: number, texture: unknown, level: number, layer: number) => void;
 
 const GL = WEBGL2_CONSTANTS;
+/** `KHR_parallel_shader_compile`'s pname. */
+const COMPLETION_STATUS_KHR = 0x91b1;
 
 /** WebIDL `AllowSharedBufferSource`. */
 type AllowSharedBufferSource = ArrayBufferLike | ArrayBufferView;
@@ -1548,6 +1550,7 @@ abstract class ContextBase {
     const p = toUnsignedLong(pname);
     const state = checkObject(s, shader, WebGLShader, 'getShaderParameter', 1, false, GL.INVALID_VALUE);
     if (!state) return null;
+    if (this.#completedByLoss(p)) return true;
     return parameterValue(native.getShaderParameter(s.index, s.version, ...keyOf(state), p));
   }
 
@@ -1634,7 +1637,16 @@ abstract class ContextBase {
     const name = toUnsignedLong(pname);
     const p = checkObject(s, program, WebGLProgram, 'getProgramParameter', 1, false, GL.INVALID_VALUE);
     if (!p) return null;
+    if (this.#completedByLoss(name)) return true;
     return parameterValue(native.getProgramParameter(s.index, s.version, ...keyOf(p), name));
+  }
+
+  /**
+   * `COMPLETION_STATUS_KHR` on a lost context is `true`, so a page polling
+   * for completion does not wait forever (KHR_parallel_shader_compile).
+   */
+  #completedByLoss(pname: number): boolean {
+    return pname === COMPLETION_STATUS_KHR && this.#s.extensions.has('KHR_parallel_shader_compile') && this.isContextLost();
   }
 
   /** WebGL 1.0 §5.14.9. */

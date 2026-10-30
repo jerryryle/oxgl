@@ -147,6 +147,7 @@ impl Context {
                 GL_R32F | GL_RG32F | GL_RGBA32F | GL_R11F_G11F_B10F => {
                     enabled("EXT_color_buffer_float")
                 }
+                GL_RGB9_E5 => enabled("WEBGL_render_shared_exponent"),
                 _ => false,
             };
         }

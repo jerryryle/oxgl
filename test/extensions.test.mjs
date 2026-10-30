@@ -310,3 +310,36 @@ test('WebGL 1 instanced attributes past their buffer are INVALID_OPERATION', () 
   assert.equal(gl.getParameter(gl.ARRAY_BUFFER_BINDING), instanced);
   gl.destroy();
 });
+
+test('KHR_parallel_shader_compile reports completion on a lost context', (t) => {
+  const gl = createContext({ width: 1, height: 1 });
+  const ext = gl.getExtension('KHR_parallel_shader_compile');
+  if (ext === null) {
+    t.skip('KHR_parallel_shader_compile unavailable on this backend');
+    gl.destroy();
+    return;
+  }
+  const s = shader(gl, gl.VERTEX_SHADER, 'void main() { gl_Position = vec4(0.0); }');
+  const p = program(gl);
+  gl.getExtension('WEBGL_lose_context').loseContext();
+  assert.equal(gl.getShaderParameter(s, ext.COMPLETION_STATUS_KHR), true);
+  assert.equal(gl.getProgramParameter(p, ext.COMPLETION_STATUS_KHR), true);
+  assert.equal(gl.getShaderParameter(s, gl.COMPILE_STATUS), null);
+  gl.destroy();
+});
+
+test('WEBGL_render_shared_exponent allows RGB9_E5 renderbuffers', (t) => {
+  const gl = createContext({ width: 1, height: 1, webgl2: true });
+  const rb = gl.createRenderbuffer();
+  gl.bindRenderbuffer(gl.RENDERBUFFER, rb);
+  gl.renderbufferStorage(gl.RENDERBUFFER, gl.RGB9_E5, 1, 1);
+  assert.equal(gl.getError(), gl.INVALID_ENUM);
+  if (gl.getExtension('WEBGL_render_shared_exponent') === null) {
+    t.skip('WEBGL_render_shared_exponent unavailable on this backend');
+    gl.destroy();
+    return;
+  }
+  gl.renderbufferStorage(gl.RENDERBUFFER, gl.RGB9_E5, 1, 1);
+  assert.equal(gl.getError(), gl.NO_ERROR);
+  gl.destroy();
+});

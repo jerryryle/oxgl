@@ -13,6 +13,11 @@ and a pinned ANGLE bundle exists for each, so `npm run build` works on those
 hosts for local use. They are not supported or tested until they are
 restored.
 
+Docker on a Mac exposes no GPU to Linux containers, so the Linux arm64 runs use
+the software backend. The GPU backend path has been checked on macOS arm64
+(ANGLE Metal on an Apple GPU): all Node tests pass, and the Khronos results match
+Linux arm64 except for differences in the canvas package's image decoding.
+
 ## Known issues
 
 - **SwiftShader initialization briefly changes process-global state.** The
@@ -169,6 +174,10 @@ Draws cost the same as calling ANGLE directly (51.9 k draws/s in
 `cargo test -p oxgl-sys --test angle --release raw_draw_rate -- --ignored`):
 the time is SwiftShader's, and a GPU backend draws much faster. oxgl adds
 about 100 ns per call.
+
+On the GPU backend (macOS arm64, ANGLE Metal, Apple M4 Max), the same
+benchmarks give 715 k small draws/s and 830 frames/s for the 1000-mesh
+three.js scene.
 
 ## Prerequisites
 
