@@ -2108,8 +2108,10 @@ abstract class ContextBase {
     if (s.destroyed) return null;
     const framebuffer = framebufferFor(s, args[0]);
     if (args[2] === GL.FRAMEBUFFER_ATTACHMENT_OBJECT_NAME && framebuffer !== null) {
-      // The type query validates the target and attachment.
-      const type = native.getFramebufferAttachmentParameter(s.index, s.version, args[0], args[1], GL.FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE);
+      // The type query validates the target and attachment. ES 2.0 cannot be
+      // asked about DEPTH_STENCIL_ATTACHMENT; its depth point answers.
+      const point = !s.webgl2 && args[1] === GL.DEPTH_STENCIL_ATTACHMENT ? GL.DEPTH_ATTACHMENT : args[1];
+      const type = native.getFramebufferAttachmentParameter(s.index, s.version, args[0], point, GL.FRAMEBUFFER_ATTACHMENT_OBJECT_TYPE);
       if (type === null) return null;
       if (type.numbers[0] === GL.NONE) {
         // WebGL 1 has no name to report for an empty point (OpenGL ES 2.0 §6.1.3).
@@ -2777,7 +2779,13 @@ abstract class WebGL2Members extends ContextBase {
     if (!state || query === null) return;
     state.deleted = true;
     collectedObjects.unregister(query);
-    for (const [target, active] of s.queries) if (active === query) s.queries.delete(target);
+    // GL keeps a deleted active query active (OpenGL ES 3.0 §2.14); WebGL
+    // ends it first, as Chromium does, so its target can begin another.
+    for (const [target, active] of s.queries) {
+      if (active !== query) continue;
+      native.endQuery(s.index, s.version, target);
+      s.queries.delete(target);
+    }
     native.deleteObject(s.index, s.version, ...keyOf(state));
   }
 
@@ -2838,7 +2846,8 @@ abstract class WebGL2Members extends ContextBase {
     const p = toUnsignedLong(pname);
     const state = checkObject(s, query, WebGLQuery, 'getQueryParameter', 1, false, GL.INVALID_OPERATION) as PendingState | null | undefined;
     if (!state) return null;
-    if ([...s.queries.values()].includes(query)) {
+    // An active query, or one never begun, has no result (OpenGL ES 3.0 §6.1.7).
+    if (state.target === 0 || [...s.queries.values()].includes(query)) {
       native.synthesizeError(s.index, s.version, GL.INVALID_OPERATION);
       return null;
     }

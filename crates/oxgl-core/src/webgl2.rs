@@ -461,8 +461,9 @@ impl Context {
         let Some(current) = current(&self.buffer, &mut self.errors) else {
             return GL_WAIT_FAILED;
         };
+        // MAX_CLIENT_WAIT_TIMEOUT_WEBGL is 0 (WebGL 2.0 §3.7.14).
         if timeout != 0 {
-            self.errors.synthesize(GL_INVALID_VALUE);
+            self.errors.synthesize(GL_INVALID_OPERATION);
             return GL_WAIT_FAILED;
         }
         current.client_wait_sync(handle, flags, 0)

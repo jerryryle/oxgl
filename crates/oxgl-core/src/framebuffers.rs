@@ -287,6 +287,13 @@ impl Context {
             self.errors.synthesize(GL_INVALID_ENUM);
             return;
         }
+        // WebGL's DEPTH_STENCIL alias is single-sampled; multisampled
+        // storage names DEPTH24_STENCIL8 (Khronos
+        // `conformance2/renderbuffers/multisampled-depth-renderbuffer-initialization.html`).
+        if format == GL_DEPTH_STENCIL && samples.is_some_and(|n| n > 0) {
+            self.errors.synthesize(GL_INVALID_OPERATION);
+            return;
+        }
         let internal = if format == GL_DEPTH_STENCIL {
             GL_DEPTH24_STENCIL8
         } else {

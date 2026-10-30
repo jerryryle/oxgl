@@ -98,3 +98,21 @@ test('getUniform over every element of a large array', () => {
   assert.equal(gl.getError(), gl.NO_ERROR);
   gl.destroy();
 });
+
+test('query and pointer details', () => {
+  const gl = createContext({ width: 1, height: 1, webgl2: true });
+  const never = gl.createQuery();
+  assert.equal(gl.getQueryParameter(never, gl.QUERY_RESULT_AVAILABLE), null);
+  assert.equal(gl.getError(), gl.INVALID_OPERATION);
+  const active = gl.createQuery();
+  gl.beginQuery(gl.TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN, active);
+  gl.deleteQuery(active);
+  gl.beginQuery(gl.TRANSFORM_FEEDBACK_PRIMITIVES_WRITTEN, gl.createQuery());
+  assert.equal(gl.getError(), gl.NO_ERROR);
+  gl.vertexAttribIPointer(0, 1, gl.INT, 0, 4);
+  assert.equal(gl.getError(), gl.INVALID_OPERATION);
+  gl.bindRenderbuffer(gl.RENDERBUFFER, gl.createRenderbuffer());
+  gl.renderbufferStorageMultisample(gl.RENDERBUFFER, 1, gl.DEPTH_STENCIL, 1, 1);
+  assert.equal(gl.getError(), gl.INVALID_OPERATION);
+  gl.destroy();
+});

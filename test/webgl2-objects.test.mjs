@@ -194,7 +194,7 @@ test('sync signaled after a turn', async () => {
   assert.equal(gl.getSyncParameter(sync, gl.SYNC_STATUS), gl.UNSIGNALED);
   assert.equal(gl.clientWaitSync(sync, 0, 0), gl.TIMEOUT_EXPIRED);
   gl.clientWaitSync(sync, 0, 1);
-  assert.equal(gl.getError(), gl.INVALID_VALUE, 'timeouts above MAX_CLIENT_WAIT_TIMEOUT_WEBGL');
+  assert.equal(gl.getError(), gl.INVALID_OPERATION, 'timeouts above MAX_CLIENT_WAIT_TIMEOUT_WEBGL');
   await delay(5);
   gl.finish();
   assert.equal(gl.getSyncParameter(sync, gl.SYNC_STATUS), gl.SIGNALED);
