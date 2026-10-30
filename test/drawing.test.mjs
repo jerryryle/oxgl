@@ -4,6 +4,7 @@ import { test } from 'node:test';
 
 import { createContext, WebGL2RenderingContext, WebGLRenderingContext } from 'oxgl';
 
+import { color as setColor, program as linkProgram, quad as fullQuad } from './gl-helpers.mjs';
 import { allPixels, readAll } from './helpers.mjs';
 
 function context(t, options = {}) {
@@ -100,4 +101,95 @@ test('flush and finish', (t) => {
   assert.equal(gl.finish(), undefined);
   assert.equal(gl.getError(), gl.NO_ERROR);
   assert.ok(allPixels(readAll(gl), [0, 255, 0, 255]));
+});
+
+// --- Vertex attributes and draw calls (core-rendering) ----------------------
+
+test('vertex attribute pointer state', () => {
+  const gl = createContext({ width: 1, height: 1 });
+  const buffer = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, buffer);
+  gl.vertexAttribPointer(1, 3, gl.FLOAT, false, 12, 4);
+  assert.equal(gl.getVertexAttrib(1, gl.VERTEX_ATTRIB_ARRAY_SIZE), 3);
+  assert.equal(gl.getVertexAttrib(1, gl.VERTEX_ATTRIB_ARRAY_STRIDE), 12);
+  assert.equal(gl.getVertexAttrib(1, gl.VERTEX_ATTRIB_ARRAY_TYPE), gl.FLOAT);
+  assert.equal(gl.getVertexAttrib(1, gl.VERTEX_ATTRIB_ARRAY_NORMALIZED), false);
+  assert.equal(gl.getVertexAttrib(1, gl.VERTEX_ATTRIB_ARRAY_ENABLED), false);
+  assert.equal(gl.getVertexAttrib(1, gl.VERTEX_ATTRIB_ARRAY_BUFFER_BINDING), buffer);
+  assert.equal(gl.getVertexAttribOffset(1, gl.VERTEX_ATTRIB_ARRAY_POINTER), 4);
+  gl.deleteBuffer(buffer);
+  assert.equal(gl.getVertexAttrib(1, gl.VERTEX_ATTRIB_ARRAY_BUFFER_BINDING), null);
+  assert.equal(gl.getError(), gl.NO_ERROR);
+  gl.destroy();
+});
+
+test('constant attributes', () => {
+  const gl = createContext({ width: 1, height: 1, webgl2: true });
+  gl.vertexAttrib2f(0, 1, 2);
+  assert.deepEqual(gl.getVertexAttrib(0, gl.CURRENT_VERTEX_ATTRIB), new Float32Array([1, 2, 0, 1]));
+  gl.vertexAttribI4ui(0, 1, 2, 3, 4);
+  assert.deepEqual(gl.getVertexAttrib(0, gl.CURRENT_VERTEX_ATTRIB), new Uint32Array([1, 2, 3, 4]));
+  gl.vertexAttribI4iv(0, [-1, 2, 3, 4]);
+  assert.deepEqual(gl.getVertexAttrib(0, gl.CURRENT_VERTEX_ATTRIB), new Int32Array([-1, 2, 3, 4]));
+  gl.vertexAttrib4fv(0, [1, 2, 3]);
+  assert.equal(gl.getError(), gl.INVALID_VALUE);
+  gl.destroy();
+});
+
+test('attribute index out of range', () => {
+  const gl = createContext({ width: 1, height: 1 });
+  gl.enableVertexAttribArray(gl.getParameter(gl.MAX_VERTEX_ATTRIBS));
+  assert.equal(gl.getError(), gl.INVALID_VALUE);
+  assert.equal(gl.getVertexAttrib(gl.getParameter(gl.MAX_VERTEX_ATTRIBS), gl.VERTEX_ATTRIB_ARRAY_BUFFER_BINDING), null);
+  assert.equal(gl.getError(), gl.INVALID_VALUE);
+  gl.destroy();
+});
+
+test('pointer with no buffer and an offset', () => {
+  const gl = createContext({ width: 1, height: 1 });
+  gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 8);
+  assert.equal(gl.getError(), gl.INVALID_OPERATION);
+  gl.destroy();
+});
+
+test('triangle and indexed draw', () => {
+  for (const webgl2 of [false, true]) {
+    const gl = createContext({ width: 8, height: 8, webgl2 });
+    const p = linkProgram(gl);
+    gl.useProgram(p);
+    fullQuad(gl, p);
+    setColor(gl, p, [1, 0, 0, 1]);
+    gl.drawArrays(gl.TRIANGLES, 0, 6);
+    assert.ok(allPixels(readAll(gl), [255, 0, 0, 255]));
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.createBuffer());
+    gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array([0, 1, 2, 3, 4, 5]), gl.STATIC_DRAW);
+    gl.drawElements(gl.TRIANGLES, 6, gl.UNSIGNED_SHORT, 0);
+    assert.ok(allPixels(readAll(gl), [255, 0, 0, 255]));
+    if (webgl2) {
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.drawRangeElements(gl.TRIANGLES, 0, 5, 6, gl.UNSIGNED_SHORT, 0);
+      assert.ok(allPixels(readAll(gl), [255, 0, 0, 255]));
+    }
+    assert.equal(gl.getError(), gl.NO_ERROR);
+    gl.destroy();
+  }
+});
+
+test('out-of-range and misaligned draws', () => {
+  const gl = createContext({ width: 4, height: 4 });
+  const p = linkProgram(gl);
+  gl.useProgram(p);
+  fullQuad(gl, p);
+  // WebGL 1.0 §6.6 allows either an error or robust access that reads no
+  // memory outside the buffer.
+  gl.drawArrays(gl.TRIANGLES, 0, 3000);
+  assert.ok([gl.NO_ERROR, gl.INVALID_OPERATION].includes(gl.getError()));
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, gl.createBuffer());
+  gl.bufferData(gl.ELEMENT_ARRAY_BUFFER, new Uint16Array([0, 1, 2, 3]), gl.STATIC_DRAW);
+  gl.drawElements(gl.TRIANGLES, 3, gl.UNSIGNED_SHORT, 1);
+  assert.equal(gl.getError(), gl.INVALID_OPERATION);
+  gl.drawElements(gl.TRIANGLES, 3, gl.UNSIGNED_SHORT, -2);
+  assert.equal(gl.getError(), gl.INVALID_VALUE);
+  gl.destroy();
 });

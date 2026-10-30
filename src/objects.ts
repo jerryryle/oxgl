@@ -27,7 +27,7 @@ export interface ProgramState extends ObjectState {
 }
 
 /** Returns an object's internal state; assigned by `WebGLObject`'s static block. */
-export let objectState: <S extends ObjectState>(object: WebGLObject) => S;
+export let objectState: (object: WebGLObject) => ObjectState;
 
 /** Base of every WebGL object (WebGL 1.0 §5.3). */
 export class WebGLObject {
@@ -35,7 +35,7 @@ export class WebGLObject {
   #label = '';
 
   static {
-    objectState = <S extends ObjectState>(object: WebGLObject) => object.#state as S;
+    objectState = (object: WebGLObject) => object.#state;
   }
 
   /** @internal Created by the context. */
@@ -54,12 +54,21 @@ export class WebGLObject {
   }
 }
 
+// The `brand` declarations emit nothing; they make the otherwise identical
+// classes distinct types, as the IDL interfaces are.
+
 /** WebGL 1.0 §5.4. */
-export class WebGLBuffer extends WebGLObject {}
+export class WebGLBuffer extends WebGLObject {
+  declare private readonly brand: 'WebGLBuffer';
+}
 /** WebGL 1.0 §5.6. */
-export class WebGLProgram extends WebGLObject {}
+export class WebGLProgram extends WebGLObject {
+  declare private readonly brand: 'WebGLProgram';
+}
 /** WebGL 1.0 §5.8. */
-export class WebGLShader extends WebGLObject {}
+export class WebGLShader extends WebGLObject {
+  declare private readonly brand: 'WebGLShader';
+}
 
 /** Returns a location's state; assigned by `WebGLUniformLocation`'s static block. */
 export let locationState: (location: WebGLUniformLocation) => LocationState;

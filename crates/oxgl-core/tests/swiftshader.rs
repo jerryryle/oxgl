@@ -343,3 +343,41 @@ fn creation_failure_allocates_nothing() {
         assert_eq!(live_contexts(), before);
     });
 }
+
+#[test]
+fn collected_objects_are_deleted_and_stale_ones_skipped() {
+    use oxgl_core::rendering::ObjectType;
+    on_gl_thread(move || {
+        let mut rt = runtime();
+        let key = software(&mut rt, 4.0, 4.0, false);
+        let context = rt.context(key).unwrap();
+        let buffer = context.create_object(ObjectType::Buffer).unwrap();
+        let program = context.create_object(ObjectType::Program).unwrap();
+        assert_eq!(rt.live_objects(), 2);
+        rt.release_object(key, buffer);
+        assert_eq!(rt.live_objects(), 1);
+        // Releasing twice, or after the context is gone, does nothing.
+        rt.release_object(key, buffer);
+        rt.destroy(key);
+        rt.release_object(key, program);
+        assert_eq!(rt.live_objects(), 0);
+    });
+}
+
+#[test]
+fn buffer_targets_follow_the_first_binding() {
+    use oxgl_core::rendering::ObjectType;
+    use oxgl_sys::bindings::{GL_ARRAY_BUFFER, GL_ELEMENT_ARRAY_BUFFER, GL_INVALID_OPERATION};
+    on_gl_thread(move || {
+        let mut rt = runtime();
+        let key = software(&mut rt, 1.0, 1.0, true);
+        let context = rt.context(key).unwrap();
+        let buffer = context.create_object(ObjectType::Buffer).unwrap();
+        assert!(!context.has_object(buffer));
+        assert!(context.bind_buffer(GL_ELEMENT_ARRAY_BUFFER, Some(buffer)));
+        assert!(context.has_object(buffer));
+        assert!(!context.bind_buffer(GL_ARRAY_BUFFER, Some(buffer)));
+        assert_eq!(context.get_error(), GL_INVALID_OPERATION);
+        rt.destroy(key);
+    });
+}

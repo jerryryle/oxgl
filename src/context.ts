@@ -154,12 +154,12 @@ const collectedObjects = new FinalizationRegistry<readonly [number, number, numb
 type ObjectClass<T extends WebGLObject> = abstract new (token: symbol, state: ObjectState) => T;
 
 /** Creates a native object and its JS wrapper; on a lost context, an invalid wrapper. */
-function createObject<T extends WebGLObject, S extends ObjectState>(
+function createObject<T extends WebGLObject>(
   s: ContextState,
   Class: new (token: symbol, state: ObjectState) => T,
   kind: number,
   shaderType: number,
-  extra: Omit<S, keyof ObjectState>,
+  extra: object,
 ): T | null {
   const key = s.destroyed ? null : native.createObject(s.index, s.version, kind, shaderType);
   if (key === null && !s.destroyed && !native.isContextLost(s.index, s.version)) return null;
@@ -180,7 +180,7 @@ function typeError(method: string, position: number, type: string): TypeError {
  * belongs to another context (`INVALID_OPERATION`), or it is deleted
  * (`deletedError`, or a silent stop when 0). Returns `null` for `null`.
  */
-function checkObject<S extends ObjectState>(
+function checkObject(
   s: ContextState,
   value: unknown,
   Class: ObjectClass<WebGLObject>,
@@ -188,14 +188,14 @@ function checkObject<S extends ObjectState>(
   position: number,
   nullable: boolean,
   deletedError: number,
-): S | null | undefined {
+): ObjectState | null | undefined {
   if (value === null || value === undefined) {
     if (!nullable) throw typeError(method, position, Class.name);
     return s.destroyed ? undefined : null;
   }
   if (!(value instanceof Class)) throw typeError(method, position, Class.name);
   if (s.destroyed) return undefined;
-  const state = objectState<S>(value);
+  const state = objectState(value);
   if (state.owner !== s) {
     native.synthesizeError(s.index, s.version, GL.INVALID_OPERATION);
     return undefined;
@@ -228,7 +228,7 @@ function uniformLocation(s: ContextState, location: unknown, method: string): nu
   if (!(location instanceof WebGLUniformLocation)) throw typeError(method, 1, 'WebGLUniformLocation');
   if (s.destroyed) return undefined;
   const state = locationState(location);
-  const current = s.program === null ? null : objectState<ProgramState>(s.program);
+  const current = s.program === null ? null : (objectState as (o: WebGLObject) => ProgramState)(s.program);
   if (state.program.owner !== s) {
     native.synthesizeError(s.index, s.version, GL.INVALID_OPERATION);
     return undefined;
@@ -796,9 +796,8 @@ abstract class ContextBase {
       return;
     }
     if (sizeOrData === null) {
-      const u = toUnsignedLong(usage);
+      toUnsignedLong(usage);
       if (s.destroyed) return;
-      void u;
       native.synthesizeError(s.index, s.version, GL.INVALID_VALUE);
       return;
     }
@@ -838,12 +837,12 @@ abstract class ContextBase {
   createShader(type: number): WebGLShader | null {
     requireArguments('createShader', 1, arguments.length);
     const t = toUnsignedLong(type);
-    return createObject<WebGLShader, ShaderState>(this.#s, WebGLShader, 1, t, { type: t, source: '' });
+    return createObject(this.#s, WebGLShader, 1, t, { type: t, source: '' });
   }
 
   /** WebGL 1.0 §5.14.9. */
   createProgram(): WebGLProgram {
-    return createObject<WebGLProgram, ProgramState>(this.#s, WebGLProgram, 2, 0, {
+    return createObject(this.#s, WebGLProgram, 2, 0, {
       attached: new Set(),
       linkCount: 0,
     }) as WebGLProgram;
@@ -892,7 +891,7 @@ abstract class ContextBase {
     requireArguments('shaderSource', 2, arguments.length);
     const s = this.#s;
     const text = toDOMString(source);
-    const state = checkObject<ShaderState>(s, shader, WebGLShader, 'shaderSource', 1, false, GL.INVALID_VALUE);
+    const state = checkObject(s, shader, WebGLShader, 'shaderSource', 1, false, GL.INVALID_VALUE) as ShaderState | null | undefined;
     if (!state) return;
     state.source = text;
     native.shaderSource(s.index, s.version, ...keyOf(state), text);
@@ -909,7 +908,7 @@ abstract class ContextBase {
   /** WebGL 1.0 §5.14.9: the last source given, exactly. */
   getShaderSource(shader: WebGLShader): string | null {
     requireArguments('getShaderSource', 1, arguments.length);
-    const state = checkObject<ShaderState>(this.#s, shader, WebGLShader, 'getShaderSource', 1, false, GL.INVALID_VALUE);
+    const state = checkObject(this.#s, shader, WebGLShader, 'getShaderSource', 1, false, GL.INVALID_VALUE) as ShaderState | null | undefined;
     return state ? state.source : null;
   }
 
@@ -936,11 +935,11 @@ abstract class ContextBase {
   attachShader(program: WebGLProgram, shader: WebGLShader): void {
     requireArguments('attachShader', 2, arguments.length);
     const s = this.#s;
-    const p = checkObject<ProgramState>(s, program, WebGLProgram, 'attachShader', 1, false, GL.INVALID_VALUE);
-    const sh = checkObject<ShaderState>(s, shader, WebGLShader, 'attachShader', 2, false, GL.INVALID_VALUE);
+    const p = checkObject(s, program, WebGLProgram, 'attachShader', 1, false, GL.INVALID_VALUE) as ProgramState | null | undefined;
+    const sh = checkObject(s, shader, WebGLShader, 'attachShader', 2, false, GL.INVALID_VALUE) as ShaderState | null | undefined;
     if (!p || !sh) return;
     // Attaching twice, or a second shader of a type, is INVALID_OPERATION (WebGL 1.0 §5.14.9).
-    if ([...p.attached].some((other) => other === shader || objectState<ShaderState>(other).type === sh.type)) {
+    if ([...p.attached].some((other) => other === shader || (objectState(other) as ShaderState).type === sh.type)) {
       native.synthesizeError(s.index, s.version, GL.INVALID_OPERATION);
       return;
     }
@@ -952,8 +951,8 @@ abstract class ContextBase {
   detachShader(program: WebGLProgram, shader: WebGLShader): void {
     requireArguments('detachShader', 2, arguments.length);
     const s = this.#s;
-    const p = checkObject<ProgramState>(s, program, WebGLProgram, 'detachShader', 1, false, GL.INVALID_VALUE);
-    const sh = checkObject<ShaderState>(s, shader, WebGLShader, 'detachShader', 2, false, GL.INVALID_VALUE);
+    const p = checkObject(s, program, WebGLProgram, 'detachShader', 1, false, GL.INVALID_VALUE) as ProgramState | null | undefined;
+    const sh = checkObject(s, shader, WebGLShader, 'detachShader', 2, false, GL.INVALID_VALUE) as ShaderState | null | undefined;
     if (!p || !sh) return;
     if (!p.attached.delete(shader)) {
       native.synthesizeError(s.index, s.version, GL.INVALID_OPERATION);
@@ -965,7 +964,7 @@ abstract class ContextBase {
   /** WebGL 1.0 §5.14.9: the attached shaders, deleted ones included. */
   getAttachedShaders(program: WebGLProgram): WebGLShader[] | null {
     requireArguments('getAttachedShaders', 1, arguments.length);
-    const p = checkObject<ProgramState>(this.#s, program, WebGLProgram, 'getAttachedShaders', 1, false, GL.INVALID_VALUE);
+    const p = checkObject(this.#s, program, WebGLProgram, 'getAttachedShaders', 1, false, GL.INVALID_VALUE) as ProgramState | null | undefined;
     return p ? [...p.attached] : null;
   }
 
@@ -973,7 +972,7 @@ abstract class ContextBase {
   linkProgram(program: WebGLProgram): void {
     requireArguments('linkProgram', 1, arguments.length);
     const s = this.#s;
-    const p = checkObject<ProgramState>(s, program, WebGLProgram, 'linkProgram', 1, false, GL.INVALID_VALUE);
+    const p = checkObject(s, program, WebGLProgram, 'linkProgram', 1, false, GL.INVALID_VALUE) as ProgramState | null | undefined;
     if (!p) return;
     p.linkCount += 1;
     native.linkProgram(s.index, s.version, ...keyOf(p));
@@ -1040,7 +1039,7 @@ abstract class ContextBase {
     requireArguments('getUniformLocation', 2, arguments.length);
     const s = this.#s;
     const n = toDOMString(name);
-    const p = checkObject<ProgramState>(s, program, WebGLProgram, 'getUniformLocation', 1, false, GL.INVALID_VALUE);
+    const p = checkObject(s, program, WebGLProgram, 'getUniformLocation', 1, false, GL.INVALID_VALUE) as ProgramState | null | undefined;
     if (!p) return null;
     const location = native.getLocation(s.index, s.version, ...keyOf(p), n, 1);
     if (location < 0) return null;
@@ -1072,7 +1071,7 @@ abstract class ContextBase {
   getUniform(program: WebGLProgram, location: WebGLUniformLocation): unknown {
     requireArguments('getUniform', 2, arguments.length);
     const s = this.#s;
-    const p = checkObject<ProgramState>(s, program, WebGLProgram, 'getUniform', 1, false, GL.INVALID_VALUE);
+    const p = checkObject(s, program, WebGLProgram, 'getUniform', 1, false, GL.INVALID_VALUE) as ProgramState | null | undefined;
     if (!(location instanceof WebGLUniformLocation)) throw typeError('getUniform', 2, 'WebGLUniformLocation');
     if (!p) return null;
     const l = locationState(location);
@@ -1094,33 +1093,52 @@ abstract class ContextBase {
   }
 
   /** Sets a uniform from a list; on WebGL 2 with `srcOffset`/`srcLength`. */
-  #uniformv(method: string, kind: number, n: number, args: IArguments): void {
+  #uniformv(
+    method: string,
+    kind: number,
+    n: number,
+    count: number,
+    location: unknown,
+    values: unknown,
+    srcOffset: unknown,
+    srcLength: unknown,
+  ): void {
     const s = this.#s;
-    requireArguments(method, 2, args.length);
+    requireArguments(method, 2, count);
     const list =
       kind === 0
-        ? toList(Float32Array, toFloat, args[1], method)
+        ? toList(Float32Array, toFloat, values, method)
         : kind === 1
-          ? toList(Int32Array, toLong, args[1], method)
-          : toList(Uint32Array, toUnsignedLong, args[1], method);
-    const offset = s.webgl2 ? toUnsignedLongLong(args[2]) : 0;
-    const length = s.webgl2 ? toUnsignedLong(args[3]) : 0;
-    const l = uniformLocation(s, args[0], method);
+          ? toList(Int32Array, toLong, values, method)
+          : toList(Uint32Array, toUnsignedLong, values, method);
+    const offset = s.webgl2 ? toUnsignedLongLong(srcOffset) : 0;
+    const length = s.webgl2 ? toUnsignedLong(srcLength) : 0;
+    const l = uniformLocation(s, location, method);
     if (l === undefined) return;
     native.uniformVector(s.index, s.version, l, kind, n, list, offset, length);
   }
 
   /** Sets a matrix uniform; on WebGL 2 with `srcOffset`/`srcLength`. */
-  #uniformMatrix(method: string, columns: number, rows: number, args: IArguments): void {
+  #uniformMatrix(
+    method: string,
+    columns: number,
+    rows: number,
+    count: number,
+    location: unknown,
+    transpose: unknown,
+    values: unknown,
+    srcOffset: unknown,
+    srcLength: unknown,
+  ): void {
     const s = this.#s;
-    requireArguments(method, 3, args.length);
-    const transpose = toBoolean(args[1]);
-    const list = toList(Float32Array, toFloat, args[2], method);
-    const offset = s.webgl2 ? toUnsignedLongLong(args[3]) : 0;
-    const length = s.webgl2 ? toUnsignedLong(args[4]) : 0;
-    const l = uniformLocation(s, args[0], method);
+    requireArguments(method, 3, count);
+    const t = toBoolean(transpose);
+    const list = toList(Float32Array, toFloat, values, method);
+    const offset = s.webgl2 ? toUnsignedLongLong(srcOffset) : 0;
+    const length = s.webgl2 ? toUnsignedLong(srcLength) : 0;
+    const l = uniformLocation(s, location, method);
     if (l === undefined) return;
-    native.uniformMatrix(s.index, s.version, l, columns, rows, transpose, list, offset, length);
+    native.uniformMatrix(s.index, s.version, l, columns, rows, t, list, offset, length);
   }
 
   uniform1f(location: WebGLUniformLocation | null, x: number): void {
@@ -1155,41 +1173,39 @@ abstract class ContextBase {
     requireArguments('uniform4i', 5, arguments.length);
     this.#uniform('uniform4i', 1, 4, location, [toLong(x), toLong(y), toLong(z), toLong(w)]);
   }
-  /* eslint-disable @typescript-eslint/no-unused-vars -- the list forms read `arguments` for WebGL 2's optional offsets */
   uniform1fv(location: WebGLUniformLocation | null, v: Iterable<number>, srcOffset?: number, srcLength?: number): void {
-    this.#uniformv('uniform1fv', 0, 1, arguments);
+    this.#uniformv('uniform1fv', 0, 1, arguments.length, location, v, srcOffset, srcLength);
   }
   uniform2fv(location: WebGLUniformLocation | null, v: Iterable<number>, srcOffset?: number, srcLength?: number): void {
-    this.#uniformv('uniform2fv', 0, 2, arguments);
+    this.#uniformv('uniform2fv', 0, 2, arguments.length, location, v, srcOffset, srcLength);
   }
   uniform3fv(location: WebGLUniformLocation | null, v: Iterable<number>, srcOffset?: number, srcLength?: number): void {
-    this.#uniformv('uniform3fv', 0, 3, arguments);
+    this.#uniformv('uniform3fv', 0, 3, arguments.length, location, v, srcOffset, srcLength);
   }
   uniform4fv(location: WebGLUniformLocation | null, v: Iterable<number>, srcOffset?: number, srcLength?: number): void {
-    this.#uniformv('uniform4fv', 0, 4, arguments);
+    this.#uniformv('uniform4fv', 0, 4, arguments.length, location, v, srcOffset, srcLength);
   }
   uniform1iv(location: WebGLUniformLocation | null, v: Iterable<number>, srcOffset?: number, srcLength?: number): void {
-    this.#uniformv('uniform1iv', 1, 1, arguments);
+    this.#uniformv('uniform1iv', 1, 1, arguments.length, location, v, srcOffset, srcLength);
   }
   uniform2iv(location: WebGLUniformLocation | null, v: Iterable<number>, srcOffset?: number, srcLength?: number): void {
-    this.#uniformv('uniform2iv', 1, 2, arguments);
+    this.#uniformv('uniform2iv', 1, 2, arguments.length, location, v, srcOffset, srcLength);
   }
   uniform3iv(location: WebGLUniformLocation | null, v: Iterable<number>, srcOffset?: number, srcLength?: number): void {
-    this.#uniformv('uniform3iv', 1, 3, arguments);
+    this.#uniformv('uniform3iv', 1, 3, arguments.length, location, v, srcOffset, srcLength);
   }
   uniform4iv(location: WebGLUniformLocation | null, v: Iterable<number>, srcOffset?: number, srcLength?: number): void {
-    this.#uniformv('uniform4iv', 1, 4, arguments);
+    this.#uniformv('uniform4iv', 1, 4, arguments.length, location, v, srcOffset, srcLength);
   }
   uniformMatrix2fv(location: WebGLUniformLocation | null, transpose: boolean, value: Iterable<number>, srcOffset?: number, srcLength?: number): void {
-    this.#uniformMatrix('uniformMatrix2fv', 2, 2, arguments);
+    this.#uniformMatrix('uniformMatrix2fv', 2, 2, arguments.length, location, transpose, value, srcOffset, srcLength);
   }
   uniformMatrix3fv(location: WebGLUniformLocation | null, transpose: boolean, value: Iterable<number>, srcOffset?: number, srcLength?: number): void {
-    this.#uniformMatrix('uniformMatrix3fv', 3, 3, arguments);
+    this.#uniformMatrix('uniformMatrix3fv', 3, 3, arguments.length, location, transpose, value, srcOffset, srcLength);
   }
   uniformMatrix4fv(location: WebGLUniformLocation | null, transpose: boolean, value: Iterable<number>, srcOffset?: number, srcLength?: number): void {
-    this.#uniformMatrix('uniformMatrix4fv', 4, 4, arguments);
+    this.#uniformMatrix('uniformMatrix4fv', 4, 4, arguments.length, location, transpose, value, srcOffset, srcLength);
   }
-  /* eslint-enable @typescript-eslint/no-unused-vars */
 
   // --- Vertex attributes (WebGL 1.0 §5.14.10) ----------------------------
 
@@ -1355,156 +1371,154 @@ export const WebGLRenderingContext: WebGL1Constants & {
   new (...args: ContextArguments): WebGLRenderingContext;
 } = withConstants(class WebGLRenderingContext extends ContextBase {}, WEBGL1_CONSTANTS);
 
+/** The WebGL 2-only members (WebGL 2.0 §3.7). */
+abstract class WebGL2Members extends ContextBase {
+  /** WebGL 2.0 §3.7.3. */
+  copyBufferSubData(readTarget: number, writeTarget: number, readOffset: number, writeOffset: number, size: number): void {
+    requireArguments('copyBufferSubData', 5, arguments.length);
+    const s = contextState(this);
+    const args = [
+      toUnsignedLong(readTarget),
+      toUnsignedLong(writeTarget),
+      toLongLong(readOffset),
+      toLongLong(writeOffset),
+      toLongLong(size),
+    ] as const;
+    if (!s.destroyed) native.copyBufferSubData(s.index, s.version, ...args);
+  }
+
+  /** WebGL 2.0 §3.7.3. */
+  getBufferSubData(target: number, srcByteOffset: number, dstBuffer: ArrayBufferView, dstOffset = 0, length = 0): void {
+    requireArguments('getBufferSubData', 3, arguments.length);
+    const s = contextState(this);
+    const t = toUnsignedLong(target);
+    const src = toLongLong(srcByteOffset);
+    if (!ArrayBuffer.isView(dstBuffer)) throw typeError('getBufferSubData', 3, 'ArrayBufferView');
+    const offset = toUnsignedLongLong(dstOffset);
+    const count = toUnsignedLong(length);
+    if (!s.destroyed) native.getBufferSubData(s.index, s.version, t, src, dstBuffer, offset, count);
+  }
+
+  /** WebGL 2.0 §3.7.9. */
+  drawRangeElements(mode: number, start: number, end: number, count: number, type: number, offset: number): void {
+    requireArguments('drawRangeElements', 6, arguments.length);
+    const s = contextState(this);
+    const args = [
+      toUnsignedLong(mode),
+      toUnsignedLong(start),
+      toUnsignedLong(end),
+      toLong(count),
+      toUnsignedLong(type),
+      toLongLong(offset),
+    ] as const;
+    if (!s.destroyed) native.drawRangeElements(s.index, s.version, ...args);
+  }
+
+  /** WebGL 2.0 §3.7.7; -1 when absent or lost. */
+  getFragDataLocation(program: WebGLProgram, name: string): number {
+    requireArguments('getFragDataLocation', 2, arguments.length);
+    const s = contextState(this);
+    const n = toDOMString(name);
+    const p = checkObject(s, program, WebGLProgram, 'getFragDataLocation', 1, false, GL.INVALID_VALUE);
+    if (!p) return -1;
+    return native.getLocation(s.index, s.version, ...keyOf(p), n, 2);
+  }
+
+  uniform1ui(location: WebGLUniformLocation | null, v0: number): void {
+    requireArguments('uniform1ui', 2, arguments.length);
+    uniformUint(this, 'uniform1ui', location, [toUnsignedLong(v0)]);
+  }
+  uniform2ui(location: WebGLUniformLocation | null, v0: number, v1: number): void {
+    requireArguments('uniform2ui', 3, arguments.length);
+    uniformUint(this, 'uniform2ui', location, [toUnsignedLong(v0), toUnsignedLong(v1)]);
+  }
+  uniform3ui(location: WebGLUniformLocation | null, v0: number, v1: number, v2: number): void {
+    requireArguments('uniform3ui', 4, arguments.length);
+    uniformUint(this, 'uniform3ui', location, [toUnsignedLong(v0), toUnsignedLong(v1), toUnsignedLong(v2)]);
+  }
+  uniform4ui(location: WebGLUniformLocation | null, v0: number, v1: number, v2: number, v3: number): void {
+    requireArguments('uniform4ui', 5, arguments.length);
+    uniformUint(this, 'uniform4ui', location, [
+      toUnsignedLong(v0),
+      toUnsignedLong(v1),
+      toUnsignedLong(v2),
+      toUnsignedLong(v3),
+    ]);
+  }
+  uniform1uiv(location: WebGLUniformLocation | null, data: Iterable<number>, srcOffset?: number, srcLength?: number): void {
+    uniformList(this, 'uniform1uiv', 1, arguments.length, location, data, srcOffset, srcLength);
+  }
+  uniform2uiv(location: WebGLUniformLocation | null, data: Iterable<number>, srcOffset?: number, srcLength?: number): void {
+    uniformList(this, 'uniform2uiv', 2, arguments.length, location, data, srcOffset, srcLength);
+  }
+  uniform3uiv(location: WebGLUniformLocation | null, data: Iterable<number>, srcOffset?: number, srcLength?: number): void {
+    uniformList(this, 'uniform3uiv', 3, arguments.length, location, data, srcOffset, srcLength);
+  }
+  uniform4uiv(location: WebGLUniformLocation | null, data: Iterable<number>, srcOffset?: number, srcLength?: number): void {
+    uniformList(this, 'uniform4uiv', 4, arguments.length, location, data, srcOffset, srcLength);
+  }
+  uniformMatrix2x3fv(location: WebGLUniformLocation | null, transpose: boolean, data: Iterable<number>, srcOffset?: number, srcLength?: number): void {
+    uniformMatrixList(this, 'uniformMatrix2x3fv', 2, 3, arguments.length, location, transpose, data, srcOffset, srcLength);
+  }
+  uniformMatrix3x2fv(location: WebGLUniformLocation | null, transpose: boolean, data: Iterable<number>, srcOffset?: number, srcLength?: number): void {
+    uniformMatrixList(this, 'uniformMatrix3x2fv', 3, 2, arguments.length, location, transpose, data, srcOffset, srcLength);
+  }
+  uniformMatrix2x4fv(location: WebGLUniformLocation | null, transpose: boolean, data: Iterable<number>, srcOffset?: number, srcLength?: number): void {
+    uniformMatrixList(this, 'uniformMatrix2x4fv', 2, 4, arguments.length, location, transpose, data, srcOffset, srcLength);
+  }
+  uniformMatrix4x2fv(location: WebGLUniformLocation | null, transpose: boolean, data: Iterable<number>, srcOffset?: number, srcLength?: number): void {
+    uniformMatrixList(this, 'uniformMatrix4x2fv', 4, 2, arguments.length, location, transpose, data, srcOffset, srcLength);
+  }
+  uniformMatrix3x4fv(location: WebGLUniformLocation | null, transpose: boolean, data: Iterable<number>, srcOffset?: number, srcLength?: number): void {
+    uniformMatrixList(this, 'uniformMatrix3x4fv', 3, 4, arguments.length, location, transpose, data, srcOffset, srcLength);
+  }
+  uniformMatrix4x3fv(location: WebGLUniformLocation | null, transpose: boolean, data: Iterable<number>, srcOffset?: number, srcLength?: number): void {
+    uniformMatrixList(this, 'uniformMatrix4x3fv', 4, 3, arguments.length, location, transpose, data, srcOffset, srcLength);
+  }
+
+  /** WebGL 2.0 §3.7.8. */
+  vertexAttribI4i(index: number, x: number, y: number, z: number, w: number): void {
+    requireArguments('vertexAttribI4i', 5, arguments.length);
+    setAttrib(this, toUnsignedLong(index), 1, [toLong(x), toLong(y), toLong(z), toLong(w)]);
+  }
+  vertexAttribI4ui(index: number, x: number, y: number, z: number, w: number): void {
+    requireArguments('vertexAttribI4ui', 5, arguments.length);
+    setAttrib(this, toUnsignedLong(index), 2, [
+      toUnsignedLong(x),
+      toUnsignedLong(y),
+      toUnsignedLong(z),
+      toUnsignedLong(w),
+    ]);
+  }
+  vertexAttribI4iv(index: number, values: Iterable<number>): void {
+    requireArguments('vertexAttribI4iv', 2, arguments.length);
+    const i = toUnsignedLong(index);
+    setAttribList(this, i, 1, toList(Int32Array, toLong, values, 'vertexAttribI4iv'));
+  }
+  vertexAttribI4uiv(index: number, values: Iterable<number>): void {
+    requireArguments('vertexAttribI4uiv', 2, arguments.length);
+    const i = toUnsignedLong(index);
+    setAttribList(this, i, 2, toList(Uint32Array, toUnsignedLong, values, 'vertexAttribI4uiv'));
+  }
+
+  /** WebGL 2.0 §3.7.8. */
+  vertexAttribIPointer(index: number, size: number, type: number, stride: number, offset: number): void {
+    requireArguments('vertexAttribIPointer', 5, arguments.length);
+    const s = contextState(this);
+    const args = [toUnsignedLong(index), toLong(size), toUnsignedLong(type), toLong(stride), toLongLong(offset)] as const;
+    if (s.destroyed) return;
+    if (native.vertexAttribPointer(s.index, s.version, args[0], args[1], args[2], -1, args[3], args[4])) {
+      s.vao.attribs[args[0]] = s.buffers.get(GL.ARRAY_BUFFER) ?? null;
+    }
+  }
+}
+
 /** A WebGL 2 context (WebGL 2.0 §3.7). */
-export interface WebGL2RenderingContext extends ContextBase, WebGL2Constants {}
+export interface WebGL2RenderingContext extends WebGL2Members, WebGL2Constants {}
 export const WebGL2RenderingContext: WebGL2Constants & {
   readonly prototype: WebGL2RenderingContext;
   new (...args: ContextArguments): WebGL2RenderingContext;
-} = withConstants(
-  class WebGL2RenderingContext extends ContextBase {
-    /** WebGL 2.0 §3.7.3. */
-    copyBufferSubData(readTarget: number, writeTarget: number, readOffset: number, writeOffset: number, size: number): void {
-      requireArguments('copyBufferSubData', 5, arguments.length);
-      const s = contextState(this);
-      const args = [
-        toUnsignedLong(readTarget),
-        toUnsignedLong(writeTarget),
-        toLongLong(readOffset),
-        toLongLong(writeOffset),
-        toLongLong(size),
-      ] as const;
-      if (!s.destroyed) native.copyBufferSubData(s.index, s.version, ...args);
-    }
-
-    /** WebGL 2.0 §3.7.3. */
-    getBufferSubData(target: number, srcByteOffset: number, dstBuffer: ArrayBufferView, dstOffset = 0, length = 0): void {
-      requireArguments('getBufferSubData', 3, arguments.length);
-      const s = contextState(this);
-      const t = toUnsignedLong(target);
-      const src = toLongLong(srcByteOffset);
-      if (!ArrayBuffer.isView(dstBuffer)) throw typeError('getBufferSubData', 3, 'ArrayBufferView');
-      const offset = toUnsignedLongLong(dstOffset);
-      const count = toUnsignedLong(length);
-      if (!s.destroyed) native.getBufferSubData(s.index, s.version, t, src, dstBuffer, offset, count);
-    }
-
-    /** WebGL 2.0 §3.7.9. */
-    drawRangeElements(mode: number, start: number, end: number, count: number, type: number, offset: number): void {
-      requireArguments('drawRangeElements', 6, arguments.length);
-      const s = contextState(this);
-      const args = [
-        toUnsignedLong(mode),
-        toUnsignedLong(start),
-        toUnsignedLong(end),
-        toLong(count),
-        toUnsignedLong(type),
-        toLongLong(offset),
-      ] as const;
-      if (!s.destroyed) native.drawRangeElements(s.index, s.version, ...args);
-    }
-
-    /** WebGL 2.0 §3.7.7; -1 when absent or lost. */
-    getFragDataLocation(program: WebGLProgram, name: string): number {
-      requireArguments('getFragDataLocation', 2, arguments.length);
-      const s = contextState(this);
-      const n = toDOMString(name);
-      const p = checkObject(s, program, WebGLProgram, 'getFragDataLocation', 1, false, GL.INVALID_VALUE);
-      if (!p) return -1;
-      return native.getLocation(s.index, s.version, ...keyOf(p), n, 2);
-    }
-
-    uniform1ui(location: WebGLUniformLocation | null, v0: number): void {
-      requireArguments('uniform1ui', 2, arguments.length);
-      uniformUint(this, 'uniform1ui', location, [toUnsignedLong(v0)]);
-    }
-    uniform2ui(location: WebGLUniformLocation | null, v0: number, v1: number): void {
-      requireArguments('uniform2ui', 3, arguments.length);
-      uniformUint(this, 'uniform2ui', location, [toUnsignedLong(v0), toUnsignedLong(v1)]);
-    }
-    uniform3ui(location: WebGLUniformLocation | null, v0: number, v1: number, v2: number): void {
-      requireArguments('uniform3ui', 4, arguments.length);
-      uniformUint(this, 'uniform3ui', location, [toUnsignedLong(v0), toUnsignedLong(v1), toUnsignedLong(v2)]);
-    }
-    uniform4ui(location: WebGLUniformLocation | null, v0: number, v1: number, v2: number, v3: number): void {
-      requireArguments('uniform4ui', 5, arguments.length);
-      uniformUint(this, 'uniform4ui', location, [
-        toUnsignedLong(v0),
-        toUnsignedLong(v1),
-        toUnsignedLong(v2),
-        toUnsignedLong(v3),
-      ]);
-    }
-    /* eslint-disable @typescript-eslint/no-unused-vars -- these read `arguments` for the optional offsets */
-    uniform1uiv(location: WebGLUniformLocation | null, data: Iterable<number>, srcOffset?: number, srcLength?: number): void {
-      uniformList(this, 'uniform1uiv', 2, 1, arguments);
-    }
-    uniform2uiv(location: WebGLUniformLocation | null, data: Iterable<number>, srcOffset?: number, srcLength?: number): void {
-      uniformList(this, 'uniform2uiv', 2, 2, arguments);
-    }
-    uniform3uiv(location: WebGLUniformLocation | null, data: Iterable<number>, srcOffset?: number, srcLength?: number): void {
-      uniformList(this, 'uniform3uiv', 2, 3, arguments);
-    }
-    uniform4uiv(location: WebGLUniformLocation | null, data: Iterable<number>, srcOffset?: number, srcLength?: number): void {
-      uniformList(this, 'uniform4uiv', 2, 4, arguments);
-    }
-    uniformMatrix2x3fv(location: WebGLUniformLocation | null, transpose: boolean, data: Iterable<number>, srcOffset?: number, srcLength?: number): void {
-      uniformMatrixList(this, 'uniformMatrix2x3fv', 2, 3, arguments);
-    }
-    uniformMatrix3x2fv(location: WebGLUniformLocation | null, transpose: boolean, data: Iterable<number>, srcOffset?: number, srcLength?: number): void {
-      uniformMatrixList(this, 'uniformMatrix3x2fv', 3, 2, arguments);
-    }
-    uniformMatrix2x4fv(location: WebGLUniformLocation | null, transpose: boolean, data: Iterable<number>, srcOffset?: number, srcLength?: number): void {
-      uniformMatrixList(this, 'uniformMatrix2x4fv', 2, 4, arguments);
-    }
-    uniformMatrix4x2fv(location: WebGLUniformLocation | null, transpose: boolean, data: Iterable<number>, srcOffset?: number, srcLength?: number): void {
-      uniformMatrixList(this, 'uniformMatrix4x2fv', 4, 2, arguments);
-    }
-    uniformMatrix3x4fv(location: WebGLUniformLocation | null, transpose: boolean, data: Iterable<number>, srcOffset?: number, srcLength?: number): void {
-      uniformMatrixList(this, 'uniformMatrix3x4fv', 3, 4, arguments);
-    }
-    uniformMatrix4x3fv(location: WebGLUniformLocation | null, transpose: boolean, data: Iterable<number>, srcOffset?: number, srcLength?: number): void {
-      uniformMatrixList(this, 'uniformMatrix4x3fv', 4, 3, arguments);
-    }
-    /* eslint-enable @typescript-eslint/no-unused-vars */
-
-    /** WebGL 2.0 §3.7.8. */
-    vertexAttribI4i(index: number, x: number, y: number, z: number, w: number): void {
-      requireArguments('vertexAttribI4i', 5, arguments.length);
-      setAttrib(this, toUnsignedLong(index), 1, [toLong(x), toLong(y), toLong(z), toLong(w)]);
-    }
-    vertexAttribI4ui(index: number, x: number, y: number, z: number, w: number): void {
-      requireArguments('vertexAttribI4ui', 5, arguments.length);
-      setAttrib(this, toUnsignedLong(index), 2, [
-        toUnsignedLong(x),
-        toUnsignedLong(y),
-        toUnsignedLong(z),
-        toUnsignedLong(w),
-      ]);
-    }
-    vertexAttribI4iv(index: number, values: Iterable<number>): void {
-      requireArguments('vertexAttribI4iv', 2, arguments.length);
-      const i = toUnsignedLong(index);
-      setAttribList(this, i, 1, toList(Int32Array, toLong, values, 'vertexAttribI4iv'));
-    }
-    vertexAttribI4uiv(index: number, values: Iterable<number>): void {
-      requireArguments('vertexAttribI4uiv', 2, arguments.length);
-      const i = toUnsignedLong(index);
-      setAttribList(this, i, 2, toList(Uint32Array, toUnsignedLong, values, 'vertexAttribI4uiv'));
-    }
-
-    /** WebGL 2.0 §3.7.8. */
-    vertexAttribIPointer(index: number, size: number, type: number, stride: number, offset: number): void {
-      requireArguments('vertexAttribIPointer', 5, arguments.length);
-      const s = contextState(this);
-      const args = [toUnsignedLong(index), toLong(size), toUnsignedLong(type), toLong(stride), toLongLong(offset)] as const;
-      if (s.destroyed) return;
-      if (native.vertexAttribPointer(s.index, s.version, args[0], args[1], args[2], -1, args[3], args[4])) {
-        s.vao.attribs[args[0]] = s.buffers.get(GL.ARRAY_BUFFER) ?? null;
-      }
-    }
-  },
-  WEBGL2_CONSTANTS,
-);
+} = withConstants(class WebGL2RenderingContext extends WebGL2Members {}, WEBGL2_CONSTANTS);
 
 /** `uniform[1234]ui` on a WebGL 2 context. */
 function uniformUint(gl: ContextBase, method: string, location: unknown, values: number[]): void {
@@ -1515,28 +1529,48 @@ function uniformUint(gl: ContextBase, method: string, location: unknown, values:
 }
 
 /** `uniform[1234]uiv` on a WebGL 2 context. */
-function uniformList(gl: ContextBase, method: string, kind: number, n: number, args: IArguments): void {
+function uniformList(
+  gl: ContextBase,
+  method: string,
+  n: number,
+  count: number,
+  location: unknown,
+  values: unknown,
+  srcOffset: unknown,
+  srcLength: unknown,
+): void {
   const s = contextState(gl);
-  requireArguments(method, 2, args.length);
-  const list = toList(Uint32Array, toUnsignedLong, args[1], method);
-  const offset = toUnsignedLongLong(args[2]);
-  const length = toUnsignedLong(args[3]);
-  const l = uniformLocation(s, args[0], method);
+  requireArguments(method, 2, count);
+  const list = toList(Uint32Array, toUnsignedLong, values, method);
+  const offset = toUnsignedLongLong(srcOffset);
+  const length = toUnsignedLong(srcLength);
+  const l = uniformLocation(s, location, method);
   if (l === undefined) return;
-  native.uniformVector(s.index, s.version, l, kind, n, list, offset, length);
+  native.uniformVector(s.index, s.version, l, 2, n, list, offset, length);
 }
 
 /** A non-square `uniformMatrix*fv` on a WebGL 2 context. */
-function uniformMatrixList(gl: ContextBase, method: string, columns: number, rows: number, args: IArguments): void {
+function uniformMatrixList(
+  gl: ContextBase,
+  method: string,
+  columns: number,
+  rows: number,
+  count: number,
+  location: unknown,
+  transpose: unknown,
+  values: unknown,
+  srcOffset: unknown,
+  srcLength: unknown,
+): void {
   const s = contextState(gl);
-  requireArguments(method, 3, args.length);
-  const transpose = toBoolean(args[1]);
-  const list = toList(Float32Array, toFloat, args[2], method);
-  const offset = toUnsignedLongLong(args[3]);
-  const length = toUnsignedLong(args[4]);
-  const l = uniformLocation(s, args[0], method);
+  requireArguments(method, 3, count);
+  const t = toBoolean(transpose);
+  const list = toList(Float32Array, toFloat, values, method);
+  const offset = toUnsignedLongLong(srcOffset);
+  const length = toUnsignedLong(srcLength);
+  const l = uniformLocation(s, location, method);
   if (l === undefined) return;
-  native.uniformMatrix(s.index, s.version, l, columns, rows, transpose, list, offset, length);
+  native.uniformMatrix(s.index, s.version, l, columns, rows, t, list, offset, length);
 }
 
 /** A `vertexAttribI4*` setter; `kind` 1 int, 2 uint. */

@@ -8,6 +8,12 @@ import {
   WebGL2RenderingContext,
   WebGLRenderingContext,
   WebGLShaderPrecisionFormat,
+  type WebGLActiveInfo,
+  type WebGLBuffer,
+  type WebGLObject,
+  type WebGLProgram,
+  type WebGLShader,
+  type WebGLUniformLocation,
 } from '../src/index.js';
 
 /* eslint-disable @typescript-eslint/no-unnecessary-type-parameters -- the standard type-equality idiom */
@@ -94,3 +100,21 @@ export { asTarget };
 createContext({ width: 1, height: 1, attributes: { powerPreference: 'fast' } });
 // @ts-expect-error -- HeadlessCanvas is not constructible from user code
 new HeadlessCanvas();
+
+// core-rendering: objects and their methods.
+const glr = createContext({ width: 1, height: 1, webgl2: true });
+const buffer: WebGLBuffer = glr.createBuffer();
+const shaderOrNull: WebGLShader | null = glr.createShader(glr.VERTEX_SHADER);
+const programObject: WebGLProgram = glr.createProgram();
+glr.bindBuffer(glr.ARRAY_BUFFER, buffer);
+glr.bufferData(glr.ARRAY_BUFFER, new Float32Array(4), glr.STATIC_DRAW);
+glr.bufferData(glr.ARRAY_BUFFER, 16, glr.STATIC_DRAW);
+glr.getBufferSubData(glr.ARRAY_BUFFER, 0, new Uint8Array(4));
+const where: WebGLUniformLocation | null = glr.getUniformLocation(programObject, 'u');
+glr.uniform4fv(where, [1, 2, 3, 4]);
+glr.uniform2ui(where, 1, 2);
+const info: WebGLActiveInfo | null = glr.getActiveUniform(programObject, 0);
+const asObject: WebGLObject = buffer;
+export { shaderOrNull, info, asObject };
+// @ts-expect-error -- a shader is not a buffer
+glr.bindBuffer(glr.ARRAY_BUFFER, shaderOrNull as WebGLShader);

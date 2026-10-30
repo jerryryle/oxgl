@@ -128,12 +128,10 @@ pub fn release_object(env: Env, index: u32, version: u32, oi: u32, ov: u32) -> n
     Ok(())
 }
 
-/// Number of live objects of a context (for tests).
+/// Number of live objects across this environment's contexts (for tests).
 #[napi]
-pub fn live_objects(env: Env, index: u32, version: u32) -> napi::Result<u32> {
-    query(env, index, version, 0, |c| {
-        u32::try_from(c.object_count()).unwrap_or(u32::MAX)
-    })
+pub fn live_objects(env: Env) -> napi::Result<u32> {
+    Ok(u32::try_from(runtime(env)?.live_objects()).unwrap_or(u32::MAX))
 }
 
 /// `is*`: whether the object is live (a buffer only once bound).

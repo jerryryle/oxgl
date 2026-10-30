@@ -210,3 +210,91 @@ fn drawing_buffer_attachment_combinations_body() {
         }
     }
 }
+
+#[test]
+fn swiftshader_draws_a_triangle() {
+    on_lasting_thread(swiftshader_draws_a_triangle_body);
+}
+
+/// Compiles, links and draws a full-viewport triangle into an RGBA8
+/// framebuffer through the safe wrappers, on ES2 and ES3.
+fn swiftshader_draws_a_triangle_body() {
+    use oxgl_sys::bindings::{
+        GL_ARRAY_BUFFER, GL_COMPILE_STATUS, GL_FLOAT, GL_FRAGMENT_SHADER, GL_LINK_STATUS,
+        GL_STATIC_DRAW, GL_TRIANGLES, GL_VERTEX_SHADER,
+    };
+    let angle = Angle::load(&bundle_dir()).unwrap();
+    let display = Display::open(&angle, DisplayKind::SwiftShader).unwrap();
+    for version in [ClientVersion::Es2, ClientVersion::Es3] {
+        let context = display.create_context(version).unwrap();
+        let current = context.make_current().unwrap();
+        current.request_extension(c"GL_OES_rgb8_rgba8");
+        let framebuffer = current.gen_framebuffer();
+        let color = current.gen_renderbuffer();
+        current.bind_framebuffer(GL_FRAMEBUFFER, framebuffer);
+        current.bind_renderbuffer(GL_RENDERBUFFER, color);
+        current.renderbuffer_storage(GL_RENDERBUFFER, GL_RGBA8, 2, 2);
+        current.framebuffer_renderbuffer(
+            GL_FRAMEBUFFER,
+            GL_COLOR_ATTACHMENT0,
+            GL_RENDERBUFFER,
+            color,
+        );
+        current.apply(oxgl_sys::StateCall::Viewport(0, 0, 2, 2));
+
+        let compile = |kind, source| {
+            let shader = current.create_shader(kind);
+            current.shader_source(shader, source);
+            current.compile_shader(shader);
+            assert_eq!(
+                current.shader_parameter(shader, GL_COMPILE_STATUS),
+                Some(1),
+                "{:?}",
+                current.shader_info_log(shader)
+            );
+            shader
+        };
+        let vertex = compile(
+            GL_VERTEX_SHADER,
+            "attribute vec2 p; void main() { gl_Position = vec4(p, 0.0, 1.0); }",
+        );
+        let fragment = compile(
+            GL_FRAGMENT_SHADER,
+            "precision mediump float; void main() { gl_FragColor = vec4(1.0, 0.0, 1.0, 1.0); }",
+        );
+        let program = current.create_program();
+        current.attach_shader(program, vertex);
+        current.attach_shader(program, fragment);
+        current.link_program(program);
+        assert_eq!(current.program_parameter(program, GL_LINK_STATUS), Some(1));
+        current.use_program(program);
+
+        let buffer = current.gen_buffer();
+        current.bind_buffer(GL_ARRAY_BUFFER, buffer);
+        let vertices: Vec<u8> = [-1f32, -1.0, 3.0, -1.0, -1.0, 3.0]
+            .iter()
+            .flat_map(|v| v.to_ne_bytes())
+            .collect();
+        current.buffer_data(GL_ARRAY_BUFFER, &vertices, GL_STATIC_DRAW);
+        let location = u32::try_from(current.attrib_location(program, c"p")).unwrap();
+        current.enable_vertex_attrib_array(location);
+        current.vertex_attrib_pointer(location, 2, GL_FLOAT, false, 0, 0);
+        current.draw_arrays(GL_TRIANGLES, 0, 3);
+
+        let mut pixels = [0u8; 16];
+        let args = ReadPixels {
+            x: 0,
+            y: 0,
+            width: 2,
+            height: 2,
+            format: GL_RGBA,
+            ty: GL_UNSIGNED_BYTE,
+        };
+        assert_eq!(current.read_pixels(args, &mut pixels), 16);
+        assert!(
+            pixels.chunks(4).all(|p| p == [255, 0, 255, 255]),
+            "{version:?}: {pixels:?}"
+        );
+        assert_eq!(current.get_error(), GL_NO_ERROR);
+    }
+}

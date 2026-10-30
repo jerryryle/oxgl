@@ -399,16 +399,17 @@ impl Current<'_> {
     }
 
     /// `glGetUniform{f,i,ui}vRobustANGLE` into `out`; returns the number of
-    /// values written (0 on error).
+    /// values written (0 on error). ANGLE takes these getters' `bufSize` in
+    /// bytes.
     #[must_use]
     pub fn get_uniform(&self, program: GLuint, location: GLint, out: UniformOut<'_>) -> usize {
         let gl = self.fns();
         let mut length: GLsizei = 0;
         match out {
             UniformOut::Float(out) => {
-                let size = sizei(out.len()).unwrap_or(GLsizei::MAX);
+                let size = sizei(size_of_val(out)).unwrap_or(GLsizei::MAX);
                 // SAFETY: a context is current; the GL writes at most `size`
-                // floats (the slice's length) and one GLsizei.
+                // bytes (the slice's size) and one GLsizei.
                 unsafe {
                     (gl.glGetUniformfvRobustANGLE)(
                         program,
@@ -420,7 +421,7 @@ impl Current<'_> {
                 };
             }
             UniformOut::Int(out) => {
-                let size = sizei(out.len()).unwrap_or(GLsizei::MAX);
+                let size = sizei(size_of_val(out)).unwrap_or(GLsizei::MAX);
                 // SAFETY: as above, for GLints.
                 unsafe {
                     (gl.glGetUniformivRobustANGLE)(
@@ -433,7 +434,7 @@ impl Current<'_> {
                 };
             }
             UniformOut::Uint(out) => {
-                let size = sizei(out.len()).unwrap_or(GLsizei::MAX);
+                let size = sizei(size_of_val(out)).unwrap_or(GLsizei::MAX);
                 // SAFETY: as above, for GLuints.
                 unsafe {
                     (gl.glGetUniformuivRobustANGLE)(

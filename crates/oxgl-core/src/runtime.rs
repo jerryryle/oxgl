@@ -147,6 +147,12 @@ impl Runtime {
         self.contexts.clear();
     }
 
+    /// Number of live WebGL objects across every context (for tests).
+    #[must_use]
+    pub fn live_objects(&self) -> usize {
+        self.contexts.values().map(Context::object_count).sum()
+    }
+
     /// Number of live contexts.
     #[must_use]
     pub fn live_contexts(&self) -> usize {
