@@ -53,8 +53,9 @@ jobs:
           # that freed it.
           gflags="$(dirname "$cdb")/gflags.exe"
           [ -x "$gflags" ] || { echo "gflags not found next to cdb"; exit 1; }
-          "$gflags" /i node.exe +hpa
-          "$gflags" /i node.exe
+          # -i, not /i: Git Bash rewrites an argument starting with / as a path.
+          "$gflags" -i node.exe +hpa
+          "$gflags" -i node.exe
           syms="$(cygpath -w "$temp/syms");srv*$(cygpath -w "$temp/symcache")*https://msdl.microsoft.com/download/symbols"
           while IFS= read -r t; do syms="$syms;$(cygpath -w "$PWD/$t")"; done < <(find target -name '*.pdb' -exec dirname {} \; | sort -u)
           node="$(cygpath -w "$(command -v node)")"
@@ -69,7 +70,7 @@ jobs:
           # initial breakpoint rather than the first exception.
           # sxn cpr/epr: report each process's start and exit (with its exit
           # code) without stopping.
-          commands="sxi ibp; sxn cpr; sxn epr; sxe -c \"r; !address @x11; !heap -p -a @x11; kn 30; .dump /mp /u $dumpdir/av.dmp; gn\" av; g"
+          commands="sxi ibp; sxn cpr; sxn epr; sxe -c \"r; !address @x11; !heap -p -a @x11; kn 30; .frame 2; dv /t /v; .dump /mp /u $dumpdir/av.dmp; gn\" av; g"
           specs=("image_bitmap_from_image_bitmap/" "tex-2d-rgb10_a2-rgba-unsigned_int_2_10_10_10_rev.html")
           for round in 1 2 3 4 5 6; do
             for i in "${!specs[@]}"; do
