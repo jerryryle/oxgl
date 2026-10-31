@@ -317,7 +317,11 @@ test('suite server serves files under the root, on loopback only, and refuses pa
 
 // --- Page runner ------------------------------------------------------------
 
-const TIMEOUT_S = 10;
+// Long enough that a page ending at once is clearly not waiting out the limit
+// on slow hosts: starting a page process takes about 5 s on Windows runners,
+// and a host that collects core dumps (systemd-coredump) takes about 5 s to
+// let an aborted page process exit.
+const TIMEOUT_S = 20;
 /** Pages that end without waiting must finish well inside the time limit. */
 const PROMPT_MS = (TIMEOUT_S * 1000) / 2;
 
@@ -350,7 +354,7 @@ async function runFixtures(pages, expectationsText, options = {}) {
 
 const pageOf = (report, suite, path) => report.suites[suite].pages.find((p) => p.path === path);
 
-test('page runner: outcomes, early errors, media, canvas shim, crashes, timeouts and harness errors', { timeout: 60_000 }, async () => {
+test('page runner: outcomes, early errors, media, canvas shim, crashes, timeouts and harness errors', { timeout: 120_000 }, async () => {
   const { ok, report, written } = await runFixtures(
     {
       webgl1: [
