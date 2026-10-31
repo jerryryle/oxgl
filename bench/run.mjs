@@ -76,6 +76,28 @@ report('uniform4f', (() => {
   }, finishGl), 'pairs/s');
 }
 
+// Texture sampling fill rate: a full-screen triangle sampling a 256x256 RGBA8
+// texture, slightly minified so LINEAR blends texels.
+{
+  const p = program(gl, '#version 300 es\nin vec2 a; out vec2 uv; void main() { uv = a * 0.7 + 0.5; gl_Position = vec4(a, 0, 1); }', '#version 300 es\nprecision mediump float; in vec2 uv; uniform sampler2D s; out vec4 o; void main() { o = texture(s, uv); }');
+  gl.useProgram(p);
+  const b = gl.createBuffer();
+  gl.bindBuffer(gl.ARRAY_BUFFER, b);
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([-1, -1, 3, -1, -1, 3]), gl.STATIC_DRAW);
+  gl.enableVertexAttribArray(0);
+  gl.vertexAttribPointer(0, 2, gl.FLOAT, false, 0, 0);
+  const t = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, t);
+  const texels = new Uint8Array(256 * 256 * 4).map((_, i) => (i * 37) & 255);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 256, 256, 0, gl.RGBA, gl.UNSIGNED_BYTE, texels);
+  for (const filter of ['NEAREST', 'LINEAR']) {
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MIN_FILTER, gl[filter]);
+    gl.texParameteri(gl.TEXTURE_2D, gl.TEXTURE_MAG_FILTER, gl[filter]);
+    const draws = measure(() => gl.drawArrays(gl.TRIANGLES, 0, 3), finishGl);
+    report(`textured full-screen draw, ${filter}`, (draws * 256 * 256) / 1e6, 'Mpixels/s');
+  }
+}
+
 // Bulk transfers.
 {
   const size = 1 << 20;

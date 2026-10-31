@@ -92,7 +92,6 @@ against `angle_commit` `127e783de334` (`chromium/8078`).
 | --- | --- | --- |
 | `conformance/glsl/misc/shader-with-double-underscore.html` (webgl1, webgl2) | ANGLE rejects identifiers containing `__` in WebGL shaders; the test expects them to compile, as newer GLSL ES allows. Still so on ANGLE `main` (October 2026). | `TParseContext::checkIsNotReserved`, `src/compiler/translator/ParseContext.cpp` |
 | `conformance2/textures/misc/immutable-tex-render-feedback.html` (webgl2) | A mutable texture's level is attached while its range is empty (`TEXTURE_BASE_LEVEL` 1, `TEXTURE_MAX_LEVEL` 0); ANGLE reports the framebuffer complete instead of `FRAMEBUFFER_INCOMPLETE_ATTACHMENT` (OpenGL ES 3.0 §4.4.4). Fails on Metal too. | ANGLE's framebuffer completeness checks |
-| `conformance/uniforms/uniform-default-values.html` (webgl1, webgl2) | SwiftShader samples a white `UNORM8` texel as about 0.99994, not exactly 1.0. Passes on GPU backends. | SwiftShader's sampler |
 | `deqp/functional/gles3/shaderoperator/unary_operator_00.html` (webgl2) | SwiftShader fails `shaderop.unary_operator.minus.lowp_uint_vertex`. Passes on GPU backends. | SwiftShader |
 
 After changing `angle_commit`, run the full suite (`npm run conformance`) with

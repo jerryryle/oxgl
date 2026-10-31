@@ -4,9 +4,7 @@
 
 webgl1 conformance/glsl/misc/shader-with-double-underscore.html FAIL # ANGLE: rejects identifiers containing __ in WebGL shaders (TParseContext::checkIsNotReserved), which the test expects to compile; see angle/README.md
 webgl1 conformance/typedarrays/array-large-array-tests.html FAIL # JS engine: expects new Float32Array(3e9) to throw (old 32-bit byteLength rule); Node's V8 allows >4 GB arrays and allocates lazily
-webgl1 conformance/uniforms/uniform-default-values.html FAIL # SwiftShader: samples a white UNORM8 texel as ~0.99994, not exactly 1.0; passes on GPU backends
 webgl2 conformance/glsl/misc/shader-with-double-underscore.html FAIL # ANGLE: rejects identifiers containing __ in WebGL shaders (TParseContext::checkIsNotReserved), which the test expects to compile; see angle/README.md
 webgl2 conformance/typedarrays/array-large-array-tests.html FAIL # JS engine: expects new Float32Array(3e9) to throw (old 32-bit byteLength rule); Node's V8 allows >4 GB arrays and allocates lazily
-webgl2 conformance/uniforms/uniform-default-values.html FAIL # SwiftShader: samples a white UNORM8 texel as ~0.99994, not exactly 1.0; passes on GPU backends
 webgl2 conformance2/textures/misc/immutable-tex-render-feedback.html FAIL # ANGLE: reports a mutable texture level outside an empty [base, max] range (base 1, max 0) as a complete attachment; fails on Metal too; see angle/README.md
 webgl2 deqp/functional/gles3/shaderoperator/unary_operator_00.html FAIL # SwiftShader: unary minus on lowp uint in a vertex shader (shaderop.unary_operator.minus.lowp_uint_vertex); passes on GPU backends
