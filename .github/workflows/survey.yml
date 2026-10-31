@@ -35,7 +35,7 @@ jobs:
           base=https://github.com/jerryryle/oxgl-angle/releases/download/angle-8078.4
           curl -sSfLO "$base/angle-windows-arm64-symbols.tar.xz" && curl -sSfLO "$base/SHA256SUMS"
           grep windows-arm64-symbols SHA256SUMS | sed 's#\./##' | sha256sum -c
-          mkdir -p "$RUNNER_TEMP/syms" && tar -xJf angle-windows-arm64-symbols.tar.xz -C "$RUNNER_TEMP/syms"
+          mkdir -p "$RUNNER_TEMP/syms" && tar --force-local -xJf angle-windows-arm64-symbols.tar.xz -C "$RUNNER_TEMP/syms"
           find "$RUNNER_TEMP/syms" -name '*.pdb' | head; find target -name '*.pdb' | head
       - name: Enable minidumps
         shell: pwsh
