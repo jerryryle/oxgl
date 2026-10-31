@@ -35,8 +35,9 @@ jobs:
           base=https://github.com/jerryryle/oxgl-angle/releases/download/angle-8078.4
           curl -sSfLO "$base/angle-windows-arm64-symbols.tar.xz" && curl -sSfLO "$base/SHA256SUMS"
           grep windows-arm64-symbols SHA256SUMS | sed 's#\./##' | sha256sum -c
-          mkdir -p "$RUNNER_TEMP/syms" && tar --force-local -xJf angle-windows-arm64-symbols.tar.xz -C "$RUNNER_TEMP/syms"
-          find "$RUNNER_TEMP/syms" -name '*.pdb' | head; find target -name '*.pdb' | head
+          syms="$(cygpath -u "$RUNNER_TEMP")/syms"
+          mkdir -p "$syms" && (cd "$syms" && tar -xJf "$OLDPWD/angle-windows-arm64-symbols.tar.xz")
+          find "$syms" -name '*.pdb' | head; find target -name '*.pdb' | head
       - name: Enable minidumps
         shell: pwsh
         run: |
@@ -51,21 +52,22 @@ jobs:
         run: |
           w1="conformance/ogles/GL/swizzlers/swizzlers_073_to_080.html deqp/data/gles2/shaders/constants.html"
           w2="copy-tex-image-2d-formats.html shaderoperator/selection.html etc2_eac_srgb8_alpha8_npot.html deqp/functional/gles3/buffercopy.html tex-2d-rgb10_a2-rgba-unsigned_int_2_10_10_10_rev.html image_bitmap_from_image_bitmap/ image_bitmap_from_blob/tex-2d-rgba16f"
-          for i in 1 2 3; do
+          for _ in 1 2 3; do
             for p in $w1; do npm run -s conformance -- --suite webgl1 --filter="$p" 2>&1 | grep -E "expected|webgl1:" ; done
             for p in $w2; do npm run -s conformance -- --suite webgl2 --filter="$p" 2>&1 | grep -E "expected|webgl2:" ; done
           done
-          ls "$RUNNER_TEMP/dumps" || true
+          ls "$(cygpath -u "$RUNNER_TEMP")/dumps" || true
       - name: Symbolize dumps
         if: always()
         run: |
           cdb=$(find "/c/Program Files (x86)/Windows Kits/10/Debuggers" -iname cdb.exe 2>/dev/null | grep -i arm64 | head -1)
           echo "cdb: $cdb"
           [ -n "$cdb" ] || exit 0
-          syms="$(cygpath -w "$RUNNER_TEMP/syms");$(cygpath -w "$PWD/target/release");$(cygpath -w "$PWD/dist");srv*$(cygpath -w "$RUNNER_TEMP/symcache")*https://msdl.microsoft.com/download/symbols"
+          temp="$(cygpath -u "$RUNNER_TEMP")"
+          syms="$(cygpath -w "$temp/syms");$(cygpath -w "$PWD/target/release");$(cygpath -w "$PWD/dist");srv*$(cygpath -w "$temp/symcache")*https://msdl.microsoft.com/download/symbols"
           for t in $(find target -name '*.pdb' -printf '%h\n' | sort -u); do syms="$syms;$(cygpath -w "$PWD/$t")"; done
           n=0
-          for d in "$RUNNER_TEMP"/dumps/*.dmp; do
+          for d in "$temp"/dumps/*.dmp; do
             [ -f "$d" ] || continue; n=$((n+1)); [ $n -le 6 ] || break
             echo "===== $d"
             "$cdb" -z "$(cygpath -w "$d")" -y "$syms" -c ".ecxr; kn 40; !analyze -v; q" 2>&1 | grep -vE "^\*|^ *$" | head -150
