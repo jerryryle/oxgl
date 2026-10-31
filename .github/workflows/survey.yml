@@ -48,6 +48,13 @@ jobs:
           cdb=$(find "/c/Program Files (x86)/Windows Kits/10/Debuggers" -iname cdb.exe 2>/dev/null | grep -i arm64 | head -1)
           echo "cdb: $cdb"
           [ -n "$cdb" ] || { echo "cdb not found"; exit 1; }
+          # Full page heap for node.exe: a freed heap block becomes inaccessible,
+          # so a use-after-free faults at once, and !heap -p -a names the stack
+          # that freed it.
+          gflags="$(dirname "$cdb")/gflags.exe"
+          [ -x "$gflags" ] || { echo "gflags not found next to cdb"; exit 1; }
+          "$gflags" /i node.exe +hpa
+          "$gflags" /i node.exe
           syms="$(cygpath -w "$temp/syms");srv*$(cygpath -w "$temp/symcache")*https://msdl.microsoft.com/download/symbols"
           while IFS= read -r t; do syms="$syms;$(cygpath -w "$PWD/$t")"; done < <(find target -name '*.pdb' -exec dirname {} \; | sort -u)
           node="$(cygpath -w "$(command -v node)")"
@@ -62,8 +69,8 @@ jobs:
           # initial breakpoint rather than the first exception.
           # sxn cpr/epr: report each process's start and exit (with its exit
           # code) without stopping.
-          commands="sxi ibp; sxn cpr; sxn epr; sxe -c \"r; !address @pc; kn 30; dps @sp L100; .dump /mp /u $dumpdir/av.dmp; gn\" av; g"
-          specs=("image_bitmap_from_image_bitmap/" "image_bitmap_from_canvas/tex-2d-rgb10_a2" "image_data/tex-2d-rgb10_a2" "tex-2d-rgb10_a2-rgba-unsigned_int_2_10_10_10_rev.html")
+          commands="sxi ibp; sxn cpr; sxn epr; sxe -c \"r; !address @x11; !heap -p -a @x11; kn 30; .dump /mp /u $dumpdir/av.dmp; gn\" av; g"
+          specs=("image_bitmap_from_image_bitmap/" "tex-2d-rgb10_a2-rgba-unsigned_int_2_10_10_10_rev.html")
           for round in 1 2 3 4 5 6; do
             for i in "${!specs[@]}"; do
               log="$temp/cdb/$round-$i.log"
@@ -82,7 +89,7 @@ jobs:
             echo "round $round: $n dumps"
             [ "$n" -ge 2 ] && break
           done
-          grep -h -B2 -A70 "Access violation" "$temp"/cdb/*.log | head -600
+          grep -h -B2 -A150 "Access violation" "$temp"/cdb/*.log | head -600
           exit 0
       - name: Symbolize dumps
         if: always()
