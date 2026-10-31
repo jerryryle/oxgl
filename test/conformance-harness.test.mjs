@@ -493,7 +493,7 @@ test('page runner: outcomes, early errors, media, canvas shim, crashes, timeouts
   assert.equal(pageOf(report, 'webgl1', 'hang.html').passed, 1, 'counts survive a timeout');
   assert.equal(outcome('webgl1', 'abort.html'), 'CRASH');
   assert.equal(outcome('webgl1', 'abort-at-teardown.html'), 'CRASH');
-  assert.match(pageOf(report, 'webgl1', 'abort-at-teardown.html').message, /SIGABRT|code 3/);
+  assert.match(pageOf(report, 'webgl1', 'abort-at-teardown.html').message, /SIGABRT|code 3\b|code 134\b/);
 
   // Page setup fails: a harness error, not an outcome or an expectation.
   assert.equal(ok, false);

@@ -1,0 +1,117 @@
+# Scratch workflow (never merged): port-windows and port-linux-x64 build-and-test,
+# x64 ASan, the Linux x64 abort probe, and conformance on every port platform
+# next to Linux arm64 on one commit.
+name: survey
+on:
+  push:
+    branches: [survey/port]
+permissions:
+  contents: read
+env:
+  CARGO_TERM_COLOR: always
+  ASAN_NIGHTLY: nightly-2026-10-20
+jobs:
+  build-test:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04, windows-2025, windows-11-arm]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install ffmpeg
+        run: |
+          if command -v ffmpeg; then exit 0; fi
+          if [ "$RUNNER_OS" = Linux ]; then sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg; exit 0; fi
+          curl -sSfL -o ffmpeg.zip https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip
+          unzip -q ffmpeg.zip -d "$RUNNER_TEMP/ffmpeg" && rm ffmpeg.zip
+          dirname "$(find "$RUNNER_TEMP/ffmpeg" -name ffmpeg.exe | head -1)" >> "$GITHUB_PATH"
+      - run: rustup toolchain install
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run lint:rust
+      - run: npm run lint:js
+      - run: cargo test --workspace --exclude oxgl-node --locked
+      - run: npm run build
+      - run: npm test
+        env:
+          OXGL_BACKEND: software
+      - name: Abort probe
+        if: runner.os == 'Linux' && always()
+        run: |
+          node scratch-abort-probe.mjs
+          coredumpctl list --no-pager 2>/dev/null | tail -3 || true
+          sudo sysctl -w kernel.core_pattern=core >/dev/null
+          ulimit -c 0
+          echo "core dumps off:"; node scratch-abort-probe.mjs
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: build-${{ matrix.os }}
+          path: probe-report.json
+          if-no-files-found: ignore
+  asan-x64:
+    runs-on: ubuntu-24.04
+    env:
+      RUSTFLAGS: -Zsanitizer=address -Cforce-frame-pointers=yes
+      RUSTDOCFLAGS: -Zsanitizer=address -Cforce-frame-pointers=yes
+      ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:detect_stack_use_after_return=1
+      OXGL_ANGLE_SYMBOLS: "1"
+      LSAN_OPTIONS: suppressions=${{ github.workspace }}/.github/lsan-suppressions.txt
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - run: rustup toolchain install "$ASAN_NIGHTLY" --profile minimal --component rust-src
+      - name: Locate llvm-symbolizer
+        run: |
+          symbolizer=$(command -v llvm-symbolizer || find /usr/lib/llvm-*/bin -name llvm-symbolizer | sort -V | tail -1)
+          echo "ASAN_SYMBOLIZER_PATH=$symbolizer" >> "$GITHUB_ENV"
+      - run: cargo +"$ASAN_NIGHTLY" test --workspace --exclude oxgl-node --locked -Zbuild-std --target x86_64-unknown-linux-gnu
+  conformance:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04-arm, ubuntu-24.04, windows-2025, windows-11-arm]
+        suite: [webgl1, webgl2]
+    runs-on: ${{ matrix.os }}
+    timeout-minutes: 120
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install ffmpeg
+        run: |
+          if command -v ffmpeg; then exit 0; fi
+          if [ "$RUNNER_OS" = Linux ]; then sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg; exit 0; fi
+          curl -sSfL -o ffmpeg.zip https://github.com/BtbN/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip
+          unzip -q ffmpeg.zip -d "$RUNNER_TEMP/ffmpeg" && rm ffmpeg.zip
+          dirname "$(find "$RUNNER_TEMP/ffmpeg" -name ffmpeg.exe | head -1)" >> "$GITHUB_PATH"
+      - run: rustup toolchain install
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - run: npm ci
+      - run: npm run build
+      - run: npm run conformance -- --suite "$SUITE"
+        continue-on-error: true
+        env:
+          SUITE: ${{ matrix.suite }}
+          OXGL_BACKEND: software
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: conformance-${{ matrix.os }}-${{ matrix.suite }}
+          path: conformance-results.json

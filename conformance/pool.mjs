@@ -146,7 +146,11 @@ function runOne(script, url, { endEarly, root, timeoutMs, teardownMs }) {
   });
 }
 
-/** Windows reports a native abort as exit code 3, and an unhandled exception as a 0xC… status. */
+/**
+ * Windows reports a native abort as exit code 3, an unhandled exception as a
+ * 0xC… status, and Node's own abort (`process.abort()`, failed assertions) as
+ * 134, its `ExitCode::kAbort`: Node's `ABORT()` ends in `_exit(134)` there.
+ */
 function isNativeAbort(code) {
-  return process.platform === 'win32' && code !== null && (code === 3 || code >>> 0 >= 0xc0000000);
+  return process.platform === 'win32' && code !== null && (code === 3 || code === 134 || code >>> 0 >= 0xc0000000);
 }

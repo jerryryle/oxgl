@@ -15,8 +15,14 @@ import { ffmpegAvailable } from './video.mjs';
 
 export const EXPECTATIONS_PATH = join(REPO_ROOT, 'conformance', 'expectations.txt');
 export const REPORT_PATH = join(REPO_ROOT, 'conformance-results.json');
-/** Seconds a page may go without a result: the official harness's watchdog. */
-const DEFAULT_TIMEOUT_S = 20;
+/**
+ * Seconds a page may go without a result. The official harness's watchdog is
+ * 20 s, but some pages report only after long draw loops (many-draw-calls goes
+ * up to 15 s between results on SwiftShader on the 4-CPU CI runner), and a
+ * passing page must stay under half the limit so ordinary load cannot time it
+ * out. A longer limit costs time only for pages that stop without finishing.
+ */
+const DEFAULT_TIMEOUT_S = 60;
 
 /**
  * Runs `pages` (suite → page paths under `root`) and judges them against

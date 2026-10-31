@@ -157,8 +157,9 @@ Other options: `--include-skipped` runs `SKIP` pages and reports them without
 judging them. `--fast-errors` ends every page at its first uncaught error, which
 helps when exploring an area that oxgl does not implement yet. `--timeout
 <seconds>` sets how long a page may go without a new result before it times
-out (default 20, the official harness's watchdog); each result restarts the
-clock. `--jobs <n>` sets how many pages run at once (default: the number of
+out (default 60; the official harness's watchdog is 20, but some pages report
+only after draw loops that take longer than half of that on SwiftShader); each
+result restarts the clock. `--jobs <n>` sets how many pages run at once (default: the number of
 CPUs).
 
 `--update` rewrites the entries of the pages that ran from their outcomes. It

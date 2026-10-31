@@ -8,6 +8,9 @@ bundle_version = "angle-8078.4"     # the oxgl-angle release these come from
 [platform.linux-x64]
 url = "https://github.com/jerryryle/oxgl-angle/releases/download/angle-8078.4/angle-linux-x64.tar.xz"
 sha256 = "10fc6990026f798b42d8193d69ff30176596d69959f9247d666431e00568c321"
+# Unstripped libraries for the ASan job's leak suppressions (OXGL_ANGLE_SYMBOLS).
+symbols_url = "https://github.com/jerryryle/oxgl-angle/releases/download/angle-8078.4/angle-linux-x64-symbols.tar.xz"
+symbols_sha256 = "ce94e61c1e049812685a55afd96528881d584dca1488b65e58112e42626ad4f8"
 
 [platform.linux-arm64]
 url = "https://github.com/jerryryle/oxgl-angle/releases/download/angle-8078.4/angle-linux-arm64.tar.xz"
