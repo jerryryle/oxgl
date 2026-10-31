@@ -38,41 +38,35 @@ jobs:
           syms="$(cygpath -u "$RUNNER_TEMP")/syms"
           mkdir -p "$syms" && (cd "$syms" && tar -xJf "$OLDPWD/angle-windows-arm64-symbols.tar.xz")
           find "$syms" -name '*.pdb' | head; find target -name '*.pdb' | head
-      - name: Enable minidumps
-        continue-on-error: true
-        shell: pwsh
-        run: |
-          $dumps = "$env:RUNNER_TEMP\dumps"
-          New-Item -ItemType Directory -Force -Path $dumps | Out-Null
-          $wer = 'HKLM:\SOFTWARE\Microsoft\Windows\Windows Error Reporting'
-          New-ItemProperty -Path $wer -Name Disabled -Value 0 -PropertyType DWord -Force | Out-Null
-          New-ItemProperty -Path $wer -Name DontShowUI -Value 1 -PropertyType DWord -Force | Out-Null
-          $k = "$wer\LocalDumps"
-          New-Item -Path $k -Force | Out-Null
-          New-ItemProperty -Path $k -Name DumpFolder -Value $dumps -PropertyType ExpandString -Force | Out-Null
-          New-ItemProperty -Path $k -Name DumpType -Value 1 -PropertyType DWord -Force | Out-Null
-          New-ItemProperty -Path $k -Name DumpCount -Value 100 -PropertyType DWord -Force | Out-Null
-          # procdump as the postmortem debugger too, in case WER stays off.
-          Invoke-WebRequest -Uri https://download.sysinternals.com/files/Procdump.zip -OutFile procdump.zip
-          Expand-Archive procdump.zip -DestinationPath "$env:RUNNER_TEMP\procdump"
-          $pd = Get-ChildItem "$env:RUNNER_TEMP\procdump" -Filter 'procdump64a.exe' | Select-Object -First 1
-          & $pd.FullName -accepteula -mp -i $dumps
-          Get-ItemProperty 'HKLM:\SOFTWARE\Microsoft\Windows NT\CurrentVersion\AeDebug' | Format-List Debugger, Auto
-      - name: Re-run the crashing pages
+      - name: Run crash-prone pages under cdb
         env:
           OXGL_BACKEND: software
         run: |
           set +e +o pipefail
-          dumps="$(cygpath -u "$RUNNER_TEMP")/dumps"
-          w1="conformance/ogles/GL/swizzlers/swizzlers_073_to_080.html deqp/data/gles2/shaders/constants.html"
-          w2="copy-tex-image-2d-formats.html shaderoperator/selection.html etc2_eac_srgb8_alpha8_npot.html deqp/functional/gles3/buffercopy.html tex-2d-rgb10_a2-rgba-unsigned_int_2_10_10_10_rev.html image_bitmap_from_image_bitmap/ image_bitmap_from_blob/tex-2d-rgba16f"
-          for round in 1 2 3 4 5 6 7 8; do
-            for p in $w1; do npm run -s conformance -- --suite webgl1 --filter="$p" 2>&1 | grep -E "got CRASH|webgl1:"; done
-            for p in $w2; do npm run -s conformance -- --suite webgl2 --filter="$p" 2>&1 | grep -E "got CRASH|webgl2:"; done
-            n=$(find "$dumps" -name '*.dmp' | wc -l)
+          temp="$(cygpath -u "$RUNNER_TEMP")"
+          mkdir -p "$temp/dumps" "$temp/cdb"
+          cdb=$(find "/c/Program Files (x86)/Windows Kits/10/Debuggers" -iname cdb.exe 2>/dev/null | grep -i arm64 | head -1)
+          echo "cdb: $cdb"
+          syms="$(cygpath -w "$temp/syms");srv*$(cygpath -w "$temp/symcache")*https://msdl.microsoft.com/download/symbols"
+          while IFS= read -r t; do syms="$syms;$(cygpath -w "$PWD/$t")"; done < <(find target -name '*.pdb' -exec dirname {} \; | sort -u)
+          node="$(cygpath -w "$(command -v node)")"
+          # Forward slashes: cdb reads backslashes in quoted command strings as escapes.
+          dumpdir="$(cygpath -m "$temp/dumps")"
+          # On every first-chance access violation in the runner or a page
+          # process (-o): print the stack, write a minidump, then pass the
+          # exception on, so the process ends as it would without cdb.
+          commands="sxe -c \"kn 60; .dump /mp /u $dumpdir/av.dmp; gn\" av; g"
+          specs=("image_bitmap_from_image_bitmap/" "image_bitmap_from_canvas/tex-2d-rgb10_a2" "image_data/tex-2d-rgb10_a2" "tex-2d-rgb10_a2-rgba-unsigned_int_2_10_10_10_rev.html")
+          for round in 1 2 3 4 5 6; do
+            for i in "${!specs[@]}"; do
+              "$cdb" -o -g -G -y "$syms" -c "$commands" "$node" conformance/run.mjs --suite webgl2 --filter="${specs[$i]}" < /dev/null > "$temp/cdb/$round-$i.log" 2>&1
+              grep -h "got CRASH\|webgl2: " "$temp/cdb/$round-$i.log"
+            done
+            n=$(find "$temp/dumps" -name '*.dmp' | wc -l)
             echo "round $round: $n dumps"
-            [ "$n" -ge 3 ] && break
+            [ "$n" -ge 2 ] && break
           done
+          grep -h -B2 -A70 "Access violation" "$temp"/cdb/*.log | head -600
           exit 0
       - name: Symbolize dumps
         if: always()
