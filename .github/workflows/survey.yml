@@ -55,12 +55,20 @@ jobs:
           # On every first-chance access violation in the runner or a page
           # process (-o): print the stack, write a minidump, then pass the
           # exception on, so the process ends as it would without cdb.
-          commands="sxe -c \"kn 60; .dump /mp /u $dumpdir/av.dmp; gn\" av; g"
+          # sxi ibp: never stop at a process's initial breakpoint (page processes
+          # start under the debugger too), so cdb never waits for input.
+          commands="sxi ibp; sxe -c \"kn 60; .dump /mp /u $dumpdir/av.dmp; gn\" av; g"
           specs=("image_bitmap_from_image_bitmap/" "image_bitmap_from_canvas/tex-2d-rgb10_a2" "image_data/tex-2d-rgb10_a2" "tex-2d-rgb10_a2-rgba-unsigned_int_2_10_10_10_rev.html")
           for round in 1 2 3 4 5 6; do
             for i in "${!specs[@]}"; do
-              "$cdb" -o -g -G -y "$syms" -c "$commands" "$node" conformance/run.mjs --suite webgl2 --filter="${specs[$i]}" < /dev/null > "$temp/cdb/$round-$i.log" 2>&1
-              grep -h "got CRASH\|webgl2: " "$temp/cdb/$round-$i.log"
+              log="$temp/cdb/$round-$i.log"
+              timeout -k 10 900 "$cdb" -o -g -G -y "$syms" -c "$commands" "$node" conformance/run.mjs --suite webgl2 --filter="${specs[$i]}" < /dev/null > "$log" 2>&1
+              rc=$?
+              echo "== round $round spec $i (${specs[$i]}): cdb exit $rc"
+              grep -h "got CRASH\|webgl2: " "$log"
+              tail -n 15 "$log"
+              # 124: timed out, so cdb stalled; its log says where.
+              [ "$rc" -eq 124 ] && break 2
             done
             n=$(find "$temp/dumps" -name '*.dmp' | wc -l)
             echo "round $round: $n dumps"
@@ -91,5 +99,7 @@ jobs:
         if: always()
         with:
           name: dumps
-          path: ${{ runner.temp }}/dumps
+          path: |
+            ${{ runner.temp }}/dumps
+            ${{ runner.temp }}/cdb
           if-no-files-found: ignore
