@@ -16,7 +16,8 @@ restored.
 Docker on a Mac exposes no GPU to Linux containers, so the Linux arm64 runs use
 the software backend. The GPU backend path has been checked on macOS arm64
 (ANGLE Metal on an Apple GPU): all Node tests pass, and the Khronos results match
-Linux arm64 except for differences in the canvas package's image decoding.
+Linux arm64 except for differences in image decoding by the conformance
+runner's canvas package (node-canvas at the time; now `@napi-rs/canvas`).
 
 ## Known issues
 

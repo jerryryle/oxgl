@@ -1,0 +1,21 @@
+# Tasks
+
+## 1. The `canvas` package
+
+- [x] 1.1 Add `conformance/canvas/package.json` (`"name": "canvas"`, `"private": true`, `"main": "index.js"`) and `index.js`, which re-exports `@napi-rs/canvas/node-canvas` with the writable `CanvasRenderingContext2D.prototype.canvas` accessor (design: "A local `canvas` package"). In `package.json` (edit in place, keep `@fission-ai/openspec`), set `"canvas": "file:conformance/canvas"` and add `"@napi-rs/canvas": "1.1.0"` pinned exactly. Run `npm install` to update `package-lock.json`. Verify that `npm ls canvas @napi-rs/canvas` shows no node-canvas, that `node -e "require('canvas').createCanvas(1,1)"` runs from the repo root, and that `npm pack --dry-run` lists nothing under `conformance/`.
+- [x] 1.2 Update `CONTRIBUTING.md`'s paragraph on the runner's `canvas` devDependency, and the `README.md` macOS note on canvas image decoding, to describe `@napi-rs/canvas` behind the local `canvas` package. Verify that `npm run lint` passes.
+
+## 2. Image loading and decoding in the runner
+
+- [x] 2.1 In `conformance/page.mjs`, wrap the per-document resource loader's `fetch` for image elements so that `onLoad` returns the element's native image `decode()` promise (design: "Hold `load` on the decode"). Add harness cases to `test/conformance-harness.test.mjs`: a JPEG `data:` image drawn into a 2D canvas in its `load` handler reads back its pixels, and an `<img>` with undecodable bytes fires `error` and not `load` (the spec's "Image drawn in its load handler" and "Undecodable image" scenarios). Verify with `npm test`.
+- [x] 2.2 Make the non-PNG upload path draw the element's decoded native image instead of decoding bytes again, and make `createImageBitmap`'s byte path await `decode()` (design: "Decoding for WebGL uses the decoded image"). Keep the unsized-SVG shim and confirm its accessor check still passes. Verify with `npm test`, including the existing ImageBitmap, SVG and EXIF harness cases.
+- [x] 2.3 Verify group 2 as a whole: `npm run lint` and `npm test` pass on Linux arm64 (the pull request's `check` and `node-range` jobs), with the same number of passing Node tests as on `main` plus the new cases. *(Done 2026-10-31 in a local `linux/arm64` Docker container, Node 24, before the pull request: `npm test` 293 passed, 0 failed, 6 skipped. The harness tests carry the two new cases. The build-and-test survey (linux-arm64-focus task 4.2) ran the same code on four more platforms.)*
+
+## 3. Conformance results and platforms
+
+- [x] 3.1 Run both suites on Linux arm64 (the pull request's `conformance` jobs). Verify that both pass against the unchanged `conformance/expectations.txt`, with no new failures and no newly passing pages hidden by `--update`. Compare each suite's run time with the latest `main` run. If a page's outcome changes, compare it with what browsers do and fix it in the runner, or bring it to the user before its expectation changes. *(Done 2026-10-31 in local `linux/arm64` Docker. The first run regressed `conformance/textures/misc/gl-teximage.html` in both suites: Skia applied the colorspin JPEG's ICC profile, which WebGL uploads ignore. The runner now strips JPEG profiles for uploads (design: "JPEG color profiles are ignored for WebGL uploads"). The rerun passed both suites against the unchanged expectations, webgl1 969/971 and webgl2 2861/2865. Run times in the same container: webgl1 149 s against `main`'s 151 s, webgl2 655 s against 658 s. These were local runs; the pull request's `conformance` jobs confirm them in CI.)*
+- [x] 3.2 On a scratch branch outside `ci` (never merged, and not running the regular CI), run only `npm ci` and `node -e "require('canvas')"` on `windows-11-arm`, plus `npm ci` on `windows-2025` and `macos-15`. Verify that all three succeed, record the result here, and delete the scratch branch. *(Done 2026-10-31, run 41157182250: `npm ci` succeeded on `windows-11-arm` (win32-arm64), `windows-2025` (win32-x64) and `macos-15` (darwin-arm64), with no compiler step. `npm ls` showed `canvas@3.2.3 -> ./conformance/canvas` and `@napi-rs/canvas@1.1.0`, and a red 2D fill read back `[255, 0, 0, 255]` on all three. Branch `survey/npm-ci` deleted.)*
+
+## Workflow follow-up
+
+- After this change is archived, resume linux-arm64-focus task 4.2, the platform survey. Its scope, including whether it runs conformance, is for the user to decide then.

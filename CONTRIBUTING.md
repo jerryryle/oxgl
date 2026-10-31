@@ -113,13 +113,14 @@ fetches it into `.cache/conformance/`, and later runs reuse that copy until the
 pin changes. Each page runs in jsdom in its own Node process, with
 `canvas.getContext` returning oxgl contexts.
 
-The runner needs the `canvas` devDependency (node-canvas, pinned exactly in
-`package.json`). jsdom uses it for 2D contexts and image decoding, and the
-runner exposes its `ImageData` class to pages; many texture pages need these
-before they reach oxgl. `npm ci`
-installs its prebuilt binary; the runner stops with an error naming it if it
-cannot be loaded. It is a devDependency only, so `npm install oxgl` never
-downloads it.
+The runner needs the `canvas` devDependency, the local package in
+`conformance/canvas/`. It presents `@napi-rs/canvas` (Skia, pinned exactly in
+`package.json`) through the node-canvas API that jsdom expects. jsdom uses it
+for 2D contexts and image decoding, and the runner exposes its `ImageData`
+class to pages; many texture pages need these before they reach oxgl. `npm ci`
+installs its prebuilt binary on every target, with no system libraries; the
+runner stops with an error naming it if it cannot be loaded. It is a
+devDependency only, so `npm install oxgl` never downloads it.
 
 The WebGL constants in `src/generated/webgl-constants.ts` come from the IDL
 files at the same commit. When you move the pin, regenerate them with `node

@@ -365,6 +365,12 @@ test('page runner: outcomes, early errors, media, canvas shim, crashes, timeouts
         'canvas-defaults.html',
         'context-2d.html',
         'image-2d.html',
+        'image-2d-jpeg.html',
+        'image-undecodable.html',
+        'image-icc-profile.html',
+        'image-bitmap-svg.html',
+        'image-src-change.html',
+        'image-upload-before-decode.html',
         'video.html',
         'video-frame.html',
         'messages.html',
@@ -432,6 +438,18 @@ test('page runner: outcomes, early errors, media, canvas shim, crashes, timeouts
   assert.equal(outcome('webgl1', 'context-2d.html'), 'PASS', pageOf(report, 'webgl1', 'context-2d.html').message);
   // Image drawn into a 2D canvas: natural size and decoded pixels.
   assert.equal(outcome('webgl1', 'image-2d.html'), 'PASS', pageOf(report, 'webgl1', 'image-2d.html').message);
+  // A JPEG drawn from its load handler reads back its pixels; load waits for the decode.
+  assert.equal(outcome('webgl1', 'image-2d-jpeg.html'), 'PASS', pageOf(report, 'webgl1', 'image-2d-jpeg.html').message);
+  // Undecodable bytes fire error and never load.
+  assert.equal(outcome('webgl1', 'image-undecodable.html'), 'PASS', pageOf(report, 'webgl1', 'image-undecodable.html').message);
+  // A JPEG's color profile applies in 2D drawing and is ignored by WebGL uploads.
+  assert.equal(outcome('webgl1', 'image-icc-profile.html'), 'PASS', pageOf(report, 'webgl1', 'image-icc-profile.html').message);
+  // An ImageBitmap from an SVG image element.
+  assert.equal(outcome('webgl1', 'image-bitmap-svg.html'), 'PASS', pageOf(report, 'webgl1', 'image-bitmap-svg.html').message);
+  // A new source on the same element uploads the new image, not a copy of the old one.
+  assert.equal(outcome('webgl1', 'image-src-change.html'), 'PASS', pageOf(report, 'webgl1', 'image-src-change.html').message);
+  // An upload before the decode finishes is not cached, and decode() waits for the pixels.
+  assert.equal(outcome('webgl1', 'image-upload-before-decode.html'), 'PASS', pageOf(report, 'webgl1', 'image-upload-before-decode.html').message);
   // A video that cannot load: play() rejects and error fires promptly.
   assert.equal(outcome('webgl1', 'video.html'), 'PASS', pageOf(report, 'webgl1', 'video.html').message);
   assert.ok(pageOf(report, 'webgl1', 'video.html').durationMs < PROMPT_MS);

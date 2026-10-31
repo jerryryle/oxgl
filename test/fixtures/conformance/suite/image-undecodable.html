@@ -1,0 +1,16 @@
+<!DOCTYPE html>
+<html><head><script src="harness.js"></script></head><body>
+<script>
+// Bytes that are not an image: error fires, and load never does.
+var img = new Image();
+var loaded = false;
+img.onload = function () { loaded = true; };
+img.onerror = function () {
+  setTimeout(function () {
+    if (loaded) testFailed("load fired"); else testPassed("error without load");
+    finishTest();
+  }, 100);
+};
+img.src = "data:image/png;base64,bm90IGFuIGltYWdl";
+</script>
+</body></html>
