@@ -1,9 +1,28 @@
 # oxgl
 
+[![ci](https://github.com/jerryryle/oxgl/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jerryryle/oxgl/actions/workflows/ci.yml)
+[![npm](https://img.shields.io/npm/v/oxgl)](https://www.npmjs.com/package/oxgl)
+[![license](https://img.shields.io/badge/license-BSD--3--Clause-blue)](LICENSE)
+
 Standards-compliant WebGL 1 and WebGL 2 for Node.js, rendered headless through
 ANGLE, with a SwiftShader software fallback. The full WebGL 1 and WebGL 2 APIs
 are implemented, with extensions and context loss, and are checked against the
 Khronos conformance suite; three.js renders through it unmodified.
+
+## Install
+
+```sh
+npm install oxgl
+```
+
+Prebuilt for Linux x64 and arm64 (glibc 2.34 or newer, such as Ubuntu 22.04 or
+Debian 12), macOS arm64, and Windows x64 and arm64, on Node.js 22.22.2 or
+newer. Installing needs no Rust toolchain, compiler or install script: npm
+downloads only the host's platform package (`@oxgl-js/<platform>`), which holds
+the native addon and its ANGLE libraries. Linux with musl (such as Alpine) has
+no build; importing oxgl there throws an error with
+`code === 'OXGL_NATIVE_MISSING'`. To build from source, see Prerequisites below
+and `CONTRIBUTING.md`.
 
 ## Platforms
 
@@ -214,6 +233,8 @@ benchmarks give 715 k small draws/s and 830 frames/s for the 1000-mesh
 three.js scene.
 
 ## Prerequisites
+
+To build from source:
 
 - [rustup](https://rustup.rs). The pinned toolchain in `rust-toolchain.toml` is
   installed automatically on first use.

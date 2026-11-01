@@ -19,6 +19,9 @@ supports only Linux arm64 (see the top-level README).
 |---|---|
 | `bundles.toml` | The pinned bundles: `bundle_version` (the oxgl-angle release) and per-platform bundle URL + sha256 that oxgl-sys downloads, and optionally a symbols archive (`symbols_url`, `symbols_sha256`) that it uses instead of the stripped libraries when `OXGL_ANGLE_SYMBOLS` is set |
 | `scripts/check_pin.py` | Validates `bundles.toml`, including that every URL is in the named oxgl-angle release |
+| `scripts/bump.py` | Pins an oxgl-angle release (the given tag, or the latest) in `bundles.toml` from its `SHA256SUMS`, after checking that oxgl-angle's own workflows made it |
+| `scripts/bump.sh` | The automatic bump: `bump.py`, then the patch version bump |
+| `scripts/test_bump.py` | Tests `bump.py`'s origin check and rewrite |
 
 ## Bundle layout
 
@@ -67,11 +70,23 @@ ANGLE changes in two steps, one in each repository:
 
 1. In [oxgl-angle](https://github.com/jerryryle/oxgl-angle), change the recipe
    with a new `bundle_version`, merge it, and release it (its
-   `angle/README.md` has the steps). The release run prints the digests.
-2. Here, copy each platform's URL and sha256, and the `bundle_version`, into
-   `bundles.toml`, run `python3 angle/scripts/check_pin.py`, and open a PR. CI
-   builds and tests oxgl against the new bundles. After an ANGLE update, also
-   recheck the known upstream issues below.
+   `angle/README.md` has the steps). oxgl-angle also does this by itself for
+   each new Chrome stable release, daily at 07:17 UTC.
+2. Here, `.github/workflows/angle-bump.yml` picks the release up daily at
+   10:17 UTC, three hours later:
+   - It runs `angle/scripts/bump.sh`, which pins the release's bundles and
+     digests and bumps the patch version.
+   - It opens or refreshes a pull request from the `angle-bump` branch and runs
+     CI on it.
+   - When CI passes, ci.yml's `merge-bump` job merges it, and the run on `main`
+     publishes the new version to npm.
+
+   A bump whose CI fails, or that someone pushed a fix to, waits for a person;
+   to skip a release, label its pull request `skip-bump` and close it. The bump
+   refuses a release that oxgl-angle's own workflows didn't make (created and
+   every asset uploaded by `github-actions[bot]`, tag on oxgl-angle's `main`).
+   To pin by hand instead, run `angle/scripts/bump.sh [<tag>]` and open a PR.
+   After an ANGLE update, also recheck the known upstream issues below.
 
 To try a locally built bundle first, point the build at it:
 `OXGL_ANGLE_DIR=<extracted bundle> npm run build`.

@@ -6,20 +6,24 @@ prerequisites and everyday commands.
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs on every pull request to `main` and every push
-to `main`. A newer push to a pull request cancels its earlier run.
+`.github/workflows/ci.yml` runs on every pull request to `main`, every push
+to `main`, and when started by hand (`workflow_dispatch`, which the ANGLE bump
+uses; see Releases below). A newer run for the same pull request or branch
+cancels the earlier one; runs on `main` are never cancelled.
 
 | Job | Runs on | Checks |
 |---|---|---|
 | `workflow-lint` | Linux | actionlint, and zizmor with `.github/zizmor.yml` (every action pinned to a commit SHA, minimal permissions, no template injection) |
-| `check` | Linux x64 and arm64, macOS arm64, Windows x64 and arm64 | rustfmt, clippy (pedantic, warnings as errors), Rust tests, ESLint and tsc, native + TS build, Node tests with `OXGL_BACKEND=software` |
-| `repo-checks` | Linux | the ANGLE pin check, dependency licenses and `THIRD_PARTY_NOTICES` |
+| `check` | Linux x64 and arm64, macOS arm64, Windows x64 and arm64 | rustfmt, clippy (pedantic, warnings as errors), Rust tests, ESLint and tsc, native + TS build, Node tests with `OXGL_BACKEND=software`, then the packed packages installed into an empty project and rendered with (`scripts/pack.mjs`, `scripts/smoke-packed.mjs`) and, on Linux, that no library in the package needs glibc newer than 2.34 (`scripts/check-glibc.sh`); in a run that releases, the tarballs are uploaded as `packages-<runner>` |
+| `repo-checks` | Linux | the ANGLE pin check and the bump script's tests, dependency licenses and `THIRD_PARTY_NOTICES` |
 | `node-range` | Linux arm64 | Node tests on Node 22.22.2 (the `engines` floor) and Node 26 |
 | `asan` | Linux arm64 and x64 | Rust tests under AddressSanitizer and LeakSanitizer |
 | `conformance` | Linux x64 and arm64, macOS arm64, Windows x64 and arm64 | both Khronos conformance suites with `OXGL_BACKEND=software`, judged against the `conformance/expectations.txt` entries that apply on each platform; each report is uploaded as `conformance-results-<runner>-<suite>` (see Conformance tests below) |
 | `threejs` | Linux arm64 | three.js's own WebGL examples with `OXGL_BACKEND=software`, each frame judged against its reference screenshot and `threejs/expectations.txt`; the report and failing examples' images are uploaded as `threejs-results` (see three.js examples below) |
 | `gpu` | self-hosted `oxgl-gpu` runner | Node tests on a real GPU; skipped unless the `OXGL_GPU_RUNNER` repository variable is `true` |
 | `ci` | Linux | succeeds only when every job above except `gpu` succeeded |
+| `release` | Linux | after `ci`, on `main` only, when npm doesn't have `package.json`'s version yet: publishes the run's tarballs (see Releases below) |
+| `merge-bump` | Linux | after `ci`, on a manual run of the `angle-bump` branch: merges the bump pull request if it is exactly the bot's change, and starts the run on `main` |
 
 `check` and `conformance` run on every supported platform (see the README).
 `threejs` runs on Linux arm64, where its expectations were seeded.
@@ -34,7 +38,7 @@ Jobs can then be added or renamed without changing that setting.
 `workflow-lint` and `repo-checks` run on every change. The jobs that build or
 test oxgl (`check`, `node-range`, `asan`, `conformance`, `threejs`, `gpu`) are skipped
 when every changed file is on the skip list in `ci.yml`'s `changes` job:
-Markdown, `openspec/`, `.claude/`, `LICENSE`, `.editorconfig` and the
+Markdown, `openspec/`, `.claude/`, `assets/`, `LICENSE`, `.editorconfig` and the
 workflow linters' config. `ci` passes those skips and fails any other. Add a
 path to the list only if no build, lint or test step reads it; anything not
 listed, including a new directory, runs every job.
@@ -51,6 +55,54 @@ the ASan nightly, actionlint, zizmor). The commands below name them by those
 `env` keys.
 Dependabot bumps only the SHA-pinned actions, so bump these by hand.
 
+## Releases
+
+A release is a version on `main` that npm doesn't have yet. To release your own
+changes, bump `version` in `package.json` and `package-lock.json` in a pull
+request (`npm version patch --no-git-tag-version`, or `minor`/`major`). After
+it merges and `ci` passes on `main`, the `release` job:
+
+1. Publishes the five platform packages (`@oxgl-js/<platform>`), then `oxgl`,
+   from the tarballs that run's `check` jobs packed and smoke-tested, with npm
+   trusted publishing and provenance. No npm token is stored anywhere.
+2. Creates the tag `v<version>` and a GitHub Release with generated notes.
+
+Pushes that leave the version alone publish nothing. If a release fails
+partway, rerun its `release` job: it skips every package npm already has and
+creates the tag and GitHub Release if they're missing. The tarballs are kept for
+7 days; after that, rerun the whole workflow on that commit.
+
+New ANGLE releases arrive by themselves. `angle-bump.yml` runs daily at
+10:17 UTC, three hours after oxgl-angle's own bump, and when oxgl-angle has a
+newer release it opens a pull request that pins it and bumps the patch version.
+CI runs on it, `merge-bump` merges it when CI passes, and the run on `main`
+releases it. A bump whose CI fails (for example, a conformance page's result
+changed), or that someone pushed a fix to, stays open for a person to finish and
+merge. To skip an oxgl-angle release, label its pull request `skip-bump` and
+close it. `angle/README.md` describes the checks on where a release came from.
+
+### One-time setup
+
+These are done once, by the maintainer, in this order:
+
+1. In this repository's Settings → Actions → General, turn on "Allow GitHub
+   Actions to create and approve pull requests": the bump opens its pull
+   request with the default token.
+2. Merge the release change with `version` at `0.1.0`. The run on `main` packs
+   and smoke-tests, and its `release` job fails, because npm has no trusted
+   publisher yet. Until `0.1.0` is on npm the daily bump does nothing.
+3. Download that run's `packages-*` artifacts and, signed in to npm as a member
+   of the `oxgl-js` org, run `npm publish <tarball> --access public` for each
+   `oxgl-js-*.tgz`, then for `oxgl-0.1.0.tgz`.
+4. On each of the six packages' Settings page on npmjs.com, add a trusted
+   publisher: GitHub Actions, owner `jerryryle`, repository `oxgl`, workflow
+   `ci.yml`, environment `npm`. Then set "Require two-factor authentication and
+   disallow tokens".
+5. Rerun that run's `release` job. It finds the packages published and creates
+   `v0.1.0` and its GitHub Release.
+
+The `npm` GitHub environment, which only `main` may deploy to, already exists.
+
 ## Reproducing a job locally
 
 `check`:
@@ -62,13 +114,20 @@ npm run lint:js
 cargo test --workspace --exclude oxgl-node --locked
 npm run build
 OXGL_BACKEND=software npm test
+node scripts/pack.mjs /tmp/oxgl-packages
+node scripts/smoke-packed.mjs /tmp/oxgl-packages
 ```
+
+`scripts/release.mjs /tmp/oxgl-packages --dry-run` reports what the `release`
+job would publish; it needs all six tarballs, so it refuses the one platform a
+local pack produces.
 
 `repo-checks` (needs Python 3.11+ and the license tools at the versions in
 `ci.yml`'s `env`):
 
 ```sh
 python3 angle/scripts/check_pin.py
+python3 angle/scripts/test_bump.py
 npm run lint:licenses
 ```
 

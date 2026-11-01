@@ -228,17 +228,22 @@ export interface NativeBinding {
 /** Version of the JS ↔ native interface this package was built for. */
 export const NATIVE_ABI_VERSION = 13;
 
-function nativeMissing(detail: string, cause?: unknown): Error {
+/** An `Error` with `code: 'OXGL_NATIVE_MISSING'` naming the host and `detail`. */
+export function nativeMissing(
+  detail: string,
+  cause?: unknown,
+  host = `${process.platform}-${process.arch}`,
+): Error {
   const error = new Error(
-    `oxgl: no usable native addon for ${process.platform}-${process.arch}: ${detail}`,
+    `oxgl: no usable native addon for ${host}: ${detail}`,
     cause === undefined ? undefined : { cause },
   );
   return Object.assign(error, { code: 'OXGL_NATIVE_MISSING' });
 }
 
 /**
- * Loads the napi-rs loader (a CommonJS module, so it goes through
- * `createRequire`) and checks the addon's ABI version. Any failure becomes an
+ * Loads the native addon (`specifier` is its path; a `.node` file loads
+ * through `createRequire`) and checks its ABI version. Any failure becomes an
  * `Error` with `code: 'OXGL_NATIVE_MISSING'`.
  */
 export function loadNative(specifier: string, parentUrl: string): NativeBinding {

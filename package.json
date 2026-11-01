@@ -1,9 +1,16 @@
 {
   "name": "oxgl",
-  "version": "0.0.0",
-  "private": true,
+  "version": "0.1.0",
   "description": "Standards-compliant headless WebGL 1 and WebGL 2 for Node.js",
   "license": "BSD-3-Clause",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/jerryryle/oxgl.git"
+  },
+  "homepage": "https://github.com/jerryryle/oxgl#readme",
+  "bugs": {
+    "url": "https://github.com/jerryryle/oxgl/issues"
+  },
   "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -14,7 +21,8 @@
     }
   },
   "files": [
-    "dist",
+    "dist/**/*.js",
+    "dist/**/*.d.ts",
     "LICENSE"
   ],
   "engines": {
@@ -33,7 +41,7 @@
   "scripts": {
     "openspec": "openspec",
     "build": "npm run build:native && npm run build:ts",
-    "build:native": "napi build --platform --release --manifest-path crates/oxgl-node/Cargo.toml --output-dir dist --js native.cjs --dts native.d.cts && node scripts/stage-angle.mjs",
+    "build:native": "napi build --platform --release --manifest-path crates/oxgl-node/Cargo.toml --output-dir dist --no-js --dts native.d.cts && node scripts/stage-angle.mjs",
     "build:ts": "tsc -p tsconfig.json",
     "lint": "npm run lint:rust && npm run lint:js && npm run lint:licenses",
     "lint:rust": "cargo fmt --check && cargo clippy --workspace --all-targets --locked -- -D warnings",
