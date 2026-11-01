@@ -102,6 +102,21 @@ const renderer = new THREE.WebGLRenderer({ canvas: gl.canvas, context: gl });
 renderer.setSize(256, 256, false); // false: a HeadlessCanvas has no style
 ```
 
+`npm run threejs` renders three.js's own WebGL examples (release r186) through
+oxgl and compares each frame with the reference screenshot the release keeps
+for it (see `CONTRIBUTING.md`). On Linux arm64 with the software backend, of
+the 354 examples it runs (377 less 23 that three.js's own test also skips):
+
+- 225 match their reference within three.js's threshold (0.1% of pixels);
+- 64 differ by 1–5% of pixels, mostly at line and polygon edges where
+  SwiftShader rasterizes differently from the GPU that made the reference;
+- 65 do not match. 55 of these hit limits of the test runner rather than oxgl:
+  remote assets it refuses, no CSS layout, HTML or CSS content around the
+  canvas, or no `AudioContext`. 5 differ for known reasons (more compressed
+  texture formats in SwiftShader, anisotropic filtering, a wall-clock timer,
+  random noise), and 5 are unexplained and listed in
+  `threejs/expectations.txt` to investigate.
+
 ### Backends
 
 | `backend` | Renders with |
@@ -212,6 +227,7 @@ npm run build      # build the native addon (release) and the TypeScript package
 npm run lint       # rustfmt, clippy (pedantic, warnings as errors), ESLint, tsc, license check
 npm test           # node:test suites in test/ (run after build)
 npm run conformance   # Khronos WebGL conformance suites, judged against conformance/expectations.txt
+npm run threejs    # three.js's WebGL examples, judged against threejs/expectations.txt
 npm run notices    # regenerate THIRD_PARTY_NOTICES after changing Rust dependencies
 cargo test --workspace --exclude oxgl-node   # Rust tests (oxgl-node is tested from Node)
 ```

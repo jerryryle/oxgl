@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>no-loop</title></head>
+<body>
+<script type="module">
+import { solid } from './lib/solid.js';
+// Renders once on load and never asks for a frame.
+solid({ animate: false });
+</script>
+</body>
+</html>

@@ -1,0 +1,17 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>node-error</title></head>
+<body>
+<script type="module">
+import { solid } from './lib/solid.js';
+// A library call under page code, in async code nobody awaits, throwing
+// from more frames down than Node keeps by default.
+const load = async () => {
+  await null;
+  nodeError(20);
+};
+void load();
+solid();
+</script>
+</body>
+</html>

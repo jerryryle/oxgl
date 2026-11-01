@@ -6,3 +6,5 @@ dist/
 __pycache__/
 .cache/
 conformance-results.json
+threejs-results.json
+threejs-output/

@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>video-error</title></head>
+<body>
+<script type="module">
+import { solid } from './lib/solid.js';
+// As upstream's injection does for a video that failed to decode.
+window._videosReady = () => {
+  throw new Error('video failed to decode');
+};
+solid();
+</script>
+</body>
+</html>

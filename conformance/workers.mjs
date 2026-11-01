@@ -17,6 +17,18 @@ const PRELUDE = `import(${JSON.stringify(import.meta.url)}).then((m) => m.runWor
 /** Marks an ImageBitmap's pixels in a message. */
 const BITMAP = '__oxglImageBitmap';
 
+/** Marks a thread's report of a `fetch` it refused, which is not a message. */
+const REFUSED = '__oxglRefusedFetch';
+
+/**
+ * Whether a URL is one a page restricted to `origin` may not fetch: an
+ * `http:` or `https:` URL on another origin. `data:` and `blob:` URLs load.
+ */
+export function crossOrigin(href, origin) {
+  const url = new URL(href);
+  return (url.protocol === 'http:' || url.protocol === 'https:') && url.origin !== origin;
+}
+
 /**
  * A message's value with each ImageBitmap replaced by its pixels, and its
  * transfer list without the bitmaps, which threads cannot transfer.
@@ -62,7 +74,9 @@ async function workerSource(href) {
  * A `Worker` class for a realm. `realm` gives its EventTarget, a
  * `messageEvent(data)` and `errorEvent(message)` maker, `base()` for
  * resolving script URLs, `receive(data)`, which rebuilds a message in the
- * realm, and `root`, the directory the suite is served from.
+ * realm, and `root`, the directory the suite is served from. With
+ * `origin`, the workers' `fetch` refuses other origins (`crossOrigin`) and
+ * reports each refused URL to `onRefused`.
  */
 export function workerClass(realm) {
   return class Worker extends realm.EventTarget {
@@ -78,9 +92,12 @@ export function workerClass(realm) {
       workerSource(href)
         .then((source) => {
           if (this.#terminated) return;
-          this.#thread = new ThreadWorker(PRELUDE, { eval: true, workerData: { source, url: href, root: realm.root } });
+          this.#thread = new ThreadWorker(PRELUDE, { eval: true, workerData: { source, url: href, root: realm.root, origin: realm.origin } });
           this.#thread.unref();
-          this.#thread.on('message', (data) => this.#fire('message', realm.messageEvent(realm.receive(data))));
+          this.#thread.on('message', (data) => {
+            if (typeof data === 'object' && data !== null && Object.hasOwn(data, REFUSED)) realm.onRefused?.(data[REFUSED]);
+            else this.#fire('message', realm.messageEvent(realm.receive(data)));
+          });
           this.#thread.on('error', (error) => {
             // A debugging aid, as for the page's own failures.
             const trace = process.env.OXGL_CONFORMANCE_TRACE;
@@ -158,7 +175,28 @@ export async function runWorker() {
     base: () => workerData.url,
     receive: (data) => decodeMessage(data, ImageBitmap),
     root: workerData.root,
+    origin: workerData.origin,
+    // A nested worker's refusals are reported on through this thread.
+    onRefused: (url) => parentPort.postMessage({ [REFUSED]: url }),
   });
+  if (workerData.origin !== undefined) {
+    const fetch = globalThis.fetch;
+    self.fetch = (input, init) => {
+      // Every failure rejects, as a browser's fetch does, including a URL that
+      // does not resolve against the worker's (a Blob URL's) base.
+      let href;
+      try {
+        href = new URL(input instanceof Request ? input.url : String(input), workerData.url).href;
+      } catch (error) {
+        return Promise.reject(error);
+      }
+      if (crossOrigin(href, workerData.origin)) {
+        parentPort.postMessage({ [REFUSED]: href });
+        return Promise.reject(new TypeError(`Failed to fetch: ${href} is on another origin`));
+      }
+      return fetch(input instanceof Request ? input : href, init);
+    };
+  }
   const listeners = [];
   self.postMessage = (data, transfer) => parentPort.postMessage(...encodeMessage(data, transfer));
   self.close = () => parentPort.close();

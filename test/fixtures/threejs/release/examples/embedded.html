@@ -1,0 +1,18 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>embedded</title></head>
+<body>
+<script type="module">
+import { solid } from './lib/solid.js';
+const response = await fetch('data:application/octet-stream;base64,AAEC');
+const buffer = await response.arrayBuffer();
+if (!(buffer instanceof ArrayBuffer) || buffer.byteLength !== 3) console.error('data: URL body is not the page\'s ArrayBuffer of 3 bytes');
+const url = URL.createObjectURL(new Blob(['postMessage("ok");'], { type: 'text/javascript' }));
+const worker = new Worker(url);
+worker.onmessage = (event) => {
+  if (event.data !== 'ok') console.error('blob: worker sent', event.data);
+  solid();
+};
+</script>
+</body>
+</html>

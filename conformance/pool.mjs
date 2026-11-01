@@ -30,15 +30,31 @@ export function pageURL(origin, suite, path) {
 
 /**
  * Runs `pages` ({ suite, path, expected }), timing each out when it goes
- * `timeoutMs` without a new result, and resolves to one record per
- * page, in order: `{ suite, path, expected, outcome, passed, failed, message, error,
- * errorBeforeFailure, contextErrors, durationMs, maxGapMs }`, or
- * `{ suite, path, expected, harnessError, durationMs }`. `maxGapMs` is the
- * longest time the page went without a result.
+ * `timeoutMs` without a new result, or runs `totalMs` in all when that is
+ * set, and resolves to one record per page, in order: `{ suite, path,
+ * expected, outcome, passed, failed, message, error, errorBeforeFailure,
+ * contextErrors, extra, durationMs, maxGapMs, limit }`, or `{ suite, path,
+ * expected, harnessError, durationMs }`. `maxGapMs` is the longest time the
+ * page went without a result; `limit` is `'idle'` or `'total'` for a
+ * `TIMEOUT`. `args(page, endEarly)` gives a page process its arguments
+ * (by default a Khronos page's URL and options) and `execArgv` its extra
+ * Node options.
  */
 export async function runPages(
   pages,
-  { origin, root, jobs = defaultJobs(), timeoutMs, teardownMs = TEARDOWN_MS, fastErrors = false, script = PAGE_SCRIPT, onResult },
+  {
+    origin,
+    root,
+    jobs = defaultJobs(),
+    timeoutMs,
+    totalMs,
+    teardownMs = TEARDOWN_MS,
+    fastErrors = false,
+    script = PAGE_SCRIPT,
+    args = (page, endEarly) => [pageURL(origin, page.suite, page.path), JSON.stringify({ endEarly, root })],
+    execArgv = [],
+    onResult,
+  },
 ) {
   const results = new Array(pages.length);
   let next = 0;
@@ -48,7 +64,7 @@ export async function runPages(
       next += 1;
       const page = pages[index];
       const endEarly = fastErrors || page.expected === 'FAIL';
-      const result = await runOne(script, pageURL(origin, page.suite, page.path), { endEarly, root, timeoutMs, teardownMs });
+      const result = await runOne(script, args(page, endEarly), { execArgv, timeoutMs, totalMs, teardownMs });
       results[index] = { suite: page.suite, path: page.path, expected: page.expected, ...result };
       onResult?.(results[index]);
     }
@@ -61,13 +77,13 @@ const STDERR_TAIL = 4096;
 /** Time a page that has reported its outcome gets to tear down and exit. */
 export const TEARDOWN_MS = 30_000;
 
-function runOne(script, url, { endEarly, root, timeoutMs, teardownMs }) {
+function runOne(script, args, { execArgv, timeoutMs, totalMs, teardownMs }) {
   const started = performance.now();
   return new Promise((done) => {
-    const child = fork(script, [url, JSON.stringify({ endEarly, root })], { stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
+    const child = fork(script, args, { execArgv: [...process.execArgv, ...execArgv], stdio: ['ignore', 'ignore', 'pipe', 'ipc'] });
     let message;
     let stderr = '';
-    let timedOut = false;
+    let timedOut;
     child.stderr.setEncoding('utf8');
     child.stderr.on('data', (chunk) => {
       stderr = (stderr + chunk).slice(-STDERR_TAIL);
@@ -75,12 +91,13 @@ function runOne(script, url, { endEarly, root, timeoutMs, teardownMs }) {
     let pageError;
     let counts;
     let teardownHung = false;
-    const kill = () => {
+    const kill = (limit) => {
       if (message?.type === 'outcome') teardownHung = true;
-      else timedOut = true;
+      else timedOut = limit;
       child.kill('SIGKILL');
     };
-    let timer = setTimeout(kill, timeoutMs);
+    let timer = setTimeout(kill, timeoutMs, 'idle');
+    const total = totalMs === undefined ? undefined : setTimeout(kill, totalMs, 'total');
     let lastResultAt = started;
     let maxGapMs = 0;
     const result = () => {
@@ -96,7 +113,7 @@ function runOne(script, url, { endEarly, root, timeoutMs, teardownMs }) {
         // The watchdog: each result restarts the time limit.
         if (message?.type !== 'outcome') {
           clearTimeout(timer);
-          timer = setTimeout(kill, timeoutMs);
+          timer = setTimeout(kill, timeoutMs, 'idle');
         }
       } else {
         message ??= m;
@@ -105,6 +122,7 @@ function runOne(script, url, { endEarly, root, timeoutMs, teardownMs }) {
         if (m?.type === 'outcome') {
           result();
           clearTimeout(timer);
+          clearTimeout(total);
           timer = setTimeout(kill, teardownMs);
         }
       }
@@ -112,10 +130,12 @@ function runOne(script, url, { endEarly, root, timeoutMs, teardownMs }) {
     child.on('error', (error) => {
       // Only a failed spawn lands here; 'exit' may not follow.
       clearTimeout(timer);
+      clearTimeout(total);
       done({ harnessError: `could not start the page process: ${error.message}`, durationMs: 0 });
     });
     child.on('exit', (code, signal) => {
       clearTimeout(timer);
+      clearTimeout(total);
       const durationMs = Math.round(performance.now() - started);
       const reported = message?.type === 'outcome' ? message : undefined;
       const details = {
@@ -124,11 +144,15 @@ function runOne(script, url, { endEarly, root, timeoutMs, teardownMs }) {
         error: reported?.error ?? pageError,
         errorBeforeFailure: reported?.errorBeforeFailure ?? false,
         contextErrors: reported?.contextErrors ?? [],
+        // Fields a runner's own page script reports, passed on as they are.
+        extra: reported?.extra,
         durationMs,
         maxGapMs,
       };
-      if (timedOut) {
-        done({ outcome: 'TIMEOUT', message: `no new result for ${timeoutMs / 1000} s`, ...details });
+      if (timedOut === 'idle') {
+        done({ outcome: 'TIMEOUT', message: `no new result for ${timeoutMs / 1000} s`, limit: 'idle', ...details });
+      } else if (timedOut === 'total') {
+        done({ outcome: 'TIMEOUT', message: `ran ${totalMs / 1000} s in total`, limit: 'total', ...details });
       } else if (teardownHung) {
         const after = `reported ${reported?.outcome}, then did not exit within ${teardownMs / 1000} s`;
         done({ outcome: 'CRASH', message: [after, stderr.trim()].filter(Boolean).join('\n'), ...details });

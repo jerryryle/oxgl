@@ -1,0 +1,28 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>load events</title></head>
+<body>
+<script type="module">
+import { solid } from './lib/solid.js';
+
+let contentLoaded = 0;
+let loaded = 0;
+document.addEventListener('DOMContentLoaded', () => {
+  contentLoaded += 1;
+});
+window.addEventListener('load', () => {
+  loaded += 1;
+  // jsdom fires load again after later loads; the page must not see it.
+  window.fireJsdomLoad();
+  const image = new Image();
+  image.onload = () =>
+    setTimeout(() => {
+      if (contentLoaded !== 1 || loaded !== 1) console.error(`DOMContentLoaded ran ${contentLoaded} times, load ${loaded} times`);
+      solid();
+    }, 300);
+  image.src = 'lib/pixel.png';
+  document.body.appendChild(image);
+});
+</script>
+</body>
+</html>
