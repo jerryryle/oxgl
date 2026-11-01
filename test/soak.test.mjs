@@ -123,13 +123,14 @@ test('dropped contexts are reclaimed', async (t) => {
   // after the first frees, so only from the second pass on do the buffers
   // come from a heap that keeps its high-water mark.
   //
-  // RSS still moves in allocator steps (up to ~125 MiB on Linux arm64) and
-  // trims, in whichever pass they land, so two of three passes can swing up.
-  // A leak grows every pass, so the gate is the smallest growth of three.
+  // RSS still moves in allocator steps (up to ~125 MiB on Linux arm64, and
+  // ~150 MiB on Linux x64) and trims, in whichever pass they land, so several
+  // passes in a row can swing up: on Linux x64 three did (69, 72, 56 MiB). A
+  // leak grows every pass, so the gate is the smallest growth of five.
   const baselineContexts = liveContexts();
   await dropContexts(ITERATIONS);
   await dropContexts(ITERATIONS);
-  const growths = await rssGrowths(3, async () => {
+  const growths = await rssGrowths(5, async () => {
     await dropContexts(ITERATIONS);
     assert.equal(liveContexts(), baselineContexts, 'every collected context was released');
   });
