@@ -10,8 +10,8 @@ Khronos conformance suite; three.js renders through it unmodified.
 Supported and tested: Linux x64 and Linux arm64 (glibc), macOS arm64, Windows
 x64 and Windows arm64. Each has a pinned ANGLE bundle, and CI runs the Rust and
 Node tests and both Khronos conformance suites on each with the software
-backend. Conformance results differ from Linux arm64 only in these pages; the
-x64 pages are listed in `conformance/expectations.txt` for those platforms:
+backend. Conformance results differ from Linux arm64 only in these pages, which
+`conformance/expectations.txt` lists for the platforms they apply to:
 
 - On x64 (Linux and Windows), 18 deqp pages that render to 32-bit integer
   color buffers (`rgba32i`, `r32ui` and similar) fail their image comparisons,
@@ -21,7 +21,8 @@ x64 pages are listed in `conformance/expectations.txt` for those platforms:
   The native dEQP tests fixed this in 2018; the WebGL port has not.
 - `texture-switch-performance` (both suites) compares two frame rates measured
   for 2 s each against a 0.8 ratio, and can land just under it on a busy
-  runner, as on Linux x64 at 0.79.
+  runner. The webgl2 page landed at 0.79 and 0.80 on Linux x64, so it is
+  skipped there.
 
 Docker on a Mac exposes no GPU to Linux containers, so the Linux arm64 runs use
 the software backend. The GPU backend path has been checked on macOS arm64

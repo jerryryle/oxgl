@@ -148,7 +148,8 @@ platform is in two of them. A run fails on any
 difference: a page that regressed, a page that passes but is still listed, a
 different failure than the one listed, or an entry for a page the suite no
 longer has. A change that makes pages pass removes their entries. `SKIP`
-entries are for pages confirmed to hang; they are not run.
+entries are for pages confirmed to hang, or too timing-dependent to judge on a
+platform; they are not run.
 
 An uncaught error ends a page at once only when its entry is `FAIL`. Every other
 page keeps running after the error, as in the official harness, until it
