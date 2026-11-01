@@ -1,0 +1,45 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>boxes</title>
+<style>
+body { margin: 0; }
+#container { position: absolute; top: 70px; bottom: 0px; width: 100%; }
+#half { width: 50%; }
+#corner { position: absolute; right: 10px; bottom: 20px; width: 100px; height: 40px; }
+</style>
+</head>
+<body>
+<div id="container"><div id="half"></div><div id="corner"></div></div>
+<div id="plain"></div>
+<canvas id="sized" width="300" height="150"></canvas>
+<script type="module">
+import { solid } from './lib/solid.js';
+
+const check = (actual, expected, what) => {
+  if (actual !== expected) console.error(`${what}: ${actual}, expected ${expected}`);
+};
+const container = document.getElementById('container');
+check(container.offsetWidth, 800, 'container offsetWidth');
+check(container.offsetHeight, 430, 'container offsetHeight');
+check(container.getBoundingClientRect().top, 70, 'container top');
+check(container.clientWidth, 800, 'container clientWidth');
+check(document.getElementById('half').offsetWidth, 400, 'half offsetWidth');
+const corner = document.getElementById('corner').getBoundingClientRect();
+check(`${corner.x},${corner.y},${corner.width},${corner.height}`, '690,440,100,40', 'corner rect');
+check(document.getElementById('corner').offsetTop, 370, 'corner offsetTop');
+const plain = document.getElementById('plain');
+check(`${plain.offsetWidth}x${plain.offsetHeight}`, '800x0', 'plain size');
+const sized = document.getElementById('sized');
+check(`${sized.clientWidth}x${sized.clientHeight}`, '300x150', 'canvas client size');
+check(sized.offsetWidth, 300, 'canvas offsetWidth');
+const detached = document.createElement('div');
+detached.style.width = '120px';
+const rect = detached.getBoundingClientRect();
+check(`${detached.offsetWidth}x${detached.offsetHeight} ${rect.width}x${rect.height}`, '0x0 0x0', 'detached element box');
+sized.remove();
+solid();
+</script>
+</body>
+</html>

@@ -207,8 +207,11 @@ use, is separate from the pin.
 
 Each example runs in jsdom in its own Node process, with the same window the
 conformance runner gives its pages (oxgl contexts, images, workers, video), an
-800×500 viewport at device pixel ratio 1, and its `<script type="module">`
-run as ES modules through its import map. Requests are served from the
+800×500 viewport at device pixel ratio 1, element sizes and offsets from CSS
+lengths (`width`, `height`, and `top`, `right`, `bottom`, `left` for
+absolutely positioned elements, but no flow layout), a `matchMedia` that
+matches nothing, and its `<script type="module">` run as ES modules through
+its import map. Requests are served from the
 checkout; `http:` and `https:` requests to any other origin are refused and
 named in the report, so examples that load remote assets fail. Every example
 follows the sequence of three.js's `test/e2e/puppeteer.js`, using the
@@ -218,16 +221,20 @@ clock, held animation frames) and `clean-page.js`:
 1. wait until no request has been in flight for 1 s, and for videos;
 2. wait 1 s per MB served, at most 30 s, for parsing;
 3. release one animation frame, and wait up to 5 s for it;
-4. read the page's one 800×500 WebGL canvas, composite it over the body's
-   background and halve it to 400×250;
+4. build the viewport: start from the body's background, read each WebGL
+   canvas's drawing buffer as it holds it, and composite it as a browser
+   does (premultiplied or not, by its context) at its place: its parent's
+   origin, with canvases that share an origin side by side in document
+   order. Then halve the frame to 400×250;
 5. compare it with `examples/screenshots/<example>.jpg`: a pixel differs when
    its RGB distance exceeds 0.1 of the maximum, and the frame matches when at
    most 0.1% of its pixels differ (the example's tolerance).
 
 An escaped error, a `console.error` (three.js reports shader errors that way)
 or a failed request fails the example even when its frame matches, as in
-upstream's test. Examples with more than one WebGL canvas, a canvas of
-another size, or content rendered by CSS fail with a message saying so.
+upstream's test. A page without a WebGL canvas, or with one past the
+viewport, fails with a message saying so. HTML and CSS content around or
+behind the canvases is not drawn.
 
 `threejs/expectations.txt` lists every example that is not expected to pass,
 one per line as `<example> <OUTCOME> # <reason>`, where OUTCOME is `FAIL`,
@@ -257,8 +264,8 @@ its percentage. An existing `DIFF` is kept while its example stays within it,
 removed once the example matches within 0.1%, and never raised: an example
 beyond its tolerance is written as `FAIL`. Review the diff. Triage each new
 `FAIL`, `TIMEOUT` and `CRASH` to name its cause: an oxgl defect, ANGLE or
-SwiftShader, or a runner gap (jsdom has no layout, module workers are not
-supported, remote assets are refused).
+SwiftShader, or a runner gap (no flow layout or HTML rendering, module
+workers are not supported, remote assets are refused).
 
 Every run writes `threejs-results.json`, with each example's outcome, the
 percentage of differing pixels, duration, the time limit it reached for a

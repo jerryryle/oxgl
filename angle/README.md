@@ -100,6 +100,22 @@ PASS`, which fails the run: remove its expectation (`--update`) and its row,
 and update the commit above. To check one page,
 `npm run conformance -- --filter <page>`.
 
+#### three.js example differences
+
+three.js examples (`npm run threejs`) that render differently because of the
+SwiftShader in the bundle. Each is an expected failure in
+`threejs/expectations.txt`, tagged `SwiftShader:`. Last checked against
+`angle_commit` `127e783de334`.
+
+| Examples | Cause | Repro |
+| --- | --- | --- |
+| `webxr_xr_dragging`, `webxr_xr_dragging_custom_depth` | SwiftShader gets the depth wrong on a large triangle that the near plane clips: the examples' floor, two triangles whose near edge passes under the camera, hides the objects standing on it. On macOS arm64 they raise no GL errors under SwiftShader, render correctly once the floor is subdivided, and match the reference exactly on ANGLE Metal; the repro shows the same depth error on Linux arm64. | Through three.js on oxgl: a `PerspectiveCamera(50, 1.6, 0.1, 10)` at (0, 1.6, 3), an opaque `PlaneGeometry(6, 6)` rotated to the ground, and 0.4-unit boxes on it at z = −0.5 to −1.5. At 200×125 with `OXGL_BACKEND=software`, SwiftShader shows 39 red pixels of the boxes on Linux arm64, and 783 when the plane is `PlaneGeometry(6, 6, 32, 32)`; macOS arm64 gives the same counts, and ANGLE Metal shows 782 either way. |
+
+After changing `angle_commit`, run `npm run threejs -- --filter webxr_xr_dragging`.
+An example that now passes is reported as an unexpected pass: remove its
+expectation, this row, and the near-clipped triangle entry in oxgl's README
+"Known issues".
+
 #### Runtime issues
 
 ANGLE behavior that oxgl's README documents under "Known issues". Last checked

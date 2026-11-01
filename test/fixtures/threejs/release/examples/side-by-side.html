@@ -1,0 +1,13 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>side-by-side</title><style>body { margin: 0; background-color: #000; } #row { display: flex; } #row > div { display: inline-block; position: relative; }</style></head>
+<body><div id="row"><div id="a"></div><div id="b"></div><div id="c"></div></div>
+<script type="module">
+import { clear } from './lib/clear.js';
+// Three 264-pixel canvases in sibling containers, as webgl_reversed_depth_buffer.
+clear(document.getElementById('a'), 264, 500, [1, 0, 0, 1]);
+clear(document.getElementById('b'), 264, 500, [0, 1, 0, 1]);
+clear(document.getElementById('c'), 264, 500, [0, 0, 1, 1]);
+</script>
+</body>
+</html>

@@ -21,7 +21,7 @@ import { startServer } from '../conformance/server.mjs';
 import { describe, installShim, keepImageBytes, release } from '../conformance/window.mjs';
 import { crossOrigin } from '../conformance/workers.mjs';
 
-import { compare, composite, DEFAULT_TOLERANCE, decodeJpeg, halve, matches } from './image.mjs';
+import { backgroundFrame, compare, compositeOnto, DEFAULT_TOLERANCE, decodeJpeg, halve, matches } from './image.mjs';
 
 const { JSDOM, VirtualConsole, requestInterceptor } = jsdom;
 
@@ -126,6 +126,7 @@ export async function runExample(name, { root, tolerance = DEFAULT_TOLERANCE, ou
       if (hooks.holdFirst !== true) ({ parsed, loaded } = holdLoadEvents(window, held));
       setViewport(window);
       installFetch(window, server.origin, refuse);
+      installMatchMedia(window);
       // After the shim, so its requestAnimationFrame gate replaces the
       // shim's compositing wrapper and nothing presents before capture.
       window.eval(injection);
@@ -239,6 +240,24 @@ function installFetch(window, origin, refuse) {
       throw new window.TypeError(`Failed to fetch: ${describe(failure)}`);
     }
     return pageResponse(response);
+  };
+}
+
+/**
+ * `matchMedia`, which jsdom does not have: a `MediaQueryList` that matches no
+ * query and never fires `change`, enough for examples that check a media
+ * feature before choosing a path.
+ */
+function installMatchMedia(window) {
+  window.matchMedia = (query) => {
+    const list = new window.EventTarget();
+    return Object.assign(list, {
+      media: String(query),
+      matches: false,
+      onchange: null,
+      addListener() {},
+      removeListener() {},
+    });
   };
 }
 
@@ -390,21 +409,58 @@ function lookup(imports, specifier) {
 }
 
 /**
- * The frame the document's one WebGL canvas holds, composited over the
- * page's background and halved, or `{ error }` naming what was found.
+ * The viewport as a browser shows it after the released frame: the page's
+ * background with each WebGL canvas in the document composited at its place,
+ * halved; or `{ error }` naming the canvases found. A canvas sits at its
+ * parent's box origin; canvases sharing an origin sit side by side in
+ * document order, as in a flex or inline row.
  */
 function capture(window, canvasPixels) {
-  const canvases = [...window.document.querySelectorAll('canvas')]
-    .map((canvas) => canvasPixels(canvas))
-    .filter((pixels) => pixels !== undefined);
+  const canvases = [...window.document.querySelectorAll('canvas')].filter((canvas) => canvasPixels(canvas) !== undefined);
   if (canvases.length === 0) return { error: 'the document has no WebGL canvas' };
-  if (canvases.length > 1) return { error: `the document has ${String(canvases.length)} WebGL canvases; the frame cannot be captured from more than one canvas` };
-  const [pixels] = canvases;
-  if (pixels.width !== WIDTH || pixels.height !== HEIGHT) {
-    return { error: `the WebGL canvas is ${String(pixels.width)}×${String(pixels.height)}, not ${String(WIDTH)}×${String(HEIGHT)}` };
+  const frame = backgroundFrame(WIDTH, HEIGHT, window.getComputedStyle(window.document.body).backgroundColor);
+  const placed = [];
+  let row;
+  for (const canvas of canvases) {
+    const origin = canvas.parentElement.getBoundingClientRect();
+    const sameRow = row !== undefined && row.x === origin.x && row.y === origin.y;
+    const x = sameRow ? row.end : origin.x;
+    const gl = canvas.getContext('webgl2') ?? canvas.getContext('webgl');
+    const pixels = drawingBuffer(window, gl);
+    placed.push({ x, y: origin.y, width: pixels.width, height: pixels.height, gl, pixels });
+    row = { x: origin.x, y: origin.y, end: x + pixels.width };
   }
-  const background = window.getComputedStyle(window.document.body).backgroundColor;
-  return { frame: halve(composite(pixels, background)) };
+  const outside = placed.some(({ x, y, width, height }) => x < 0 || y < 0 || x + width > WIDTH || y + height > HEIGHT);
+  if (outside) {
+    const found = placed.map(({ x, y, width, height }) => `${String(width)}×${String(height)} at (${String(x)}, ${String(y)})`).join(', ');
+    return { error: `the WebGL canvases (${found}) do not fit the ${String(WIDTH)}×${String(HEIGHT)} viewport` };
+  }
+  for (const { x, y, gl, pixels } of placed) compositeOnto(frame, pixels, x, y, gl.getContextAttributes()?.premultipliedAlpha !== false);
+  return { frame: halve(frame) };
+}
+
+/**
+ * A context's drawing buffer as it holds it, top row first. Read after the
+ * released frame and before any present, the runner's last use of the page,
+ * so the state set here needs no restoring; oxgl resolves an antialiased
+ * buffer before the read.
+ */
+function drawingBuffer(window, gl) {
+  const width = gl.drawingBufferWidth;
+  const height = gl.drawingBufferHeight;
+  gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  gl.pixelStorei(gl.PACK_ALIGNMENT, 1);
+  if (gl instanceof window.WebGL2RenderingContext) {
+    gl.bindBuffer(gl.PIXEL_PACK_BUFFER, null);
+    gl.readBuffer(gl.BACK);
+    for (const name of ['PACK_ROW_LENGTH', 'PACK_SKIP_ROWS', 'PACK_SKIP_PIXELS']) gl.pixelStorei(gl[name], 0);
+  }
+  const raw = new Uint8Array(width * height * 4);
+  gl.readPixels(0, 0, width, height, gl.RGBA, gl.UNSIGNED_BYTE, raw);
+  const data = new Uint8ClampedArray(raw.length);
+  const stride = width * 4;
+  for (let y = 0; y < height; y++) data.set(raw.subarray((height - 1 - y) * stride, (height - y) * stride), y * stride);
+  return { data, width, height };
 }
 
 /** The outcome message's fields, writing a failing example's images to `output`. */

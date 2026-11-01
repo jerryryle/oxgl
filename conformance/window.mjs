@@ -224,6 +224,7 @@ export function installShim(window, state, { sameOriginOnly = false, onRefused }
       },
     });
   }
+  installBoxes(window);
   // A WebGL canvas drawn into a 2D canvas, or exported with toDataURL,
   // shows its drawing buffer, which jsdom's own canvas does not have.
   const { canvasPixels } = oxgl;
@@ -371,6 +372,81 @@ export function installShim(window, state, { sameOriginOnly = false, onRefused }
   installWorkers(window, state.root, sameOriginOnly ? { origin: window.location.origin, onRefused } : {});
   loadOnce(window);
   return oxgl;
+}
+
+/**
+ * Element boxes from CSS, without flow layout (openspec threejs-examples,
+ * "Element boxes from CSS"): sizes and offsets in `px` or `%` of the
+ * containing block, which is the nearest positioned ancestor or else the
+ * viewport. Absolutely positioned elements take `left`, `top`, `right` and
+ * `bottom`; others sit at their containing block's origin. An unset width is
+ * the space between `left` and `right`, else the containing block's; an unset
+ * height the space between `top` and `bottom`, else 0. A canvas keeps its
+ * own size rule above. An element outside the document has an empty box. The boxes back `offsetWidth`, `offsetHeight`,
+ * `clientWidth`, `clientHeight`, `offsetLeft`, `offsetTop` and
+ * `getBoundingClientRect()`.
+ */
+function installBoxes(window) {
+  const { document } = window;
+  const viewport = () => ({ x: 0, y: 0, width: window.innerWidth, height: window.innerHeight });
+  const isViewport = (element) => element === null || element === document.documentElement || element === document.body;
+  const length = (value, of) => {
+    const match = /^(-?\d+(?:\.\d+)?)(px|%)$/.exec(String(value));
+    if (match === null) return undefined;
+    return match[2] === 'px' ? Number(match[1]) : (Number(match[1]) / 100) * of;
+  };
+  const positioned = (element) => window.getComputedStyle(element).position !== 'static';
+  const containingBlock = (element) => {
+    if (window.getComputedStyle(element).position === 'fixed') return null;
+    let ancestor = element.parentElement;
+    while (!isViewport(ancestor) && !positioned(ancestor)) ancestor = ancestor.parentElement;
+    return isViewport(ancestor) ? null : ancestor;
+  };
+  const box = (element) => {
+    if (isViewport(element)) return viewport();
+    // An element outside the document is not rendered, so it has no box.
+    if (!element.isConnected) return { x: 0, y: 0, width: 0, height: 0 };
+    const block = containingBlock(element);
+    const cb = block === null ? viewport() : box(block);
+    const style = window.getComputedStyle(element);
+    const absolute = style.position === 'absolute' || style.position === 'fixed';
+    const [left, right, top, bottom] = absolute
+      ? [length(style.left, cb.width), length(style.right, cb.width), length(style.top, cb.height), length(style.bottom, cb.height)]
+      : [];
+    let width = length(style.width, cb.width) ?? (left !== undefined && right !== undefined ? cb.width - left - right : cb.width);
+    let height = length(style.height, cb.height) ?? (top !== undefined && bottom !== undefined ? cb.height - top - bottom : 0);
+    if (element instanceof window.HTMLCanvasElement) [width, height] = [element.clientWidth, element.clientHeight];
+    const x = cb.x + (left ?? (right === undefined ? 0 : cb.width - right - width));
+    const y = cb.y + (top ?? (bottom === undefined ? 0 : cb.height - bottom - height));
+    return { x, y, width, height, cb };
+  };
+  const proto = window.HTMLElement.prototype;
+  const define = (name, get) => Object.defineProperty(proto, name, { configurable: true, enumerable: true, get });
+  define('offsetWidth', function () {
+    return Math.floor(box(this).width);
+  });
+  define('offsetHeight', function () {
+    return Math.floor(box(this).height);
+  });
+  define('offsetLeft', function () {
+    const { x, cb } = box(this);
+    return Math.floor(x - (cb?.x ?? 0));
+  });
+  define('offsetTop', function () {
+    const { y, cb } = box(this);
+    return Math.floor(y - (cb?.y ?? 0));
+  });
+  // A canvas keeps its own client size, defined on its prototype.
+  define('clientWidth', function () {
+    return Math.floor(box(this).width);
+  });
+  define('clientHeight', function () {
+    return Math.floor(box(this).height);
+  });
+  proto.getBoundingClientRect = function () {
+    const { x, y, width, height } = box(this);
+    return new window.DOMRect(x, y, width, height);
+  };
 }
 
 /**

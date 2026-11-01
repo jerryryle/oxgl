@@ -12,7 +12,7 @@ import { applicable, concludeRun, formatExpectations, judge, parseExpectations, 
 import { defaultJobs, runPages } from '../conformance/pool.mjs';
 import { startServer } from '../conformance/server.mjs';
 import { crossOrigin, workerClass } from '../conformance/workers.mjs';
-import { compare, composite, halve, matches, parseColor } from '../threejs/image.mjs';
+import { backgroundFrame, compare, compositeOnto, halve, matches, parseColor } from '../threejs/image.mjs';
 import { listExamples } from '../threejs/release.mjs';
 import { main as threejsMain, parseThreejsExpectations, runThreejs } from '../threejs/run.mjs';
 
@@ -34,12 +34,22 @@ function filled(width, height, [r, g, b, a = 255]) {
   return { data, width, height };
 }
 
-test('composite: a transparent frame shows the body background, white when it is transparent', () => {
-  const clear = filled(2, 2, [0, 0, 0, 0]);
-  assert.deepEqual([...composite(clear, 'rgb(0, 0, 0)').data.slice(0, 4)], [0, 0, 0, 255]);
-  assert.deepEqual([...composite(clear, 'rgb(255, 255, 255)').data.slice(0, 4)], [255, 255, 255, 255]);
-  assert.deepEqual([...composite(clear, 'rgba(0, 0, 0, 0)').data.slice(0, 4)], [255, 255, 255, 255]);
-  assert.deepEqual([...composite(filled(1, 1, [255, 0, 0, 128]), 'rgb(0, 0, 255)').data], [128, 0, 127, 255]);
+test('compositing: premultiplied and unpremultiplied buffers over the page background, white when it is transparent', () => {
+  const over = (pixel, background, premultiplied) => {
+    const frame = backgroundFrame(1, 1, background);
+    compositeOnto(frame, filled(1, 1, pixel), 0, 0, premultiplied);
+    return [...frame.data];
+  };
+  assert.deepEqual(over([0, 0, 0, 0], 'rgb(0, 0, 0)', true), [0, 0, 0, 255]);
+  assert.deepEqual(over([0, 0, 0, 0], 'rgba(0, 0, 0, 0)', true), [255, 255, 255, 255]);
+  // Colour above alpha in a premultiplied buffer: added, clamped.
+  assert.deepEqual(over([255, 109, 36, 21], 'rgb(0, 0, 0)', true), [255, 109, 36, 255]);
+  assert.deepEqual(over([200, 0, 0, 128], 'rgb(0, 0, 255)', true), [200, 0, 127, 255]);
+  assert.deepEqual(over([255, 0, 0, 128], 'rgb(255, 255, 255)', false), [255, 127, 127, 255]);
+  // Placed at an offset in a larger frame.
+  const frame = backgroundFrame(3, 1, 'rgb(0, 0, 0)');
+  compositeOnto(frame, filled(1, 1, [9, 9, 9, 255]), 2, 0, true);
+  assert.deepEqual([...frame.data.slice(8, 12)], [9, 9, 9, 255]);
   assert.deepEqual(parseColor('rgba(1, 2, 3, 0.5)'), { r: 1, g: 2, b: 3, a: 0.5 });
 });
 
@@ -150,18 +160,27 @@ before(() => {
   const screenshots = join(root, 'examples', 'screenshots');
   mkdirSync(screenshots);
   const { createCanvas } = createRequire(import.meta.url)('canvas');
-  const reference = (name, [r, g, b]) => {
+  // A reference of filled rectangles, in 400×250 screenshot pixels, stored
+  // losslessly (the runner decodes any format the canvas package reads) so
+  // JPEG chroma subsampling does not blur its edges.
+  const reference = (name, rects) => {
     const canvas = createCanvas(400, 250);
     const context = canvas.getContext('2d');
-    context.fillStyle = `rgb(${r}, ${g}, ${b})`;
-    context.fillRect(0, 0, 400, 250);
-    writeFileSync(join(screenshots, `${name}.jpg`), canvas.toBuffer('image/jpeg', { quality: 0.95 }));
+    for (const [[r, g, b], x = 0, y = 0, w = 400, h = 250] of rects) {
+      context.fillStyle = `rgb(${r}, ${g}, ${b})`;
+      context.fillRect(x, y, w, h);
+    }
+    writeFileSync(join(screenshots, `${name}.jpg`), canvas.toBuffer('image/png'));
   };
-  for (const name of ['solid', 'no-loop', 'modules', 'load-events', 'three', 'embedded', 'console-error', 'remote', 'worker-remote', 'polling', 'throws', 'two-canvases', 'small-canvas']) {
-    reference(name, BLUE);
+  for (const name of ['solid', 'boxes', 'media', 'no-loop', 'modules', 'load-events', 'three', 'embedded', 'console-error', 'remote', 'worker-remote', 'polling', 'throws']) {
+    reference(name, [[BLUE]]);
   }
-  reference('transparent-black', [0, 0, 0]);
-  reference('transparent-white', [255, 255, 255]);
+  reference('transparent-black', [[[0, 0, 0]]]);
+  reference('transparent-white', [[[255, 255, 255]]]);
+  reference('premultiplied', [[[255, 109, 36]]]);
+  reference('unpremultiplied', [[[255, 127, 127]]]);
+  reference('side-by-side', [[[0, 0, 0]], [[255, 0, 0], 0, 0, 132], [[0, 255, 0], 132, 0, 132], [[0, 0, 255], 264, 0, 132]]);
+  reference('below-header', [[[255, 255, 255]], [[0, 0, 255], 0, 35, 400, 215]]);
 });
 
 after(() => rmSync(root, { recursive: true, force: true }));
@@ -261,6 +280,14 @@ test('a worker without the same-origin option still fetches from another origin'
   }
 });
 
+test('Element boxes from CSS: absolute offsets, percentages, unsized elements and canvases', async () => {
+  passes(await run('boxes'));
+});
+
+test('Wide-gamut check: matchMedia matches nothing and accepts listeners', async () => {
+  passes(await run('media'));
+});
+
 test('Seeded randomness: two runs capture the same frame', async () => {
   const output = join(root, 'output-seeded');
   // seeded has no reference, so each run writes its frame.
@@ -284,14 +311,19 @@ test('Large assets: the parse allowance is capped, so the runner\'s own waits do
   assert.ok(performance.now() - started < 5000);
 });
 
-test('The captured frame: two canvases, a wrongly sized canvas, and transparent frames over the body', async () => {
-  const two = await run('two-canvases');
-  assert.equal(two.outcome, 'FAIL');
-  assert.match(two.message, /cannot be captured from more than one canvas/);
-  const small = await run('small-canvas');
-  assert.match(small.message, /300×150, not 800×500/);
+test('Canvases composited like a browser: premultiplied colour above alpha, unpremultiplied, and transparent over the body', async () => {
+  passes(await run('premultiplied'));
+  passes(await run('unpremultiplied'));
   passes(await run('transparent-black'));
   passes(await run('transparent-white'));
+});
+
+test('Canvas placement: side by side in sibling containers, below a header, and past the viewport', async () => {
+  passes(await run('side-by-side'));
+  passes(await run('below-header'));
+  const past = await run('past-viewport');
+  assert.equal(past.outcome, 'FAIL');
+  assert.match(past.message, /800×500 at \(0, 0\), 800×500 at \(800, 0\)\) do not fit the 800×500 viewport/);
 });
 
 test('Missing reference and images of failing examples', async () => {

@@ -23,20 +23,41 @@ export function parseColor(css) {
 }
 
 /**
- * An unpremultiplied frame composited over the page's background color
- * (itself over white, as a browser's canvas area shows a transparent page).
+ * The page's background color as opaque RGB: the CSS color over white, as a
+ * browser's viewport shows a transparent page.
  */
-export function composite({ data, width, height }, background) {
-  const page = parseColor(background) ?? { r: 255, g: 255, b: 255, a: 0 };
+export function pageBackground(css) {
+  const page = parseColor(css) ?? { r: 255, g: 255, b: 255, a: 0 };
   const over = (channel) => channel * page.a + 255 * (1 - page.a);
-  const bg = [over(page.r), over(page.g), over(page.b)];
-  const out = new Uint8ClampedArray(width * height * 4);
-  for (let i = 0; i < out.length; i += 4) {
-    const a = data[i + 3] / 255;
-    for (let c = 0; c < 3; c++) out[i + c] = Math.round(data[i + c] * a + bg[c] * (1 - a));
-    out[i + 3] = 255;
+  return [over(page.r), over(page.g), over(page.b)];
+}
+
+/** An opaque `width × height` image of the page's background. */
+export function backgroundFrame(width, height, background) {
+  const data = new Uint8ClampedArray(width * height * 4);
+  const [r, g, b] = pageBackground(background);
+  for (let i = 0; i < data.length; i += 4) data.set([r, g, b, 255], i);
+  return { data, width, height };
+}
+
+/**
+ * Composites a canvas's drawing buffer onto `frame` at (`x`, `y`), as a
+ * browser composites it over the page: a premultiplied buffer contributes
+ * `rgb + background × (1 − a)`, an unpremultiplied one
+ * `rgb × a + background × (1 − a)`, each channel clamped to 255.
+ */
+export function compositeOnto(frame, { data, width, height }, x, y, premultiplied) {
+  for (let row = 0; row < height; row++) {
+    for (let column = 0; column < width; column++) {
+      const i = (row * width + column) * 4;
+      const o = ((y + row) * frame.width + x + column) * 4;
+      const a = data[i + 3] / 255;
+      for (let c = 0; c < 3; c++) {
+        const source = premultiplied ? data[i + c] : data[i + c] * a;
+        frame.data[o + c] = Math.min(255, Math.round(source + frame.data[o + c] * (1 - a)));
+      }
+    }
   }
-  return { data: out, width, height };
 }
 
 /** An image halved in each dimension by averaging 2×2 blocks, as upstream's `scale(1 / 2)`. */
