@@ -10,6 +10,8 @@ import { mkdtempSync, readdirSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join, resolve } from 'node:path';
 
+import { npm } from './npm.mjs';
+
 const from = process.argv[2];
 if (!from) {
   console.error('usage: node scripts/smoke-packed.mjs <dir-with-tarballs>');
@@ -24,11 +26,17 @@ if (tarballs.length !== 2) throw new Error(`smoke: expected 2 tarballs in ${from
 // platform package resolve from that project's node_modules.
 const CHECK = `
 import assert from 'node:assert/strict';
+import { realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
+import { sep } from 'node:path';
 import { createContext } from 'oxgl';
 
-const resolved = createRequire(import.meta.url).resolve('oxgl');
-assert.ok(resolved.startsWith(process.cwd()), \`oxgl resolved outside the project: \${resolved}\`);
+// Both paths go through the same realpath: on the Windows runners the temp
+// directory is an 8.3 short name (RUNNER~1), which the module resolver and
+// the working directory may spell differently.
+const project = realpathSync.native(process.cwd());
+const resolved = realpathSync.native(createRequire(import.meta.url).resolve('oxgl'));
+assert.ok(resolved.startsWith(project + sep), \`oxgl resolved outside \${project}: \${resolved}\`);
 
 const gl = createContext({ width: 4, height: 4, backend: 'software' });
 gl.clearColor(0, 1, 0, 1);
@@ -46,11 +54,7 @@ const project = mkdtempSync(join(tmpdir(), 'oxgl-smoke-'));
 try {
   writeFileSync(join(project, 'package.json'), '{ "private": true, "type": "module" }\n');
   writeFileSync(join(project, 'check.mjs'), CHECK);
-  execFileSync('npm', ['install', '--ignore-scripts', '--no-audit', '--no-fund', ...tarballs], {
-    cwd: project,
-    stdio: 'inherit',
-    shell: process.platform === 'win32',
-  });
+  npm(['install', '--ignore-scripts', '--no-audit', '--no-fund', ...tarballs], { cwd: project, stdio: 'inherit' });
   execFileSync(process.execPath, ['check.mjs'], { cwd: project, stdio: 'inherit' });
 } finally {
   rmSync(project, { recursive: true, force: true });

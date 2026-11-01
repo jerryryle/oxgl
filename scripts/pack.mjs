@@ -8,12 +8,12 @@
 // package.json listed them.
 //
 //     node scripts/pack.mjs <out-dir>
-import { execFileSync } from 'node:child_process';
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { dirname, join, resolve } from 'node:path';
 
 import { platformString } from '../dist/resolve-native.js';
+import { npm as runNpm } from './npm.mjs';
 
 const SCOPE = '@oxgl-js';
 
@@ -30,14 +30,9 @@ function hostOf(triple) {
   return { platform, arch, libc: abi === 'gnu' ? 'glibc' : undefined };
 }
 
-/** Runs npm (npm.cmd on Windows, which needs a shell) and returns its stdout. */
+/** Runs npm in `cwd` and returns its stdout. */
 function npm(args, cwd) {
-  return execFileSync('npm', args, {
-    cwd,
-    encoding: 'utf8',
-    shell: process.platform === 'win32',
-    stdio: ['ignore', 'pipe', 'inherit'],
-  });
+  return runNpm(args, { cwd, encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'] });
 }
 
 const out = process.argv[2];
@@ -93,6 +88,13 @@ try {
   // with the optional dependencies added to its manifest.
   const rootDir = join(stage, 'oxgl');
   const [listing] = JSON.parse(npm(['pack', '--dry-run', '--json', '--ignore-scripts'], '.'));
+  // The addon and ANGLE belong in the platform package only (openspec
+  // licensing). The smoke test can't catch them here: the loader prefers
+  // oxgl's own dist/, so it would never load the platform package.
+  const native = listing.files.filter(({ path }) => path.endsWith('.node') || /(^|\/)angle\//.test(path));
+  if (native.length > 0) {
+    throw new Error(`pack: the oxgl package must not contain ${native.map(({ path }) => path).join(', ')}; check package.json "files"`);
+  }
   for (const { path } of listing.files) {
     mkdirSync(join(rootDir, dirname(path)), { recursive: true });
     cpSync(path, join(rootDir, path));
