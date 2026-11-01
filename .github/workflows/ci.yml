@@ -100,10 +100,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        # Linux arm64 is the only supported platform for now (see README.md).
-        os: [ubuntu-24.04-arm]
-        # PLATFORM-FOCUS: re-enable
-        # os: [ubuntu-24.04, macos-15, windows-2025]
+        os: [ubuntu-24.04-arm, ubuntu-24.04, macos-15, windows-2025, windows-11-arm]
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -114,8 +111,14 @@ jobs:
           persist-credentials: false
       # The conformance runner, and its harness tests, decode videos with ffmpeg.
       - name: Install ffmpeg
-        if: runner.os == 'Linux'
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: |
+          case "$RUNNER_OS" in
+            Linux) sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg ;;
+            macOS) brew install ffmpeg ;;
+            Windows) choco install -y --no-progress ffmpeg ;;
+          esac
       - name: Install the pinned Rust toolchain
         run: rustup toolchain install
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -189,8 +192,6 @@ jobs:
       matrix:
         node: [22.22.2, 26]
     runs-on: ubuntu-24.04-arm
-    # PLATFORM-FOCUS: re-enable
-    # runs-on: ubuntu-24.04
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
@@ -227,24 +228,37 @@ jobs:
         env:
           OXGL_BACKEND: software
 
-  # Rust test suites under AddressSanitizer + LeakSanitizer. ANGLE is the
-  # normal stripped bundle; see design.md for why suppressions start empty.
+  # Rust test suites under AddressSanitizer + LeakSanitizer, on both Linux
+  # architectures (README.md, CONTRIBUTING.md).
   asan:
     needs: changes
     if: needs.changes.outputs.heavy == 'true'
-    runs-on: ubuntu-24.04-arm
-    # PLATFORM-FOCUS: re-enable
-    # runs-on: ubuntu-24.04
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          # No -Zbuild-std on aarch64: it instruments compiler_builtins, whose
+          # outline atomics __asan_init calls before shadow memory exists, so
+          # every test binary segfaults at startup. The prebuilt std is
+          # uninstrumented; heap errors are still caught through ASan's
+          # allocator. fast_unwind_on_malloc=0: ANGLE's arm64 build signs
+          # return addresses, which the frame-pointer unwinder cannot follow,
+          # so suppressions would never see the ANGLE frames.
+          - os: ubuntu-24.04-arm
+            target: aarch64-unknown-linux-gnu
+            build-std: false
+            asan-options: ":fast_unwind_on_malloc=0"
+          # x64 rebuilds std instrumented, which needs rust-src.
+          - os: ubuntu-24.04
+            target: x86_64-unknown-linux-gnu
+            build-std: true
+            asan-options: ""
+    runs-on: ${{ matrix.os }}
     env:
       RUSTFLAGS: -Zsanitizer=address -Cforce-frame-pointers=yes
       # Doctests are built by rustdoc, which reads only RUSTDOCFLAGS.
       RUSTDOCFLAGS: -Zsanitizer=address -Cforce-frame-pointers=yes
-      # fast_unwind_on_malloc=0: ANGLE's arm64 build signs return addresses, which
-      # the frame-pointer unwinder cannot follow, so suppressions would never
-      # see the ANGLE frames.
-      ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:detect_stack_use_after_return=1:fast_unwind_on_malloc=0
-      # PLATFORM-FOCUS: re-enable
-      # ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:detect_stack_use_after_return=1
+      ASAN_OPTIONS: detect_leaks=1:halt_on_error=1:detect_stack_use_after_return=1${{ matrix.asan-options }}
       # Builds tests against the unstripped libraries of the pinned symbols
       # archive (verified like the bundle), so suppressions can name ANGLE
       # functions.
@@ -256,9 +270,12 @@ jobs:
         with:
           persist-credentials: false
       - name: Install the pinned nightly
-        # PLATFORM-FOCUS: re-enable (x64 rebuilds std, which needs rust-src)
-        # run: rustup toolchain install "$ASAN_NIGHTLY" --profile minimal --component rust-src
-        run: rustup toolchain install "$ASAN_NIGHTLY" --profile minimal
+        env:
+          BUILD_STD: ${{ matrix.build-std }}
+        run: |
+          args=()
+          [ "$BUILD_STD" = true ] && args+=(--component rust-src)
+          rustup toolchain install "$ASAN_NIGHTLY" --profile minimal "${args[@]}"
       # LeakSanitizer matches suppressions against symbolized frames.
       - name: Locate llvm-symbolizer
         run: |
@@ -278,15 +295,13 @@ jobs:
           path: ~/.cargo/oxgl-angle
           key: angle-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('angle/bundles.toml') }}
       # oxgl-node is a Node addon whose tests run under Node, not cargo.
-      # No -Zbuild-std on aarch64: it instruments compiler_builtins, whose
-      # outline atomics __asan_init calls before shadow memory exists, so every
-      # test binary segfaults at startup. The prebuilt std is uninstrumented;
-      # heap errors are still caught through ASan's allocator.
-      # PLATFORM-FOCUS: re-enable
-      #   -Zbuild-std --target x86_64-unknown-linux-gnu
-      - run: >-
-          cargo +"$ASAN_NIGHTLY" test --workspace --exclude oxgl-node --locked
-          --target aarch64-unknown-linux-gnu
+      - env:
+          TARGET: ${{ matrix.target }}
+          BUILD_STD: ${{ matrix.build-std }}
+        run: |
+          args=()
+          [ "$BUILD_STD" = true ] && args+=(-Zbuild-std)
+          cargo +"$ASAN_NIGHTLY" test --workspace --exclude oxgl-node --locked "${args[@]}" --target "$TARGET"
 
   # Extension point: GPU coverage on a self-hosted runner, enabled by setting
   # the OXGL_GPU_RUNNER repository variable to 'true'. Not required by `ci`.
@@ -303,24 +318,36 @@ jobs:
       - run: npm run build
       - run: npm test
 
-  # Both Khronos conformance suites, judged against
-  # conformance/expectations.txt (openspec conformance-testing). The suites
-  # run in parallel; each uploads its report whether it passes or fails.
+  # Both Khronos conformance suites on every supported platform, judged against
+  # the conformance/expectations.txt entries that apply there (openspec
+  # conformance-testing). Each platform and suite runs in parallel and uploads
+  # its report whether it passes or fails.
   conformance:
     needs: changes
     if: needs.changes.outputs.heavy == 'true'
     strategy:
       fail-fast: false
       matrix:
+        os: [ubuntu-24.04-arm, ubuntu-24.04, macos-15, windows-2025, windows-11-arm]
         suite: [webgl1, webgl2]
-    runs-on: ubuntu-24.04-arm
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # The conformance runner, and its harness tests, decode videos with ffmpeg.
+      # The conformance runner decodes videos with ffmpeg.
       - name: Install ffmpeg
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+        env:
+          HOMEBREW_NO_AUTO_UPDATE: "1"
+        run: |
+          case "$RUNNER_OS" in
+            Linux) sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg ;;
+            macOS) brew install ffmpeg ;;
+            Windows) choco install -y --no-progress ffmpeg ;;
+          esac
       - name: Install the pinned Rust toolchain
         run: rustup toolchain install
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -334,7 +361,7 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git/db
             target
-          key: cargo-ubuntu-24.04-arm-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+          key: cargo-${{ matrix.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cargo/oxgl-angle
@@ -350,11 +377,11 @@ jobs:
         env:
           SUITE: ${{ matrix.suite }}
           OXGL_BACKEND: software
-      # Artifact names must be unique within a run, hence the suite suffix.
+      # Artifact names must be unique within a run, hence the platform and suite suffix.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
-          name: conformance-results-${{ matrix.suite }}
+          name: conformance-results-${{ matrix.os }}-${{ matrix.suite }}
           path: conformance-results.json
 
   # The one check branch protection requires. The jobs that build or test oxgl
