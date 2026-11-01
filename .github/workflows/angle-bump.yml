@@ -1,0 +1,93 @@
+# Daily, pins oxgl-angle's latest release (angle/scripts/bump.sh: the bundle
+# digests from its SHA256SUMS, and the patch version), opens a pull request
+# for it from the `angle-bump` branch and runs ci.yml on that branch (openspec
+# angle-distribution). Pushes and pull requests made with the default token
+# trigger no workflows, but a workflow_dispatch does, and its `ci` check lands
+# on the pull request's head commit. When it passes, ci.yml's merge-bump job
+# merges the pull request and runs ci.yml on main, whose release job publishes
+# the new version. An open bump is refreshed when main or oxgl-angle moves on,
+# and closed when main needs no bump, unless it carries a fix pushed to its
+# branch; a bump that fails stays open for that fix, which a person merges. A
+# closed bump labelled skip-bump skips its release. Runs three hours after
+# oxgl-angle's own 07:17 bump, which builds and releases in under two.
+name: angle-bump
+
+on:
+  schedule:
+    - cron: "17 10 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: angle-bump
+
+permissions:
+  contents: read
+
+jobs:
+  bump:
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: write
+      pull-requests: write
+      actions: write
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          # All branches, to compare an open bump with this one.
+          fetch-depth: 0
+          persist-credentials: false
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+      - name: Pin oxgl-angle's latest release and open or refresh the pull request
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          # Until the first release is on npm (the one-time bootstrap in
+          # CONTRIBUTING.md), a bump can't be released.
+          if ! npm view oxgl version > /dev/null 2>&1; then
+            echo "::notice::oxgl is not on npm yet; bumps start after the first release"
+            exit 0
+          fi
+          # Whether the branch is only the bot's commit, changing only what a
+          # bump changes; anything else is a fix a person pushed.
+          # (Captured first: under pipefail, grep -q closing a pipe early would
+          # fail the writer and invert the answer.)
+          bot_only() {
+            local subjects files
+            subjects="$(git log --format=%s origin/main..origin/angle-bump)"
+            files="$(git diff --name-only "$(git merge-base origin/main origin/angle-bump)" origin/angle-bump)"
+            [[ "$subjects" == "Pin oxgl-angle "* && "$subjects" != *$'\n'* ]] \
+              && ! grep -qvxE 'angle/bundles\.toml|package\.json|package-lock\.json' <<< "$files"
+          }
+          open="$(gh pr list --repo "$GITHUB_REPOSITORY" --head angle-bump --state open --json number --jq length)"
+          tag="$(angle/scripts/bump.sh)"
+          if [ -z "$tag" ]; then
+            if [ "$open" != 0 ] && bot_only; then
+              gh pr close angle-bump --repo "$GITHUB_REPOSITORY" --comment "main already pins oxgl-angle's latest release."
+            fi
+            exit 0
+          fi
+          title="Pin oxgl-angle $tag"
+          skipped="$(gh pr list --repo "$GITHUB_REPOSITORY" --head angle-bump --state closed --label skip-bump --limit 100 --json title \
+            | jq --arg title "$title" '[.[] | select(.title == $title)] | length')"
+          if [ "$skipped" != 0 ]; then
+            echo "A bump to $tag is labelled skip-bump; remove the label to retry"
+            exit 0
+          fi
+          git -c user.name="github-actions[bot]" \
+            -c user.email="41898282+github-actions[bot]@users.noreply.github.com" \
+            commit -q -m "$title" angle/bundles.toml package.json package-lock.json
+          # Leave a fix pushed to the branch alone, and this exact bump too.
+          if [ "$open" != 0 ] && { ! bot_only || git diff --quiet origin/angle-bump HEAD; }; then
+            echo "The open bump pull request is current or carries a fix"
+            exit 0
+          fi
+          body="Pins oxgl-angle's [$tag](https://github.com/jerryryle/oxgl-angle/releases/tag/$tag) and bumps the version to $(jq -r .version package.json). ci.yml's merge-bump job merges this when CI passes, unless someone pushes to this branch: merge such a fix by hand. To skip this release, label this skip-bump and close it."
+          git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/angle-bump
+          if [ "$open" != 0 ]; then
+            gh pr edit angle-bump --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"
+          else
+            gh pr create --repo "$GITHUB_REPOSITORY" --base main --head angle-bump --title "$title" --body "$body"
+          fi
+          gh workflow run ci.yml --repo "$GITHUB_REPOSITORY" --ref angle-bump
