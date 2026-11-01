@@ -9,6 +9,10 @@ The captured frame SHALL be the viewport after the released animation frame: the
 - **WHEN** an example renders a red cube on black into one 800×500 canvas
 - **THEN** the captured frame is 400×250 and shows the cube where Chrome shows it
 
+#### Scenario: Example with two canvases
+- **WHEN** an example renders into two WebGL canvases of 400×500, each in a sibling container at the top-left (cf. three.js `webgl_camera_logarithmicdepthbuffer`)
+- **THEN** the captured frame shows them side by side, the first at the left edge
+
 #### Scenario: Canvas past the viewport
 - **WHEN** an example's canvases are 800×500 each, side by side
 - **THEN** its outcome is `FAIL` with a message giving the canvas sizes and places found

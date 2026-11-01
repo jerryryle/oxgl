@@ -14,7 +14,7 @@ CI SHALL run on every pull request targeting `main` and every push to `main`, an
 
 #### Scenario: Documentation-only change
 - **WHEN** a pull request changes only `README.md` and files under `openspec/`
-- **THEN** workflow lint and the repository checks run, the jobs that build or test oxgl (the Rust and Node checks, the Node version range, AddressSanitizer, conformance and the optional GPU job) are skipped, and the `ci` check passes
+- **THEN** workflow lint and the repository checks run, the jobs that build or test oxgl (the Rust and Node checks, the Node version range, AddressSanitizer, conformance, the three.js examples and the optional GPU job) are skipped, and the `ci` check passes
 
 #### Scenario: Skip list holds only unread files
 - **WHEN** a reviewer reads the skip list
@@ -140,3 +140,18 @@ CI SHALL run both conformance suites (conformance-testing) on Linux arm64 with `
 #### Scenario: Suite cached by pin
 - **WHEN** the pinned suite commit is unchanged since a run on `main`
 - **THEN** the job restores the suite from a cache keyed by that commit instead of fetching it
+
+### Requirement: three.js examples job
+CI SHALL run the three.js example suite (threejs-examples) on Linux arm64 with `OXGL_BACKEND=software`, judged against the checked-in expectations, in a job that builds the package first. The job SHALL be required by the aggregate `ci` check, skipped as the other heavy jobs are, and SHALL upload its report and output images as workflow artifacts whether it passes or fails.
+
+#### Scenario: Example regression fails CI
+- **WHEN** a pull request makes an example that is expected to pass render a frame that does not match its reference
+- **THEN** the three.js job fails, naming the example, and the `ci` check fails
+
+#### Scenario: Images available after failure
+- **WHEN** the three.js job fails
+- **THEN** the report and the failing examples' captured, reference and diff images can be downloaded from the workflow run
+
+#### Scenario: Release cached by pin
+- **WHEN** the pinned three.js commit is unchanged since a run on `main`
+- **THEN** the job restores the release from a cache keyed by that commit instead of fetching it
