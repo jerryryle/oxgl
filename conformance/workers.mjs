@@ -8,7 +8,7 @@ import { appendFileSync, readFileSync } from 'node:fs';
 import { runInThisContext } from 'node:vm';
 import { parentPort, Worker as ThreadWorker, workerData } from 'node:worker_threads';
 
-import { bitmapPixels, imageBitmapClass, offscreenCanvasClass } from './offscreen.mjs';
+import { bitmapPixels, finishAll, imageBitmapClass, offscreenCanvasClass } from './offscreen.mjs';
 import { resolveFile } from './server.mjs';
 
 /** A thread's first code: loads this module and runs the worker's script. */
@@ -138,11 +138,17 @@ export async function runWorker() {
     if (name.startsWith('WebGL')) self[name] = value;
   }
   self.ImageData = ImageData;
-  // Dedicated workers have animation frames (HTML §8.10.1).
-  self.requestAnimationFrame = (callback) => setTimeout(() => callback(performance.now()), 16);
+  // Dedicated workers have animation frames (HTML §8.10.1). Each frame first
+  // waits for the work queued on the worker's contexts, as a page's does.
+  const live = new Set();
+  self.requestAnimationFrame = (callback) =>
+    setTimeout(() => {
+      finishAll(live);
+      callback(performance.now());
+    }, 16);
   self.cancelAnimationFrame = (handle) => clearTimeout(handle);
   self.ImageBitmap = ImageBitmap;
-  self.OffscreenCanvas = offscreenCanvasClass(globalThis, oxgl, ImageBitmap);
+  self.OffscreenCanvas = offscreenCanvasClass(globalThis, oxgl, ImageBitmap, (canvas, gl) => live.add(new WeakRef(gl)));
   oxgl.setImageDecoder((source) => bitmapPixels.get(source));
   self.Worker = workerClass({
     EventTarget,

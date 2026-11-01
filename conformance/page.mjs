@@ -19,7 +19,7 @@ import jsdom from 'jsdom';
 
 import { native } from '../dist/native.js';
 
-import { bitmapPixels, imageBitmapClass, offscreenCanvasClass } from './offscreen.mjs';
+import { bitmapPixels, finishAll, imageBitmapClass, offscreenCanvasClass } from './offscreen.mjs';
 import { decodePng, encodePng } from './png.mjs';
 import { resolveFile } from './server.mjs';
 import { frameAt, probe, videoFile } from './video.mjs';
@@ -330,10 +330,14 @@ function installShim(window, state) {
   // with it, as a browser releases them with the document. Contexts are held
   // weakly, so one the page drops is collected and released by oxgl itself.
   const own = new Set();
+  // Every live WebGL context of the page, including OffscreenCanvas ones,
+  // whose queued work each animation frame waits for.
+  const live = new Set();
   const close = window.close;
   window.close = function () {
     for (const ref of own) release(state, ref);
     own.clear();
+    live.clear();
     return close.call(this);
   };
   // jsdom's images have no decode() (HTML §4.8.4.3.4), which the suite's
@@ -456,7 +460,9 @@ function installShim(window, state) {
   // its placeholder canvas, and is composited as that canvas would be.
   const placeholders = new WeakMap();
   window.OffscreenCanvas = offscreenCanvasClass(window, oxgl, window.ImageBitmap, (canvas, gl) => {
-    if (placeholders.has(canvas)) own.add(new WeakRef(gl));
+    const ref = new WeakRef(gl);
+    live.add(ref);
+    if (placeholders.has(canvas)) own.add(ref);
   });
   // jsdom's own getContext gives 2D contexts (through the canvas package).
   // It does not know oxgl's contexts, so one type per canvas is enforced here
@@ -493,6 +499,7 @@ function installShim(window, state) {
     const ref = new WeakRef(gl);
     state.contexts.add(ref);
     own.add(ref);
+    live.add(ref);
     return gl;
   };
   forwardResizes(window, contexts);
@@ -505,7 +512,7 @@ function installShim(window, state) {
     placeholders.set(offscreen, this);
     return offscreen;
   };
-  compositeEachFrame(window, own, oxgl.presentDrawingBuffer, placeholders);
+  compositeEachFrame(window, own, live, oxgl.presentDrawingBuffer, placeholders);
   for (const name of INTERFACES) window[name] = oxgl[name];
   window.ImageData = canvasPackage().ImageData;
   if (state.root !== undefined) window.CLOSURE_IMPORT_SCRIPT = closureImport(window, state.root);
@@ -539,12 +546,18 @@ function loadOnce(window) {
  * frame drew: drawing buffers without preserveDrawingBuffer are cleared.
  * Canvases outside the document are never composited; an OffscreenCanvas
  * from transferControlToOffscreen is, when its placeholder is in it.
+ *
+ * First, the frame waits for the work queued on every `live` context, so a
+ * page can queue about one frame of GPU work, as in a browser. Without this,
+ * a page drawing in an animation-frame loop queues work faster than
+ * SwiftShader runs it, then waits for the backlog to drain.
  */
-function compositeEachFrame(window, own, present, placeholders) {
+function compositeEachFrame(window, own, live, present, placeholders) {
   const requestAnimationFrame = window.requestAnimationFrame;
   let scheduled = false;
   const composite = () => {
     scheduled = false;
+    finishAll(live);
     for (const ref of own) {
       const gl = ref.deref();
       const shown = placeholders.get(gl?.canvas) ?? gl?.canvas;

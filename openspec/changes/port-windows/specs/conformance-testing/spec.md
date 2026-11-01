@@ -100,3 +100,20 @@ The root `package.json` SHALL expose `npm run conformance`, which runs both suit
 #### Scenario: Updating expectations
 - **WHEN** a developer runs the command with the update option
 - **THEN** the run is judged against the expectations it writes, the entries for the pages that ran are rewritten from their outcomes on the run's platform as Checked-in expectations requires, existing reasons are kept for entries whose outcome is unchanged, on a run of whole suites entries for pages those suites no longer contain are removed, and new or changed entries take the page's first escaped error as their reason, or its first failure message when it has none (for `TIMEOUT` and `CRASH`, `no new result within the time limit` / `crashed`, followed by the first escaped error's message when there is one), reduced to its first line and at most 200 characters; the command then exits zero unless the expectations file could not be parsed or a page had a harness error
+
+## ADDED Requirements
+
+### Requirement: Animation frames wait for queued GPU work
+At the start of each animation frame, before compositing and before that frame's callbacks, the runner SHALL wait until every live WebGL context created in that page or worker has finished the work queued on it, whether or not its canvas is in the document, so a page can queue at most about one frame of GPU work, as in a browser.
+
+#### Scenario: Previous frame's work is done
+- **WHEN** a WebGL 2 page draws in an animation-frame callback, inserts a fence with `fenceSync`, and checks the fence's `SYNC_STATUS` in its next animation-frame callback
+- **THEN** the status is `SIGNALED`
+
+#### Scenario: Draw loop on an off-screen canvas
+- **WHEN** a page draws hundreds of times per animation frame for a few seconds on a canvas outside the document, then finishes
+- **THEN** it completes within about a frame of its last callback instead of draining a backlog (cf. Khronos `conformance/rendering/texture-switch-performance.html`)
+
+#### Scenario: Animation frames in a worker
+- **WHEN** a worker draws on an `OffscreenCanvas` context in an animation-frame callback
+- **THEN** its next animation-frame callback starts only after that work has finished

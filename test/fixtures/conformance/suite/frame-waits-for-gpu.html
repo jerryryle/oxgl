@@ -1,0 +1,34 @@
+<!DOCTYPE html>
+<html><head><script src="harness.js"></script></head><body>
+<script>
+// Queues far more work than SwiftShader finishes in one frame, on a canvas
+// outside the document, then checks in the next frame that it is done.
+var gl = document.createElement("canvas").getContext("webgl2");
+gl.canvas.width = 512;
+gl.canvas.height = 512;
+gl.viewport(0, 0, 512, 512);
+function shader(type, source) {
+  var s = gl.createShader(type);
+  gl.shaderSource(s, source);
+  gl.compileShader(s);
+  return s;
+}
+var program = gl.createProgram();
+gl.attachShader(program, shader(gl.VERTEX_SHADER, "#version 300 es\nvoid main() { vec2 p = vec2(gl_VertexID & 1, gl_VertexID >> 1) * 4.0 - 1.0; gl_Position = vec4(p, 0.0, 1.0); }"));
+gl.attachShader(program, shader(gl.FRAGMENT_SHADER, "#version 300 es\nprecision mediump float; out vec4 c; void main() { c = vec4(sin(gl_FragCoord.xy), 0.0, 1.0); }"));
+gl.linkProgram(program);
+gl.useProgram(program);
+var sync;
+requestAnimationFrame(function () {
+  for (var i = 0; i < 3000; ++i) gl.drawArrays(gl.TRIANGLES, 0, 3);
+  sync = gl.fenceSync(gl.SYNC_GPU_COMMANDS_COMPLETE, 0);
+  gl.flush();
+  requestAnimationFrame(function () {
+    var status = gl.getSyncParameter(sync, gl.SYNC_STATUS);
+    if (status === gl.SIGNALED) testPassed("previous frame's work is done");
+    else testFailed("previous frame's work is still queued");
+    finishTest();
+  });
+});
+</script>
+</body></html>

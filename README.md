@@ -19,11 +19,6 @@ backend. Conformance results differ from Linux arm64 only in these pages, which
   just past the 32-bit integer range, which GLSL leaves undefined, and the
   reference images assume the result is clamped. arm64 clamps and x86 does not.
   The native dEQP tests fixed this in 2018; the WebGL port has not.
-- `texture-switch-performance` (both suites, and its `conformance2/` copy) compares two frame rates measured
-  for 2 s each against a 0.8 ratio, and lands just under it on the busy Linux
-  x64 runner (0.79 to 0.80), so it is skipped there.
-- `many-draw-calls` (both suites) is skipped on macOS arm64: on the 3-CPU
-  `macos-15` runner, with three pages at once, it went 180 s without a result.
 
 Docker on a Mac exposes no GPU to Linux containers, so the Linux arm64 runs use
 the software backend. The GPU backend path has been checked on macOS arm64

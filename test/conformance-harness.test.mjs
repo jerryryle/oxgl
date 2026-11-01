@@ -481,7 +481,7 @@ test('page runner: outcomes, early errors, media, canvas shim, crashes, timeouts
         'abort-at-teardown.html',
         'missing.html',
       ],
-      webgl2: ['error-never-completes.html', 'webgl-version.html'],
+      webgl2: ['error-never-completes.html', 'webgl-version.html', 'frame-waits-for-gpu.html'],
     },
     [
       'webgl1 fail-result.html FAIL # x',
@@ -497,6 +497,8 @@ test('page runner: outcomes, early errors, media, canvas shim, crashes, timeouts
   const outcome = (suite, path) => pageOf(report, suite, path)?.outcome;
 
   assert.equal(outcome('webgl1', 'pass.html'), 'PASS');
+  // Animation frames wait for queued GPU work: a fence from one frame is signaled in the next.
+  assert.equal(outcome('webgl2', 'frame-waits-for-gpu.html'), 'PASS', pageOf(report, 'webgl2', 'frame-waits-for-gpu.html')?.message);
   assert.equal(pageOf(report, 'webgl1', 'pass.html').passed, 2);
   assert.equal(outcome('webgl1', 'fail-result.html'), 'FAIL');
   assert.equal(pageOf(report, 'webgl1', 'fail-result.html').message, 'expected 1, got 2');
