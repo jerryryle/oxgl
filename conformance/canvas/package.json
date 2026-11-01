@@ -1,0 +1,8 @@
+{
+  "name": "canvas",
+  "version": "3.2.3",
+  "private": true,
+  "description": "The conformance runner's canvas package: @napi-rs/canvas behind the node-canvas 3.2.3 API that jsdom expects (see openspec conformance-testing).",
+  "license": "BSD-3-Clause",
+  "main": "index.js"
+}

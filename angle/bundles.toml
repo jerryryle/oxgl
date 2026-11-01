@@ -3,27 +3,30 @@
 # https://github.com/jerryryle/oxgl-angle; this file is filled from its release
 # run, and changing it does not rebuild ANGLE.
 
-bundle_version = "angle-8078.4"     # the oxgl-angle release these come from
+bundle_version = "angle-8078.6"     # the oxgl-angle release these come from
 
 [platform.linux-x64]
-url = "https://github.com/jerryryle/oxgl-angle/releases/download/angle-8078.4/angle-linux-x64.tar.xz"
-sha256 = "10fc6990026f798b42d8193d69ff30176596d69959f9247d666431e00568c321"
+url = "https://github.com/jerryryle/oxgl-angle/releases/download/angle-8078.6/angle-linux-x64.tar.xz"
+sha256 = "486308fc0731456becfa4b949b7ec974f55058aa6f8b507f12a9af047716ccf2"
+# Unstripped libraries for the ASan job's leak suppressions (OXGL_ANGLE_SYMBOLS).
+symbols_url = "https://github.com/jerryryle/oxgl-angle/releases/download/angle-8078.6/angle-linux-x64-symbols.tar.xz"
+symbols_sha256 = "d63e7d6f1a8a832c0726493e1e0ffcfc331dbcacb1b9f0f0e3f3c7e200c141b0"
 
 [platform.linux-arm64]
-url = "https://github.com/jerryryle/oxgl-angle/releases/download/angle-8078.4/angle-linux-arm64.tar.xz"
-sha256 = "a3156b8ab2b7dbb2286d7a008365c9fdf0fa4e8b384908ea8df3e361ddfab5e2"
+url = "https://github.com/jerryryle/oxgl-angle/releases/download/angle-8078.6/angle-linux-arm64.tar.xz"
+sha256 = "67dc07250d9a74040b610242cf161db234c1f036086e45fcd371f9bd84f80dd3"
 # Unstripped libraries for the ASan job's leak suppressions (OXGL_ANGLE_SYMBOLS).
-symbols_url = "https://github.com/jerryryle/oxgl-angle/releases/download/angle-8078.4/angle-linux-arm64-symbols.tar.xz"
-symbols_sha256 = "4e28f5f72dcad1f251b86cacb89e4fce7180a2fb0d89e0d0daf32a05a66a5250"
+symbols_url = "https://github.com/jerryryle/oxgl-angle/releases/download/angle-8078.6/angle-linux-arm64-symbols.tar.xz"
+symbols_sha256 = "9c526a6f2206629848ae35ac3efaef1c80e1e48d3b5b27651412004d8bae1df9"
 
 [platform.macos-arm64]
-url = "https://github.com/jerryryle/oxgl-angle/releases/download/angle-8078.4/angle-macos-arm64.tar.xz"
-sha256 = "0d1b2493b1061ce379eeff20f9c00587a66bef3e93f0dae2c8067d0eebe63f77"
+url = "https://github.com/jerryryle/oxgl-angle/releases/download/angle-8078.6/angle-macos-arm64.tar.xz"
+sha256 = "b7fa2d82fb91dcde4bbe32da94deb16aa3cdd08e6ea31d7471692e8f233c4222"
 
 [platform.windows-x64]
-url = "https://github.com/jerryryle/oxgl-angle/releases/download/angle-8078.4/angle-windows-x64.tar.xz"
-sha256 = "3e03c92c512d6ac9bf5e5f4dafc5904f69dafe211a437aeb950b2e08e3b63f4b"
+url = "https://github.com/jerryryle/oxgl-angle/releases/download/angle-8078.6/angle-windows-x64.tar.xz"
+sha256 = "d076599963b9f9edec3ea05a9cc55d2f00b48d86a5b214e0670d9d475748d18d"
 
 [platform.windows-arm64]
-url = "https://github.com/jerryryle/oxgl-angle/releases/download/angle-8078.4/angle-windows-arm64.tar.xz"
-sha256 = "526816c3b72ec2b4d32e39f18cf1258961b72333afadd479d1d142d69e407c59"
+url = "https://github.com/jerryryle/oxgl-angle/releases/download/angle-8078.6/angle-windows-arm64.tar.xz"
+sha256 = "aef9e7a7ac482c0b546ca45a8f8c8846fad15fe101437796f4cab3e6a33f3939"

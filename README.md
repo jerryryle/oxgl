@@ -7,16 +7,24 @@ Khronos conformance suite; three.js renders through it unmodified.
 
 ## Platforms
 
-Linux arm64 (glibc) is the only supported and tested platform for now. The
-build also recognises Linux x64, macOS arm64, Windows x64 and Windows arm64,
-and a pinned ANGLE bundle exists for each, so `npm run build` works on those
-hosts for local use. They are not supported or tested until they are
-restored.
+Supported and tested: Linux x64 and Linux arm64 (glibc), macOS arm64, Windows
+x64 and Windows arm64. Each has a pinned ANGLE bundle, and CI runs the Rust and
+Node tests and both Khronos conformance suites on each with the software
+backend. Conformance results differ from Linux arm64 only in these pages, which
+`conformance/expectations.txt` lists for the platforms they apply to:
+
+- On x64 (Linux and Windows), 18 deqp pages that render to 32-bit integer
+  color buffers (`rgba32i`, `r32ui` and similar) fail their image comparisons,
+  because of a bug in the WebGL conformance tests: their shaders convert floats
+  just past the 32-bit integer range, which GLSL leaves undefined, and the
+  reference images assume the result is clamped. arm64 clamps and x86 does not.
+  The native dEQP tests fixed this in 2018; the WebGL port has not.
 
 Docker on a Mac exposes no GPU to Linux containers, so the Linux arm64 runs use
 the software backend. The GPU backend path has been checked on macOS arm64
 (ANGLE Metal on an Apple GPU): all Node tests pass, and the Khronos results match
-Linux arm64 except for differences in the canvas package's image decoding.
+Linux arm64 except for differences in image decoding by the conformance
+runner's canvas package (node-canvas at the time; now `@napi-rs/canvas`).
 
 ## Known issues
 

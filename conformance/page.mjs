@@ -19,7 +19,7 @@ import jsdom from 'jsdom';
 
 import { native } from '../dist/native.js';
 
-import { bitmapPixels, imageBitmapClass, offscreenCanvasClass } from './offscreen.mjs';
+import { bitmapPixels, finishAll, imageBitmapClass, offscreenCanvasClass } from './offscreen.mjs';
 import { decodePng, encodePng } from './png.mjs';
 import { resolveFile } from './server.mjs';
 import { frameAt, probe, videoFile } from './video.mjs';
@@ -47,6 +47,38 @@ ImageImpl.prototype._attributeChangeSteps = function (localName, oldValue, value
   const responsive = this.hasAttributeNS(null, 'srcset') || this.hasAttributeNS(null, 'sizes');
   const steps = namespace === null && localName === 'width' && !responsive ? elementAttributeChange : imageAttributeChange;
   return steps.call(this, localName, oldValue, value, namespace);
+};
+
+// The canvas package decodes an image's pixels after jsdom sets its source,
+// and jsdom fires load straight after. jsdom waits for a promise returned
+// from onLoad, so an image's load waits for its decode, and a failed decode
+// fires error instead. Until then the image is only partially available, so
+// it is not yet complete and decode() waits for it. SVGs decode at once, and
+// an unsized one is never handed to the package (see loadUnsizedSvgEmpty). A
+// JPEG with a color profile is also decoded without it, for WebGL uploads
+// (see webglImages).
+const ResourceLoader = createRequire(import.meta.url)('jsdom/lib/jsdom/browser/resources/per-document-resource-loader.js');
+const fetchResource = ResourceLoader.prototype?.fetch;
+if (typeof fetchResource !== 'function') {
+  throw new Error('jsdom no longer has a per-document resource loader fetch; update the image load hold');
+}
+ResourceLoader.prototype.fetch = function (url, options) {
+  const { element, onLoad } = options;
+  if (element?.localName !== 'img' || onLoad === undefined) return fetchResource.call(this, url, options);
+  return fetchResource.call(this, url, {
+    ...options,
+    onLoad: (data, ...rest) => {
+      onLoad(data, ...rest);
+      const bytes = Buffer.from(data.buffer, data.byteOffset, data.byteLength);
+      if (isSvg(bytes)) return undefined;
+      const image = element._image;
+      element._currentRequestState = 'partially available';
+      return Promise.all([decoded(image), decodeForWebgl(element, bytes)]).then(() => {
+        // A source set since then has its own request and decode.
+        if (decodes.get(image) === true && element._currentRequestState === 'partially available') element._currentRequestState = 'completely available';
+      });
+    },
+  });
 };
 
 /**
@@ -298,10 +330,14 @@ function installShim(window, state) {
   // with it, as a browser releases them with the document. Contexts are held
   // weakly, so one the page drops is collected and released by oxgl itself.
   const own = new Set();
+  // Every live WebGL context of the page, including OffscreenCanvas ones,
+  // whose queued work each animation frame waits for.
+  const live = new Set();
   const close = window.close;
   window.close = function () {
     for (const ref of own) release(state, ref);
     own.clear();
+    live.clear();
     return close.call(this);
   };
   // jsdom's images have no decode() (HTML §4.8.4.3.4), which the suite's
@@ -408,19 +444,25 @@ function installShim(window, state) {
     }
     // An SVG image is drawn at the element's size (HTML §4.8.4.3.6).
     if (isSvg(fetched.bytes)) return rasterizeSvg(fetched.bytes, image.width, image.height);
-    fetched.decoded ??= decodeImage(fetched.bytes) ?? null;
-    return fetched.decoded ?? undefined;
+    // Not cached until the image has decoded: an earlier upload gets nothing.
+    fetched.decoded ??= decodeImage(fetched.bytes, webglImage(image));
+    return fetched.decoded;
   });
   installImageBitmap(window, (image) => {
     const fetched = imageBytes.get(image);
     const bytes = fetched?.url === image.src ? fetched.bytes : dataUrlBytes(image.src);
-    return bytes === undefined ? undefined : decodeImage(bytes);
+    if (bytes === undefined) return undefined;
+    // An SVG image's bitmap has its natural size; the load hold leaves SVGs out.
+    if (isSvg(bytes)) return rasterizeSvg(bytes, image.naturalWidth, image.naturalHeight);
+    return decodeImage(bytes, webglImage(image));
   }, canvasPixels);
   // An OffscreenCanvas from transferControlToOffscreen shows its frames in
   // its placeholder canvas, and is composited as that canvas would be.
   const placeholders = new WeakMap();
   window.OffscreenCanvas = offscreenCanvasClass(window, oxgl, window.ImageBitmap, (canvas, gl) => {
-    if (placeholders.has(canvas)) own.add(new WeakRef(gl));
+    const ref = new WeakRef(gl);
+    live.add(ref);
+    if (placeholders.has(canvas)) own.add(ref);
   });
   // jsdom's own getContext gives 2D contexts (through the canvas package).
   // It does not know oxgl's contexts, so one type per canvas is enforced here
@@ -457,6 +499,7 @@ function installShim(window, state) {
     const ref = new WeakRef(gl);
     state.contexts.add(ref);
     own.add(ref);
+    live.add(ref);
     return gl;
   };
   forwardResizes(window, contexts);
@@ -469,7 +512,7 @@ function installShim(window, state) {
     placeholders.set(offscreen, this);
     return offscreen;
   };
-  compositeEachFrame(window, own, oxgl.presentDrawingBuffer, placeholders);
+  compositeEachFrame(window, own, live, oxgl.presentDrawingBuffer, placeholders);
   for (const name of INTERFACES) window[name] = oxgl[name];
   window.ImageData = canvasPackage().ImageData;
   if (state.root !== undefined) window.CLOSURE_IMPORT_SCRIPT = closureImport(window, state.root);
@@ -503,12 +546,18 @@ function loadOnce(window) {
  * frame drew: drawing buffers without preserveDrawingBuffer are cleared.
  * Canvases outside the document are never composited; an OffscreenCanvas
  * from transferControlToOffscreen is, when its placeholder is in it.
+ *
+ * First, the frame waits for the work queued on every `live` context, so a
+ * page can queue about one frame of GPU work, as in a browser. Without this,
+ * a page drawing in an animation-frame loop queues work faster than
+ * SwiftShader runs it, then waits for the backlog to drain.
  */
-function compositeEachFrame(window, own, present, placeholders) {
+function compositeEachFrame(window, own, live, present, placeholders) {
   const requestAnimationFrame = window.requestAnimationFrame;
   let scheduled = false;
   const composite = () => {
     scheduled = false;
+    finishAll(live);
     for (const ref of own) {
       const gl = ref.deref();
       const shown = placeholders.get(gl?.canvas) ?? gl?.canvas;
@@ -655,26 +704,107 @@ const keepImageBytes = requestInterceptor(async (request, { element }) => {
 });
 
 /**
- * Image bytes decoded as browsers do for WebGL: PNGs by the runner's own
- * decoder; others (JPEG) by the canvas package, which applies EXIF
- * orientation as browsers do. `undefined` for bytes neither can decode.
+ * Canvas-package images of image elements' JPEG bytes without their color
+ * profiles, by element (jsdom's impl), for WebGL uploads. The canvas package
+ * applies a profile, as a 2D canvas should, but WebGL uploads ignore it, as
+ * they do a PNG's. Elements without one upload their own image.
  */
-function decodeImage(bytes) {
+const webglImages = new WeakMap();
+
+/** Starts decoding `bytes` without their color profile for `element`'s uploads, if they have one. */
+function decodeForWebgl(element, bytes) {
+  webglImages.delete(element);
+  const stripped = withoutIccProfile(bytes);
+  if (stripped === undefined) return undefined;
+  const image = new (canvasPackage().Image)();
+  webglImages.set(element, image);
+  image.src = stripped;
+  // The element's own decode decides whether it loads.
+  return decoded(image).catch(() => {
+    if (webglImages.get(element) === image) webglImages.delete(element);
+  });
+}
+
+/**
+ * Canvas-package images' decodes: `true` once the current source has
+ * decoded, else that source's pending attempt. An image has its size as soon
+ * as its source is set, but no pixels until then.
+ */
+const decodes = new WeakMap();
+
+/** Decodes a canvas-package image's current source, recording when it is done. */
+async function decoded(image) {
+  if (image === undefined) return;
+  const attempt = {};
+  decodes.set(image, attempt);
+  await image.decode();
+  // A source set since then has its own attempt.
+  if (decodes.get(image) === attempt) decodes.set(image, true);
+}
+
+/** The decoded canvas-package image an image element uploads to WebGL. */
+function webglImage(element) {
+  const impl = implForWrapper(element);
+  return webglImages.get(impl) ?? impl?._image;
+}
+
+/**
+ * JPEG bytes without their ICC profile (APP2 `ICC_PROFILE` segments), or
+ * `undefined` for bytes that are not a JPEG or have no profile.
+ */
+function withoutIccProfile(bytes) {
+  if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8) return undefined;
+  const kept = [bytes.subarray(0, 2)];
+  let offset = 2;
+  let found = false;
+  // Marker segments up to start of scan, each 0xFF, a marker and a length
+  // that counts itself. A marker may be preceded by 0xFF fill bytes, which
+  // are dropped.
+  while (offset + 4 <= bytes.length && bytes[offset] === 0xff && bytes[offset + 1] !== 0xda) {
+    if (bytes[offset + 1] === 0xff) {
+      offset++;
+      continue;
+    }
+    const end = offset + 2 + bytes.readUInt16BE(offset + 2);
+    const icc = bytes[offset + 1] === 0xe2 && bytes.subarray(offset + 4, offset + 16).toString('latin1') === 'ICC_PROFILE\0';
+    if (icc) found = true;
+    else kept.push(bytes.subarray(offset, end));
+    offset = end;
+  }
+  return found ? Buffer.concat([...kept, bytes.subarray(offset)]) : undefined;
+}
+
+/**
+ * Image bytes decoded as browsers do for WebGL: PNGs by the runner's own
+ * decoder; others (JPEG) from `image`, the canvas package's image of those
+ * bytes, which applies EXIF orientation as browsers do. The caller passes an
+ * image decoded without the bytes' color profile: `webglImage` for an image
+ * element, or `decodeBytes`'s own. `undefined` for bytes neither can decode,
+ * and for an image whose decode has not finished.
+ */
+function decodeImage(bytes, image) {
   const png = decodePng(bytes);
   if (png !== undefined) return png;
-  const { Image, createCanvas } = canvasPackage();
-  const image = new Image();
-  try {
-    image.src = bytes;
-  } catch {
-    return undefined;
-  }
-  if (!(image.width > 0 && image.height > 0)) return undefined;
-  const canvas = createCanvas(image.width, image.height);
+  if (decodes.get(image) !== true || !(image.width > 0 && image.height > 0)) return undefined;
+  const canvas = canvasPackage().createCanvas(image.width, image.height);
   const context = canvas.getContext('2d');
   context.drawImage(image, 0, 0);
   const { data } = context.getImageData(0, 0, image.width, image.height);
   return { data, width: image.width, height: image.height };
+}
+
+/** `decodeImage` for bytes with no image element: the canvas package decodes them first. */
+async function decodeBytes(bytes) {
+  const png = decodePng(bytes);
+  if (png !== undefined) return png;
+  const image = new (canvasPackage().Image)();
+  try {
+    image.src = withoutIccProfile(bytes) ?? bytes;
+    await decoded(image);
+  } catch {
+    return undefined;
+  }
+  return decodeImage(bytes, image);
 }
 
 /** RGBA8 `{ data, width, height }` with color multiplied by alpha. */
@@ -711,7 +841,7 @@ function installImageBitmap(window, decodeElement, canvasPixels) {
   window.createImageBitmap = async (source, options = {}) => {
     let pixels;
     if (bitmapPixels.has(source)) pixels = bitmapPixels.get(source);
-    else if (typeof source?.arrayBuffer === 'function') pixels = decodeImage(Buffer.from(await source.arrayBuffer()));
+    else if (typeof source?.arrayBuffer === 'function') pixels = await decodeBytes(Buffer.from(await source.arrayBuffer()));
     else if (source instanceof window.HTMLImageElement) pixels = decodeElement(source);
     else if (source instanceof window.HTMLVideoElement) pixels = videoFrame(source);
     else if (ArrayBuffer.isView(source?.data)) pixels = { data: source.data, width: source.width, height: source.height };
@@ -824,12 +954,12 @@ function installWorkers(window, root) {
 
 /** The bytes of a jsdom Blob, which has no synchronous reader. */
 function blobBytes(blob) {
-  const bytes = blobImpl(blob)?._bytes;
+  const bytes = implForWrapper(blob)?._bytes;
   if (!(bytes instanceof Uint8Array)) throw new TypeError('URL.createObjectURL: not a Blob');
   return bytes;
 }
 
-const blobImpl = createRequire(import.meta.url)('jsdom/lib/generated/idl/utils.js').implForWrapper;
+const implForWrapper = createRequire(import.meta.url)('jsdom/lib/generated/idl/utils.js').implForWrapper;
 
 /** A structured-cloned value from Node's realm, rebuilt in `window`'s. */
 function toRealm(window, value) {

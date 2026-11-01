@@ -1,0 +1,3 @@
+# Store and check out text files with LF on every host, so fixtures and
+# sources have the same bytes everywhere (Git for Windows defaults to CRLF).
+* text=auto eol=lf

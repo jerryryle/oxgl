@@ -34,6 +34,15 @@ export function imageBitmapClass() {
   };
 }
 
+/** Waits for the queued work of each context in `refs`, forgetting collected ones. */
+export function finishAll(refs) {
+  for (const ref of refs) {
+    const gl = ref.deref();
+    if (gl === undefined) refs.delete(ref);
+    else gl.finish();
+  }
+}
+
 /**
  * An OffscreenCanvas class for a realm: `globals` gives its EventTarget,
  * TypeError, DOMException and Blob; `oxgl` is the JS layer (createContext,

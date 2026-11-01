@@ -6,7 +6,7 @@ import { createRequire } from 'node:module';
 import { join } from 'node:path';
 import { parseArgs } from 'node:util';
 
-import { concludeRun, formatExpectations, keyOf, parseExpectations, selectPages } from './expectations.mjs';
+import { applicable, concludeRun, formatExpectations, hostPlatform, keyOf, parseExpectations, PLATFORMS, selectPages } from './expectations.mjs';
 import { listPages, SUITES } from './lists.mjs';
 import { defaultJobs, runPages } from './pool.mjs';
 import { startServer } from './server.mjs';
@@ -15,8 +15,14 @@ import { ffmpegAvailable } from './video.mjs';
 
 export const EXPECTATIONS_PATH = join(REPO_ROOT, 'conformance', 'expectations.txt');
 export const REPORT_PATH = join(REPO_ROOT, 'conformance-results.json');
-/** Seconds a page may go without a result: the official harness's watchdog. */
-const DEFAULT_TIMEOUT_S = 20;
+/**
+ * Seconds a page may go without a result. The official harness's watchdog is
+ * 20 s, but some pages report only after long draw loops (many-draw-calls goes
+ * up to 15 s between results on SwiftShader on the 4-CPU CI runner), and a
+ * passing page must stay under half the limit so ordinary load cannot time it
+ * out. A longer limit costs time only for pages that stop without finishing.
+ */
+const DEFAULT_TIMEOUT_S = 60;
 
 /**
  * Runs `pages` (suite → page paths under `root`) and judges them against
@@ -41,7 +47,8 @@ export async function runConformance({
 }) {
   const started = Date.now();
   const selection = selectPages(pages, expectations, { filter, includeSkipped });
-  const toRun = selection.run.map((p) => ({ ...p, expected: expectations.get(keyOf(p.suite, p.path))?.outcome ?? 'PASS' }));
+  const applying = applicable(expectations);
+  const toRun = selection.run.map((p) => ({ ...p, expected: applying.get(keyOf(p.suite, p.path))?.outcome ?? 'PASS' }));
 
   // Report differences as pages finish, so a long run is never silent.
   let done = 0;
@@ -85,7 +92,7 @@ export async function runConformance({
     // Seconds a page may go without a new result (the watchdog), not a total.
     idleTimeoutSeconds: timeoutS,
     jobs,
-    platform: `${process.platform}-${process.arch}`,
+    platform: hostPlatform(),
     timestamp: new Date(started).toISOString(),
     durationMs: Date.now() - started,
     options: { filter: filter ?? null, includeSkipped, fastErrors, update },
@@ -190,6 +197,8 @@ export async function main(
   if (values.suite !== undefined && !Object.hasOwn(SUITES, values.suite)) throw new Error(`unknown suite ${values.suite}\n${USAGE}`);
   if (!(timeoutS > 0)) throw new Error(`--timeout must be a positive number of seconds\n${USAGE}`);
   if (!Number.isInteger(jobs) || jobs < 1) throw new Error(`--jobs must be a positive integer\n${USAGE}`);
+  // Expectations name only the supported platforms, so an update elsewhere could not record its outcomes.
+  if (values.update && !PLATFORMS.includes(hostPlatform())) throw new Error(`--update needs one of ${PLATFORMS.join(', ')}; this host is ${hostPlatform()}`);
   if (!existsSync(join(REPO_ROOT, 'dist', 'index.js'))) {
     throw new Error('dist/ is not built; run `npm run build` first');
   }

@@ -67,8 +67,11 @@ export function probe(file) {
  */
 export function frameAt(file, time, { width, height, decoder }) {
   const codec = decoder === undefined ? [] : ['-c:v', decoder];
+  // Bit-exact YUV to RGB conversion: swscale's default SIMD paths round
+  // differently on x86 and Arm, so frames would differ by host.
+  const scale = ['-sws_flags', 'accurate_rnd+bitexact+full_chroma_int'];
   const run = (seek) =>
-    execFileSync('ffmpeg', ['-v', 'error', '-ss', String(seek), ...codec, '-i', file, '-frames:v', '1', '-f', 'rawvideo', '-pix_fmt', 'rgba', '-'], {
+    execFileSync('ffmpeg', ['-v', 'error', '-ss', String(seek), ...codec, '-i', file, '-frames:v', '1', ...scale, '-f', 'rawvideo', '-pix_fmt', 'rgba', '-'], {
       maxBuffer: width * height * 4 + 1024,
     });
   let bytes = run(time);

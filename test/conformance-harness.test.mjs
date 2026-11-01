@@ -11,7 +11,6 @@ import { test } from 'node:test';
 import {
   concludeRun,
   formatExpectations,
-  keyOf,
   normalizeReason,
   parseExpectations,
   selectPages,
@@ -132,7 +131,7 @@ test('Entry without a reason: parsing fails naming the entry', () => {
 test('unknown outcomes, unknown suites, malformed lines and duplicates are rejected', () => {
   assert.throws(() => parseExpectations('webgl1 a.html PASS # listed'), /unknown outcome PASS/);
   assert.throws(() => parseExpectations('webgl3 a.html FAIL # x'), /unknown suite webgl3/);
-  assert.throws(() => parseExpectations('webgl1 a.html'), /expected "<suite> <path> <OUTCOME> # <reason>"/);
+  assert.throws(() => parseExpectations('webgl1 a.html'), /expected "<suite> <path> <OUTCOME> \[<platform> \.\.\.\] # <reason>"/);
   assert.throws(
     () => parseExpectations('webgl1 a.html FAIL # x\nwebgl1 a.html TIMEOUT # y'),
     /:2: duplicate entry for webgl1 a\.html/,
@@ -149,6 +148,8 @@ test('a multi-line failure message becomes a single-line reason of at most 200 c
 // --- Judging ----------------------------------------------------------------
 
 const pages = (entries) => new Map(Object.entries(entries));
+/** The entry lines of an expectations Map, as the file would list them. */
+const entryLines = (entries) => formatExpectations(entries).split('\n').filter((l) => l !== '' && !l.startsWith('#'));
 const result = (suite, path, outcome, message) => ({ suite, path, outcome, message });
 
 test('Regression: an expected PASS that fails is named with both outcomes', () => {
@@ -231,7 +232,7 @@ test('harness errors fail the run', () => {
 
 // --- --update ---------------------------------------------------------------
 
-test('Updating expectations: reasons kept, passes removed, new reasons normalized, SKIP untouched', () => {
+test('Updating expectations: reasons kept, passes narrow entries, new reasons normalized, SKIP untouched', () => {
   const exp = parseExpectations(
     [
       'webgl1 same.html FAIL # hand-written reason',
@@ -254,22 +255,109 @@ test('Updating expectations: reasons kept, passes removed, new reasons normalize
     { ...result('webgl1', 'threw.html', 'FAIL', 'successfullyParsed should be true'), error: 'TypeError: gl.bar is not a function', errorBeforeFailure: true, failed: 1 },
     { ...result('webgl1', 'incidental.html', 'FAIL', 'getError was INVALID_ENUM'), error: 'Error: in a timer', errorBeforeFailure: false, failed: 1 },
   ];
-  const run = concludeRun(exp, results, all, { update: true });
+  const run = concludeRun(exp, results, all, { update: true, platform: 'linux-arm64' });
   assert.equal(run.ok, true, 'an --update run with differences succeeds');
-  assert.deepEqual(
-    [...run.written.values()].map((e) => [e.path, e.outcome, e.reason]),
-    [
-      ['same.html', 'FAIL', 'hand-written reason'],
-      ['changed.html', 'TIMEOUT', 'no new result within the time limit'],
-      ['skip.html', 'SKIP', 'waits on video'],
-      ['new.html', 'FAIL', 'TypeError: gl.bufferData is not a function'],
-      ['abort.html', 'CRASH', 'crashed'],
-      ['hang.html', 'TIMEOUT', 'no new result within the time limit: TypeError: gl.foo is not a function'],
-      ['threw.html', 'FAIL', 'TypeError: gl.bar is not a function'],
-      ['incidental.html', 'FAIL', 'getError was INVALID_ENUM'],
-    ],
-  );
-  assert.ok(!run.written.has(keyOf('webgl1', 'fixed.html')));
+  // An entry without platforms counts as listing all five, so the other platforms keep theirs.
+  const others = '[linux-x64 macos-arm64 windows-x64 windows-arm64]';
+  assert.deepEqual(entryLines(run.written), [
+    'webgl1 abort.html CRASH # crashed',
+    `webgl1 changed.html FAIL ${others} # old reason`,
+    'webgl1 changed.html TIMEOUT [linux-arm64] # no new result within the time limit',
+    `webgl1 fixed.html FAIL ${others} # old reason`,
+    'webgl1 hang.html TIMEOUT # no new result within the time limit: TypeError: gl.foo is not a function',
+    'webgl1 incidental.html FAIL # getError was INVALID_ENUM',
+    'webgl1 new.html FAIL # TypeError: gl.bufferData is not a function',
+    'webgl1 same.html FAIL # hand-written reason',
+    'webgl1 skip.html SKIP # waits on video',
+    'webgl1 threw.html FAIL # TypeError: gl.bar is not a function',
+  ]);
+});
+
+// --- Platform-limited entries ----------------------------------------------
+
+const X64 = 'webgl2 p.html FAIL [linux-x64 windows-x64] # x64 only';
+
+test('platform lists parse, format in platform order, and round-trip', () => {
+  const entries = parseExpectations(`webgl2 p.html FAIL [windows-x64 linux-x64] # x64 only\nwebgl2 p.html TIMEOUT [macos-arm64] # slow`);
+  assert.deepEqual(entryLines(entries), [X64, 'webgl2 p.html TIMEOUT [macos-arm64] # slow']);
+  assert.equal(formatExpectations(parseExpectations(formatExpectations(entries))), formatExpectations(entries));
+  const all = parseExpectations('webgl2 p.html FAIL [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # x');
+  assert.deepEqual(entryLines(all), ['webgl2 p.html FAIL # x'], 'a list of all five is written without one');
+});
+
+test('Unknown platform: parsing fails naming the entry', () => {
+  assert.throws(() => parseExpectations('webgl2 p.html FAIL [linux-riscv64] # x'), /:1: unknown platform linux-riscv64/);
+  assert.throws(() => parseExpectations('webgl2 p.html FAIL [] # x'), /empty platform list/);
+});
+
+test('Overlapping entries: parsing fails naming them', () => {
+  assert.throws(() => parseExpectations(`${X64}\nwebgl2 p.html TIMEOUT [windows-x64] # y`), /:2: entries for webgl2 p\.html overlap on windows-x64/);
+  assert.throws(() => parseExpectations(`${X64}\nwebgl2 p.html TIMEOUT # y`), /:2: duplicate entry for webgl2 p\.html/);
+  assert.throws(() => parseExpectations(`webgl2 p.html TIMEOUT # y\n${X64}`), /:2: duplicate entry for webgl2 p\.html/);
+});
+
+test('Entry limited to other platforms: the page is expected to PASS, and the entry is kept', () => {
+  const exp = parseExpectations(X64);
+  const all = pages({ webgl2: ['p.html'] });
+  const run = concludeRun(exp, [result('webgl2', 'p.html', 'PASS')], all, { platform: 'linux-arm64' });
+  assert.equal(run.ok, true);
+  assert.deepEqual(run.stale, []);
+  const updated = concludeRun(exp, [result('webgl2', 'p.html', 'PASS')], all, { platform: 'linux-arm64', update: true });
+  assert.deepEqual(entryLines(updated.written), [X64]);
+});
+
+test('Entry limited to this platform: the page is expected to fail', () => {
+  const exp = parseExpectations(X64);
+  const all = pages({ webgl2: ['p.html'] });
+  assert.equal(concludeRun(exp, [result('webgl2', 'p.html', 'FAIL')], all, { platform: 'linux-x64' }).ok, true);
+  assert.equal(concludeRun(exp, [result('webgl2', 'p.html', 'PASS')], all, { platform: 'linux-x64' }).ok, false);
+});
+
+test('Different outcomes on different platforms: each platform expects its own', () => {
+  const exp = parseExpectations(`${X64}\nwebgl2 p.html TIMEOUT [macos-arm64] # slow`);
+  const all = pages({ webgl2: ['p.html'] });
+  for (const [platform, outcome] of [['linux-x64', 'FAIL'], ['macos-arm64', 'TIMEOUT'], ['windows-arm64', 'PASS']]) {
+    assert.equal(concludeRun(exp, [result('webgl2', 'p.html', outcome)], all, { platform }).ok, true, platform);
+  }
+});
+
+test('a SKIP entry skips its page only on its platforms, and an update leaves it alone', () => {
+  const exp = parseExpectations('webgl2 p.html SKIP [windows-arm64] # hangs');
+  const all = pages({ webgl2: ['p.html'] });
+  assert.deepEqual(selectPages(all, exp, { platform: 'windows-arm64' }).skipped, [{ suite: 'webgl2', path: 'p.html' }]);
+  assert.deepEqual(selectPages(all, exp, { platform: 'linux-arm64' }).skipped, []);
+  const run = concludeRun(exp, [result('webgl2', 'p.html', 'PASS')], all, { platform: 'windows-arm64', update: true });
+  assert.deepEqual(entryLines(run.written), ['webgl2 p.html SKIP [windows-arm64] # hangs']);
+});
+
+test('Update after a platform starts failing: the platform joins the entry with that outcome', () => {
+  const run = concludeRun(parseExpectations(X64), [result('webgl2', 'p.html', 'FAIL', 'new message')], pages({ webgl2: ['p.html'] }), {
+    platform: 'macos-arm64',
+    update: true,
+  });
+  assert.deepEqual(entryLines(run.written), ['webgl2 p.html FAIL [linux-x64 macos-arm64 windows-x64] # x64 only']);
+});
+
+test('an update with another outcome on an unlisted platform adds an entry for it alone', () => {
+  const run = concludeRun(parseExpectations(X64), [result('webgl2', 'p.html', 'CRASH')], pages({ webgl2: ['p.html'] }), {
+    platform: 'windows-arm64',
+    update: true,
+  });
+  assert.deepEqual(entryLines(run.written), [X64, 'webgl2 p.html CRASH [windows-arm64] # crashed']);
+});
+
+test('Update after a platform starts passing: the platform leaves the entry', () => {
+  const all = pages({ webgl2: ['p.html'] });
+  const once = concludeRun(parseExpectations(X64), [result('webgl2', 'p.html', 'PASS')], all, { platform: 'windows-x64', update: true });
+  assert.deepEqual(entryLines(once.written), ['webgl2 p.html FAIL [linux-x64] # x64 only']);
+  const twice = concludeRun(once.written, [result('webgl2', 'p.html', 'PASS')], all, { platform: 'linux-x64', update: true });
+  assert.deepEqual(entryLines(twice.written), []);
+});
+
+test('an update that completes a list writes the entry without platforms', () => {
+  const exp = parseExpectations('webgl2 p.html FAIL [linux-x64 linux-arm64 macos-arm64 windows-x64] # x');
+  const run = concludeRun(exp, [result('webgl2', 'p.html', 'FAIL')], pages({ webgl2: ['p.html'] }), { platform: 'windows-arm64', update: true });
+  assert.deepEqual(entryLines(run.written), ['webgl2 p.html FAIL # x']);
 });
 
 test('an --update run of whole suites removes stale entries; a filtered one keeps them', () => {
@@ -317,7 +405,12 @@ test('suite server serves files under the root, on loopback only, and refuses pa
 
 // --- Page runner ------------------------------------------------------------
 
-const TIMEOUT_S = 10;
+// Long enough that a page ending at once is clearly not waiting out the limit
+// on slow hosts: starting a page process takes about 5 s on Windows runners,
+// and over 20 s on a slow one when four start at once, and a host that collects
+// core dumps (systemd-coredump) takes about 5 s to let an aborted page process
+// exit.
+const TIMEOUT_S = 40;
 /** Pages that end without waiting must finish well inside the time limit. */
 const PROMPT_MS = (TIMEOUT_S * 1000) / 2;
 
@@ -350,7 +443,7 @@ async function runFixtures(pages, expectationsText, options = {}) {
 
 const pageOf = (report, suite, path) => report.suites[suite].pages.find((p) => p.path === path);
 
-test('page runner: outcomes, early errors, media, canvas shim, crashes, timeouts and harness errors', { timeout: 60_000 }, async () => {
+test('page runner: outcomes, early errors, media, canvas shim, crashes, timeouts and harness errors', { timeout: 240_000 }, async () => {
   const { ok, report, written } = await runFixtures(
     {
       webgl1: [
@@ -365,6 +458,12 @@ test('page runner: outcomes, early errors, media, canvas shim, crashes, timeouts
         'canvas-defaults.html',
         'context-2d.html',
         'image-2d.html',
+        'image-2d-jpeg.html',
+        'image-undecodable.html',
+        'image-icc-profile.html',
+        'image-bitmap-svg.html',
+        'image-src-change.html',
+        'image-upload-before-decode.html',
         'video.html',
         'video-frame.html',
         'messages.html',
@@ -382,7 +481,7 @@ test('page runner: outcomes, early errors, media, canvas shim, crashes, timeouts
         'abort-at-teardown.html',
         'missing.html',
       ],
-      webgl2: ['error-never-completes.html', 'webgl-version.html'],
+      webgl2: ['error-never-completes.html', 'webgl-version.html', 'frame-waits-for-gpu.html', 'frame-waits-for-gpu-worker.html'],
     },
     [
       'webgl1 fail-result.html FAIL # x',
@@ -398,6 +497,10 @@ test('page runner: outcomes, early errors, media, canvas shim, crashes, timeouts
   const outcome = (suite, path) => pageOf(report, suite, path)?.outcome;
 
   assert.equal(outcome('webgl1', 'pass.html'), 'PASS');
+  // Animation frames wait for queued GPU work: a fence from one frame is signaled in the next.
+  for (const page of ['frame-waits-for-gpu.html', 'frame-waits-for-gpu-worker.html']) {
+    assert.equal(outcome('webgl2', page), 'PASS', `${page}: ${pageOf(report, 'webgl2', page)?.message}`);
+  }
   assert.equal(pageOf(report, 'webgl1', 'pass.html').passed, 2);
   assert.equal(outcome('webgl1', 'fail-result.html'), 'FAIL');
   assert.equal(pageOf(report, 'webgl1', 'fail-result.html').message, 'expected 1, got 2');
@@ -432,6 +535,18 @@ test('page runner: outcomes, early errors, media, canvas shim, crashes, timeouts
   assert.equal(outcome('webgl1', 'context-2d.html'), 'PASS', pageOf(report, 'webgl1', 'context-2d.html').message);
   // Image drawn into a 2D canvas: natural size and decoded pixels.
   assert.equal(outcome('webgl1', 'image-2d.html'), 'PASS', pageOf(report, 'webgl1', 'image-2d.html').message);
+  // A JPEG drawn from its load handler reads back its pixels; load waits for the decode.
+  assert.equal(outcome('webgl1', 'image-2d-jpeg.html'), 'PASS', pageOf(report, 'webgl1', 'image-2d-jpeg.html').message);
+  // Undecodable bytes fire error and never load.
+  assert.equal(outcome('webgl1', 'image-undecodable.html'), 'PASS', pageOf(report, 'webgl1', 'image-undecodable.html').message);
+  // A JPEG's color profile applies in 2D drawing and is ignored by WebGL uploads.
+  assert.equal(outcome('webgl1', 'image-icc-profile.html'), 'PASS', pageOf(report, 'webgl1', 'image-icc-profile.html').message);
+  // An ImageBitmap from an SVG image element.
+  assert.equal(outcome('webgl1', 'image-bitmap-svg.html'), 'PASS', pageOf(report, 'webgl1', 'image-bitmap-svg.html').message);
+  // A new source on the same element uploads the new image, not a copy of the old one.
+  assert.equal(outcome('webgl1', 'image-src-change.html'), 'PASS', pageOf(report, 'webgl1', 'image-src-change.html').message);
+  // An upload before the decode finishes is not cached, and decode() waits for the pixels.
+  assert.equal(outcome('webgl1', 'image-upload-before-decode.html'), 'PASS', pageOf(report, 'webgl1', 'image-upload-before-decode.html').message);
   // A video that cannot load: play() rejects and error fires promptly.
   assert.equal(outcome('webgl1', 'video.html'), 'PASS', pageOf(report, 'webgl1', 'video.html').message);
   assert.ok(pageOf(report, 'webgl1', 'video.html').durationMs < PROMPT_MS);
@@ -475,7 +590,7 @@ test('page runner: outcomes, early errors, media, canvas shim, crashes, timeouts
   assert.equal(pageOf(report, 'webgl1', 'hang.html').passed, 1, 'counts survive a timeout');
   assert.equal(outcome('webgl1', 'abort.html'), 'CRASH');
   assert.equal(outcome('webgl1', 'abort-at-teardown.html'), 'CRASH');
-  assert.match(pageOf(report, 'webgl1', 'abort-at-teardown.html').message, /SIGABRT|code 3/);
+  assert.match(pageOf(report, 'webgl1', 'abort-at-teardown.html').message, /SIGABRT|code 3\b|code 134\b/);
 
   // Page setup fails: a harness error, not an outcome or an expectation.
   assert.equal(ok, false);

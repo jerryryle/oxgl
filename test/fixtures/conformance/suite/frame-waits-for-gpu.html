@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html><head><script src="harness.js"></script><script src="gpu-wait.js"></script></head><body>
+<script>
+// A canvas outside the document, which is never composited.
+var canvas = document.createElement("canvas");
+canvas.width = 512;
+canvas.height = 512;
+checkFrameWaitsForGpu(canvas.getContext("webgl2"), requestAnimationFrame, function (done) {
+  if (done) testPassed("previous frame's work is done");
+  else testFailed("previous frame's work is still queued");
+  finishTest();
+});
+</script>
+</body></html>

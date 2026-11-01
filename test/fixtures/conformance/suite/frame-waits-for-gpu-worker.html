@@ -1,0 +1,11 @@
+<!DOCTYPE html>
+<html><head><script src="harness.js"></script></head><body>
+<script>
+var worker = new Worker("frame-waits-for-gpu-worker.js");
+worker.onmessage = function (event) {
+  if (event.data === true) testPassed("worker's previous frame's work is done");
+  else testFailed("worker's previous frame's work is still queued");
+  finishTest();
+};
+</script>
+</body></html>
