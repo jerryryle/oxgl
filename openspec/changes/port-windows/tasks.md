@@ -2,7 +2,7 @@
 
 ## 1. Fixes
 
-- [x] 1.1 In `conformance/pool.mjs`, make `isNativeAbort` also accept exit code 134 on Windows, with a comment citing Node's `ExitCode::kAbort`. Make the abort-at-teardown assertion in `test/conformance-harness.test.mjs` accept `code 134`. Verify that `npm test` still passes on macOS. *(Done; the harness test's own limit also went from 10 to 20 s, since starting a page process takes about 5 s on both Windows runners and `type-error.html` overran the test's 'prompt' bound of half the limit (5.1 and 5.8 s in run 41211891400).)*
+- [x] 1.1 In `conformance/pool.mjs`, make `isNativeAbort` also accept exit code 134 on Windows, with a comment citing Node's `ExitCode::kAbort`. Make the abort-at-teardown assertion in `test/conformance-harness.test.mjs` accept `code 134`. Verify that `npm test` still passes on macOS. *(Done; the harness test's own limit also went from 10 to 20 s (later 40 s, after `pass.html` overran 20 s on `windows-2025` in jerryryle/oxgl#31's first run, with four page processes starting at once), since starting a page process takes about 5 s on both Windows runners and `type-error.html` overran the test's 'prompt' bound of half the limit (5.1 and 5.8 s in run 41211891400).)*
 - [x] 1.2 Add `.gitattributes` with `* text=auto eol=lf` and run `git add --renormalize .`, committing any file it changes with the attributes. Verify that `git ls-files --eol` reports no `i/crlf` file. *(Done: no tracked file had CRLF, so only `.gitattributes` is added.)*
 
 ## 2. Build-and-test survey
