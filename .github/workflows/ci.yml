@@ -373,9 +373,9 @@ jobs:
           key: conformance-suite-${{ hashFiles('conformance/suite.json') }}
       - run: npm ci
       - run: npm run build
-      # macos-15 runners are slow and variable: many-draw-calls went over 60 s
-      # between results there with three pages at once, so macOS gets a longer
-      # limit, which costs time only for pages that stop without finishing.
+      # macos-15 runners are slow and variable: passing pages went up to 53 s
+      # between results there, so macOS gets a longer limit, which costs time
+      # only for pages that stop without finishing.
       - run: |
           args=(--suite "$SUITE")
           [ "$RUNNER_OS" = macOS ] && args+=(--timeout 180)
