@@ -15,7 +15,7 @@ cancels the earlier one; runs on `main` are never cancelled.
 |---|---|---|
 | `workflow-lint` | Linux | actionlint, and zizmor with `.github/zizmor.yml` (every action pinned to a commit SHA, minimal permissions, no template injection) |
 | `check` | Linux x64 and arm64, macOS arm64, Windows x64 and arm64 | rustfmt, clippy (pedantic, warnings as errors), Rust tests, ESLint and tsc, native + TS build, Node tests with `OXGL_BACKEND=software`, then the packed packages installed into an empty project and rendered with (`scripts/pack.mjs`, `scripts/smoke-packed.mjs`) and, on Linux, that no library in the package needs glibc newer than 2.34 (`scripts/check-glibc.sh`); in a run that releases, the tarballs are uploaded as `packages-<runner>` |
-| `repo-checks` | Linux | the ANGLE pin check and the bump script's tests, dependency licenses and `THIRD_PARTY_NOTICES` |
+| `repo-checks` | Linux | the ANGLE pin check and the bump script's tests, ESLint and the tests of the results page builder, dependency licenses and `THIRD_PARTY_NOTICES` |
 | `node-range` | Linux arm64 | Node tests on Node 22.22.2 (the `engines` floor) and Node 26 |
 | `asan` | Linux arm64 and x64 | Rust tests under AddressSanitizer and LeakSanitizer |
 | `conformance` | Linux x64 and arm64, macOS arm64, Windows x64 and arm64 | both Khronos conformance suites with `OXGL_BACKEND=software`, judged against the `conformance/expectations.txt` entries that apply on each platform; each report is uploaded as `conformance-results-<runner>-<suite>` (see Conformance tests below) |
@@ -23,6 +23,8 @@ cancels the earlier one; runs on `main` are never cancelled.
 | `gpu` | self-hosted `oxgl-gpu` runner | Node tests on a real GPU; skipped unless the `OXGL_GPU_RUNNER` repository variable is `true` |
 | `ci` | Linux | succeeds only when every job above except `gpu` succeeded |
 | `release` | Linux | after `ci`, on `main` only, when npm doesn't have `package.json`'s version yet: publishes the run's tarballs (see Releases below) |
+| `results` | Linux | after `conformance` and `threejs`, even when they fail: builds the results page from their reports (or, for a page-only change, from the latest `main` run's) and uploads it as `results-page`; not part of `ci` (see Results page below) |
+| `pages` | Linux | on `main` only: publishes the page `results` built to GitHub Pages |
 | `merge-bump` | Linux | after `ci`, on a manual run of the `angle-bump` branch: merges the bump pull request if it is exactly the bot's change, and starts the run on `main` |
 
 `check` and `conformance` run on every supported platform (see the README).
@@ -42,6 +44,11 @@ Markdown, `openspec/`, `.claude/`, `assets/`, `LICENSE`, `.editorconfig` and the
 workflow linters' config. `ci` passes those skips and fails any other. Add a
 path to the list only if no build, lint or test step reads it; anything not
 listed, including a new directory, runs every job.
+
+A change to only the results page's own files (`scripts/results-page.html`,
+`scripts/results-page.mjs`, `test/results-page.test.mjs`), plus anything on the
+skip list, skips the same jobs: `repo-checks` lints and tests the builder, and
+`results` rebuilds the page from the latest `main` run's reports.
 
 ANGLE is never built here: its recipe and bundle releases live in
 [jerryryle/oxgl-angle](https://github.com/jerryryle/oxgl-angle) (see
@@ -103,6 +110,28 @@ These are done once, by the maintainer, in this order:
 
 The `npm` GitHub environment, which only `main` may deploy to, already exists.
 
+## Results page
+
+The [results page](https://jerryryle.github.io/oxgl/) is one table of every
+conformance page's and three.js example's result on each platform. Its fixed
+parts are in `scripts/results-page.html`; `scripts/results-page.mjs` fills in
+the rows from the runs' reports. The `results` job builds it on every run that
+runs the suites, and on `main` the `pages` job publishes it.
+
+- **Page-only changes.** A change to only the page's own files skips the full
+  build and suites, and rebuilds the page from the latest `main` run's reports.
+  The page then names both that run's commit and its own. Reports last 90 days:
+  if no `main` run in that time has them, the page is left as it was, and the
+  job log says so.
+- **Building it locally** from any run's artifacts:
+
+  ```sh
+  gh run download <run-id> -p 'conformance-results-*' -p threejs-results -D results
+  node scripts/results-page.mjs --commit "$(gh run view <run-id> --json headSha -q .headSha)" results results.html
+  ```
+
+  Then open `results.html` in a browser.
+
 ## Reproducing a job locally
 
 `check`:
@@ -128,6 +157,8 @@ local pack produces.
 ```sh
 python3 angle/scripts/check_pin.py
 python3 angle/scripts/test_bump.py
+npx eslint scripts/results-page.mjs test/results-page.test.mjs
+node --test test/results-page.test.mjs
 npm run lint:licenses
 ```
 

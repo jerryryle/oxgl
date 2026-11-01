@@ -58,17 +58,31 @@
   - A pull request run uploads a `results-page` artifact whose page opens and shows that run's results.
   - The `pages` job is skipped on the pull request.
   - A pull request that changes only a skip-listed file builds no page.
+
+  *(Implemented 2026-11-01, not yet run in CI.)*
+  - *Pins: `actions/upload-pages-artifact` v5.0.0 and `actions/deploy-pages` v5.0.1, both by commit SHA.*
+  - *Linters: actionlint and zizmor pass.*
+  - *Download pattern: checked against `download-artifact` v8.0.2's source. It filters with `Minimatch`, and `{conformance-results-*,threejs-results}` matches exactly the report artifacts. A pattern with no match downloads nothing, without failing.*
+  - *Local build: the documented steps build the page from run 41349671748.*
+  - *Still to verify: the pull request run, and the skip-only pull request.*
 - [ ] 3.2 Add page-only runs (design D7):
   - The `changes` job's `page` output, with `heavy=false` for page-only changes.
   - `npm ci`, ESLint on the page files and `node --test test/results-page.test.mjs` in `repo-checks`.
-  - In the `results` job: finding the latest `main` run with unexpired reports, downloading them with `run-id`, and passing `--commit` and `--page-commit` to the builder.
-  - The builder's `--page-commit` option and its meta line, with a test.
+  - In the `results` job: finding the latest completed `main` run (push or manual, from this repository) with unexpired reports, downloading them with `run-id`, and passing `--commit` and `--page-commit` to the builder.
+  - The builder's `--page-commit` option and its meta line, with a test. *(Done 2026-11-01, ahead of the CI parts, which are on hold: `buildPage` takes `pageCommit` and names it only when it differs from `commit`, tested in `test/results-page.test.mjs`.)*
 
   Verify:
   - The `changes` matching loop, run on sample file lists, reports page-only for a template-only change and a template-plus-README change, and not for a change that also touches `conformance/run.mjs`.
   - A page-only pull request run skips the build and test jobs, passes `ci`, and uploads a preview page naming the earlier `main` commit and its own.
   - With the run lookup pointed at a repository or branch with no reports, the job logs a notice and builds nothing.
   - actionlint and zizmor pass.
+
+  *(Implemented 2026-11-01, not yet run in CI.)*
+  - *Classification: the `changes` matching block, extracted from `ci.yml` and run on sample lists, reports page-only for template only, template plus README, and builder plus its test. It reports a full run for builder plus `conformance/run.mjs` and for another script, and neither for README only.*
+  - *Run lookup: it accepts only completed push or manual runs of this repository's own `main`. Run against `jerryryle/oxgl`, it skips the in-progress run 41349671748 and finds 41328696463 (`6a96d4e`). Against a repository with no reports, it reports found=false.*
+  - *Template script: a builder test compiles the template's inline script.*
+  - *repo-checks: its builder lint and test commands pass locally.*
+  - *Still to verify: the page-only pull request run in CI.*
 
 ## 4. README
 

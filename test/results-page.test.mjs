@@ -3,8 +3,9 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'nod
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { test } from 'node:test';
+import { Script } from 'node:vm';
 
-import { buildPage, cellOf, main, readReports } from '../scripts/results-page.mjs';
+import { buildPage, cellOf, main, readReports, TEMPLATE_PATH } from '../scripts/results-page.mjs';
 
 const PLATFORMS = ['linux-x64', 'linux-arm64', 'macos-arm64', 'windows-x64', 'windows-arm64'];
 
@@ -104,6 +105,17 @@ test('the page: rows, columns, marks, counts and missing reports', () => {
   assert.doesNotMatch(html, /<!-- results:/);
 });
 
+test('a page republished from earlier results names both commits', () => {
+  const reports = allPlatforms('webgl1', ['a.html']);
+  const link = (sha) => `<a href="https://github.com/jerryryle/oxgl/commit/${sha}"><code>${sha.slice(0, 7)}</code></a>`;
+  const republished = buildPage(reports, { commit: 'b31fde2aaaa', pageCommit: 'c0ffee1bbbb' });
+  assert.ok(republished.includes(`Results from oxgl commit ${link('b31fde2aaaa')}`));
+  assert.ok(republished.includes(` · page built at ${link('c0ffee1bbbb')}.</p>`));
+  // The same commit, or none, isn't named twice.
+  assert.doesNotMatch(buildPage(reports, { commit: 'b31fde2aaaa', pageCommit: 'b31fde2aaaa' }), /page built at/);
+  assert.doesNotMatch(buildPage(reports, { commit: 'b31fde2aaaa' }), /page built at/);
+});
+
 test('a suite with no report at all says so, without a table', () => {
   const html = buildPage(allPlatforms('webgl1', ['a.html']), { commit: 'abc' });
   const three = section(html, 'three.js examples');
@@ -140,12 +152,22 @@ test('the command reads reports from artifact directories and writes the page', 
     writeFileSync(join(dir, 'artifacts', 'unrelated.json'), '{}');
     assert.equal(readReports(join(dir, 'artifacts')).length, 6);
     const out = join(dir, 'site', 'index.html');
-    main(['--commit', 'abc1234', join(dir, 'artifacts'), out]);
+    main(['--commit', 'abc1234', '--page-commit', 'def5678', join(dir, 'artifacts'), out]);
     assert.match(readFileSync(out, 'utf8'), /<h2>WebGL 1 conformance<\/h2>/);
+    assert.match(readFileSync(out, 'utf8'), /page built at <a href="[^"]*def5678"><code>def5678<\/code><\/a>/);
     assert.throws(() => main([join(dir, 'artifacts'), out]), /usage: .*--commit/);
     writeFileSync(join(dir, 'artifacts', 'linux-x64-webgl1', 'conformance-results.json'), '{"platform": "linux-x64", "suit');
     assert.throws(() => readReports(join(dir, 'artifacts')), /linux-x64-webgl1[/\\]conformance-results\.json is not a readable report/);
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('the template\'s inline script compiles', () => {
+  // Nothing else checks it: ESLint and these tests cover the builder only.
+  const template = readFileSync(TEMPLATE_PATH, 'utf8');
+  const scripts = [...template.matchAll(/<script>([\s\S]*?)<\/script>/g)].map((m) => m[1]);
+  assert.equal(scripts.length, 1);
+  assert.doesNotThrow(() => new Script(scripts[0], { filename: 'results-page.html' }));
+  assert.throws(() => new Script(`${scripts[0]}\n}`, { filename: 'results-page.html' }), SyntaxError);
 });
