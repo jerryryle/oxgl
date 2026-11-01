@@ -3,7 +3,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Triggers
-CI SHALL run on every pull request targeting `main`, every push to `main`, and every manual run (`workflow_dispatch`) on any branch, and SHALL cancel superseded runs for the same pull request, or for manual runs on the same branch other than `main`. The jobs that build or test oxgl SHALL be skipped when every changed file is on the repository's skip list, which SHALL name only files no build, test or lint step reads, and SHALL run otherwise, including when the changed files cannot be determined. Workflow lint and the repository checks SHALL run on every change.
+CI SHALL run on every pull request targeting `main` and every push to `main`, and SHALL cancel superseded runs for the same pull request. The jobs that build or test oxgl SHALL be skipped when every changed file is on the repository's skip list, which SHALL name only files no build, test or lint step reads, and SHALL run otherwise, including when the changed files cannot be determined. Workflow lint and the repository checks SHALL run on every change.
 
 #### Scenario: Pull request opened
 - **WHEN** a pull request targeting `main` is opened or updated
@@ -33,11 +33,14 @@ CI SHALL run on every pull request targeting `main`, every push to `main`, and e
 - **WHEN** a push to `main` changes only files on the list
 - **THEN** the jobs that build or test oxgl are skipped; when it changes any other file, or the pushed range cannot be compared, every job runs
 
+## ADDED Requirements
+
+### Requirement: Manual runs
+CI SHALL also run when started manually (`workflow_dispatch`) on any branch, running every job against the branch's head commit, as when the changed files cannot be determined. A manual run SHALL cancel an earlier one still in progress on the same branch, except on `main`, where every run completes.
+
 #### Scenario: Manual run
 - **WHEN** CI is started manually on a branch
 - **THEN** every job runs against the branch's head commit, the `ci` check is reported on that commit, and an earlier manual run still in progress on that branch is cancelled unless the branch is `main`
-
-## ADDED Requirements
 
 ### Requirement: Packed packages are smoke-tested
 On each supported platform, CI SHALL pack `oxgl` and that platform's package with `npm pack`, and install both tarballs into an empty project outside the repository. It SHALL then import the package there and render with `backend: 'software'`. A failure SHALL fail the `ci` check. On `main`, when the version is not yet on npm, each platform job SHALL keep its platform tarball as a run artifact for the release, and exactly one designated job SHALL also keep its `oxgl` tarball.

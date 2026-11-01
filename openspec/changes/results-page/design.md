@@ -84,6 +84,15 @@ How the builder reads the reports:
   - **Steps:** `actions/deploy-pages`. Both new actions are pinned to commit SHAs, per `.github/zizmor.yml`.
 - **What stays the same:** `permissions: contents: read` at the workflow level. Pull request runs build and upload the page, but the `pages` job's condition keeps them from deploying.
 
+### D7. Page-only changes reuse the last full run's reports
+- **Classification.** The `changes` job gains a `page` output. It's `true` when every changed file is on the skip list or is a results page file (`scripts/results-page.html`, `scripts/results-page.mjs`, `test/results-page.test.mjs`), and at least one page file changed. Such a change also sets `heavy=false`, so the build and test jobs skip and `ci` accepts the skips, as for a documentation-only change. A change that touches anything else, such as the runners, is not page-only.
+- **Checking the builder.** `repo-checks` runs `npm ci`, ESLint on the three page files, and `node --test test/results-page.test.mjs` on every change. These need no native build, and they make the builder's checks part of the required `ci` check for page-only changes. On a full run they repeat what `check` covers, at a cost of seconds.
+- **Finding the reports.** The `results` job runs when `heavy` or `page` is true, with `actions: read`. On a full run it downloads this run's artifacts, as before.
+  - **On a page-only run:** a step lists recent `ci.yml` runs on `main` with `gh run list`, newest first. It takes the first one with an unexpired `conformance-results-*` artifact (`gh api …/actions/runs/<id>/artifacts`), and records its id and head commit. `actions/download-artifact` then fetches that run's `conformance-results-*` and `threejs-results` with `run-id` and `github-token`.
+  - **No such run:** artifacts last 90 days, the repository maximum. If no `main` run in that window uploaded reports, the job writes a notice and builds nothing, and `pages` doesn't run.
+- **Labelling.** The builder takes `--commit`, the results' commit (that run's head), and `--page-commit` (`$GITHUB_SHA`). It names the second only when it differs.
+- **Deploying.** Unchanged: the `pages` job deploys whatever `results` built, on `main` only.
+
 ### D6. Building the page locally
 `CONTRIBUTING.md` documents three steps:
 1. Download a run's artifacts with `gh run download <run-id> -p 'conformance-results-*' -p threejs-results -D results`.
@@ -97,7 +106,8 @@ No Rust or native code changes, so the unsafe, panic, handle and ArrayBuffer rul
 ## Risks / Trade-offs
 
 - **[Two `main` runs finish out of order, so an older run's page is deployed after a newer one]** → Accepted. The page shows the older results until the next deploy, and the header names its commit.
-- **[A push that only changes skip-listed files doesn't rebuild the page]** → Intended: the page keeps describing the last run that ran the suites, whose commit it names.
+- **[A push that only changes skip-listed files doesn't rebuild the page]** → Intended: the page keeps describing the last run that ran the suites, whose commit it names. A change to the page's own files rebuilds it from that run's reports (D7).
+- **[A page-only push finds no reports younger than 90 days]** → Accepted: the published page stays as it was, and the job log says why. Any full run on `main` brings it back.
 - **[The examples suite fills one column]** → Accepted (D1). "not run" says so in every other cell.
 - **[A long message makes a native tooltip unwieldy]** → Hover text is capped at 1,000 characters. The full text stays in the run's artifacts.
 

@@ -23,6 +23,7 @@ CI runs both Khronos WebGL conformance suites on five platforms and three.js's o
   - A `results` job builds the page after the `conformance` and `threejs` jobs, even when they fail, and uploads it as an artifact.
   - On `main` only, a `pages` job deploys it with `actions/upload-pages-artifact` and `actions/deploy-pages`. The `pages: write` and `id-token: write` permissions are scoped to that job.
   - Pull request runs never deploy.
+  - A change to only the page's own files (template, builder, builder tests) skips the full build and suites. The builder is linted and tested in the repository checks, and the page is rebuilt from the latest `main` run's reports. On `main` it's republished. Reports expire after 90 days; with none left, nothing is republished.
 - **README** links the published page.
 
 Changed from the original brief, by decision: the three.js section uses the three.js examples suite (`npm run threejs`, the `threejs` job), not the nine `node:test` cases in `test/threejs.test.mjs`. That suite already writes a JSON report and gives a reason for every expected failure, so no JUnit output from `npm test` is needed. It runs only on Linux arm64, so its other columns show "not run".

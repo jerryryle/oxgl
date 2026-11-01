@@ -58,6 +58,17 @@
   - A pull request run uploads a `results-page` artifact whose page opens and shows that run's results.
   - The `pages` job is skipped on the pull request.
   - A pull request that changes only a skip-listed file builds no page.
+- [ ] 3.2 Add page-only runs (design D7):
+  - The `changes` job's `page` output, with `heavy=false` for page-only changes.
+  - `npm ci`, ESLint on the page files and `node --test test/results-page.test.mjs` in `repo-checks`.
+  - In the `results` job: finding the latest `main` run with unexpired reports, downloading them with `run-id`, and passing `--commit` and `--page-commit` to the builder.
+  - The builder's `--page-commit` option and its meta line, with a test.
+
+  Verify:
+  - The `changes` matching loop, run on sample file lists, reports page-only for a template-only change and a template-plus-README change, and not for a change that also touches `conformance/run.mjs`.
+  - A page-only pull request run skips the build and test jobs, passes `ci`, and uploads a preview page naming the earlier `main` commit and its own.
+  - With the run lookup pointed at a repository or branch with no reports, the job logs a notice and builds nothing.
+  - actionlint and zizmor pass.
 
 ## 4. README
 
@@ -71,3 +82,4 @@
 
 - Archive this change after 5.1 passes, and verify `npx openspec validate --specs --strict` afterwards.
 - `npm-release` also edits `.github/workflows/ci.yml` and `CONTRIBUTING.md`. Whichever change lands second rebases onto the other, and keeps both changes' jobs in `ci.yml`.
+- Archive `npm-release` before this change: this change's continuous-integration delta modifies "Triggers" as `npm-release` leaves it, including its `assets/` scenarios.

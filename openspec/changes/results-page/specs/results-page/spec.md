@@ -111,12 +111,23 @@ The page SHALL be a single HTML file with its styles and script inline, and SHAL
 - **WHEN** a failure message contains `</script>` or HTML tags
 - **THEN** the page still renders, and the hover reason shows the text literally
 
+### Requirement: Section summaries
+Each section SHALL say which suite it covers, on which platforms it runs, how many tests it has, how many have a result that isn't PASS, and how many results were unexpected.
+
+#### Scenario: WebGL 1 summary
+- **WHEN** the webgl1 reports list 971 pages, 3 of them with a known non-PASS result and none unexpected
+- **THEN** the webgl1 section says it covers the Khronos WebGL 1.0 suite on every platform: 971 tests, 3 with a result that isn't PASS, 0 unexpected
+
 ### Requirement: The page explains itself
-The page SHALL say what oxgl is and what the page shows, and SHALL link to the oxgl repository, to both expectations files, and to the oxgl commit the CI run tested. It SHALL name when the results were produced (the newest report's timestamp), the conformance suite commit and the pinned three.js release. Each section SHALL say which suite it covers, on which platforms it runs, how many tests it has, and how many have a result that isn't PASS.
+The page SHALL say what oxgl is and what the page shows, and SHALL link to the oxgl repository, to both expectations files, and to the oxgl commit whose CI run produced the results, naming the page's own commit too when it differs. It SHALL name when the results were produced (the newest report's timestamp), the conformance suite commit and the pinned three.js release.
 
 #### Scenario: A reader arrives from a link
 - **WHEN** someone opens the page without knowing oxgl
 - **THEN** its opening text says what oxgl is and what the table shows, and links to `https://github.com/jerryryle/oxgl`
+
+#### Scenario: Republished from earlier results
+- **WHEN** a page-only change at commit `c0ffee1` rebuilds the page from the reports of a run on commit `b31fde2`
+- **THEN** the page names `b31fde2` as the commit its results come from, and says the page itself was built at `c0ffee1`
 
 #### Scenario: Results commit
 - **WHEN** the page was built from a CI run that tested oxgl commit `b31fde2`
