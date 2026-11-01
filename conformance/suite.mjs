@@ -1,6 +1,7 @@
 // The pinned Khronos suite (suite.json) and its local copy under
 // .cache/conformance/<sha>/: a blobless, sparse, depth-1 checkout of sdk/tests
 // at the pinned commit, fetched once and reused while the pin is unchanged.
+// ensureCheckout does the same for any repository and paths.
 import { execFileSync } from 'node:child_process';
 import { existsSync, mkdirSync, readdirSync, readFileSync, renameSync, rmSync, statSync } from 'node:fs';
 import { dirname, join } from 'node:path';
@@ -18,9 +19,18 @@ export function readPin() {
  * when the cache has no copy.
  */
 export function ensureSuite(pin = readPin(), cacheDir = join(REPO_ROOT, '.cache', 'conformance')) {
+  return join(ensureCheckout(pin, cacheDir, { paths: ['/sdk/tests/'], marker: 'sdk/tests/00_test_list.txt' }), 'sdk', 'tests');
+}
+
+/**
+ * Returns `<cacheDir>/<commit>`, a sparse checkout of `paths` at
+ * `pin.commit` from `pin.repository`, fetching it first when the cache has
+ * no complete copy: one with the file `marker`.
+ */
+export function ensureCheckout(pin, cacheDir, { paths, marker }) {
   const checkout = join(cacheDir, pin.commit);
-  const tests = join(checkout, 'sdk', 'tests');
-  if (existsSync(join(tests, '00_test_list.txt'))) return tests;
+  const complete = () => existsSync(join(checkout, marker));
+  if (complete()) return checkout;
 
   // Fetch into a scratch directory of this process's own and rename it into
   // place, so an interrupted fetch never looks like a complete copy and two
@@ -29,22 +39,22 @@ export function ensureSuite(pin = readPin(), cacheDir = join(REPO_ROOT, '.cache'
   removeAbandoned(cacheDir, pin.commit);
   mkdirSync(scratch, { recursive: true });
   const git = (...args) => execFileSync('git', args, { cwd: scratch, stdio: ['ignore', 'ignore', 'inherit'] });
-  console.error(`conformance: fetching ${pin.repository} at ${pin.commit}`);
+  console.error(`fetching ${pin.repository} at ${pin.commit}`);
   git('init', '--quiet');
   git('remote', 'add', 'origin', pin.repository);
-  git('sparse-checkout', 'set', '--no-cone', '/sdk/tests/');
+  git('sparse-checkout', 'set', '--no-cone', ...paths);
   git('fetch', '--quiet', '--depth=1', '--filter=blob:none', 'origin', pin.commit);
   git('checkout', '--quiet', 'FETCH_HEAD');
-  // A copy without its test list is incomplete (edited or partly deleted).
-  if (existsSync(checkout) && !existsSync(join(tests, '00_test_list.txt'))) rmSync(checkout, { recursive: true, force: true });
+  // A copy without its marker is incomplete (edited or partly deleted).
+  if (existsSync(checkout) && !complete()) rmSync(checkout, { recursive: true, force: true });
   try {
     renameSync(scratch, checkout);
   } catch (error) {
     // Another run finished first; its copy is the same commit.
-    if (!existsSync(join(tests, '00_test_list.txt'))) throw error;
+    if (!complete()) throw error;
   }
   rmSync(scratch, { recursive: true, force: true });
-  return tests;
+  return checkout;
 }
 
 /** A fetch takes seconds; a scratch directory this old is abandoned whatever its pid now names. */

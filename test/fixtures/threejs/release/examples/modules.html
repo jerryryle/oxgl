@@ -1,0 +1,33 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<title>modules</title>
+<script type="importmap">
+{ "imports": { "lib": "./lib/index.js", "lib/": "./lib/", "lib/special.js": "./lib/other.js" } }
+</script>
+</head>
+<body>
+<script type="module">
+import { solid } from './lib/solid.js';
+import { name } from 'lib';
+import { b } from 'lib/b.js';
+import { special } from 'lib/special.js';
+import { fromA } from './lib/cycle-a.js';
+
+const check = (ok, what) => {
+  if (!ok) console.error(`modules: ${what}`);
+};
+check(name === 'index', 'a bare specifier resolves through the import map');
+check(b === 'b', 'a prefixed specifier resolves through its prefix');
+check(special === 'other', 'an exact key wins over a prefix');
+check(fromA() === 'a sees b, b sees a', 'cyclic imports link');
+const { dynamic } = await import('lib/dynamic.js');
+check(dynamic === 'dynamic', 'dynamic import resolves through the import map');
+check(import.meta.url === document.URL, 'an inline module has the document URL');
+check(globalThis === window && [] instanceof window.Array && new Float32Array(1) instanceof window.Float32Array, 'modules run in the page realm');
+check(document.querySelector('canvas') === null, 'the module runs before anything has drawn');
+solid();
+</script>
+</body>
+</html>

@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>below-header</title><style>body { margin: 0; background-color: #fff; } #container { position: absolute; top: 70px; bottom: 0px; width: 100%; }</style></head>
+<body><div id="container"></div>
+<script type="module">
+import { clear } from './lib/clear.js';
+// Sized from its container, as webgl_postprocessing_fxaa.
+const container = document.getElementById('container');
+clear(container, container.offsetWidth, container.offsetHeight, [0, 0, 1, 1]);
+</script>
+</body>
+</html>

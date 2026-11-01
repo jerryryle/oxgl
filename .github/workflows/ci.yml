@@ -34,7 +34,7 @@ env:
 
 jobs:
   # Whether the jobs that build or test oxgl (check, node-range, asan,
-  # conformance, gpu) are needed. heavy is false only when every changed file
+  # conformance, threejs, gpu) are needed. heavy is false only when every changed file
   # is on the skip list below. The list may name only files that no build,
   # lint or test step reads; anything else, including a new path, runs every
   # job. When the changed files can't be determined (a new branch, or the
@@ -390,12 +390,64 @@ jobs:
           name: conformance-results-${{ matrix.os }}-${{ matrix.suite }}
           path: conformance-results.json
 
+  # three.js r186's own WebGL examples, each frame judged against the
+  # release's reference screenshot and threejs/expectations.txt (openspec
+  # threejs-examples). Runs alongside the conformance jobs; uploads its report
+  # and failing examples' images whether it passes or fails.
+  threejs:
+    needs: changes
+    if: needs.changes.outputs.heavy == 'true'
+    runs-on: ubuntu-24.04-arm
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      # The runner refuses to start without ffmpeg, as the conformance runner does.
+      - name: Install ffmpeg
+        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          key: cargo-ubuntu-24.04-arm-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cargo/oxgl-angle
+          key: angle-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('angle/bundles.toml') }}
+      # The release is fetched by its pinned commit; the cache is keyed by the pin.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: .cache/threejs
+          key: threejs-release-${{ hashFiles('threejs/pin.json') }}
+      - run: npm ci
+      - run: npm run build
+      - run: npm run threejs
+        env:
+          OXGL_BACKEND: software
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: always()
+        with:
+          name: threejs-results
+          path: |
+            threejs-results.json
+            threejs-output/
+          if-no-files-found: ignore
+
   # The one check branch protection requires. The jobs that build or test oxgl
   # may be skipped only when `changes` found them unneeded; any other skip (an
   # upstream failure, a broken `if:`) fails the check.
   ci:
     if: always()
-    needs: [changes, workflow-lint, check, repo-checks, node-range, asan, conformance]
+    needs: [changes, workflow-lint, check, repo-checks, node-range, asan, conformance, threejs]
     runs-on: ubuntu-24.04
     steps:
       - name: Require every needed job to succeed
@@ -407,4 +459,4 @@ jobs:
             | all(to_entries[];
                 .value.result == "success"
                 or (.value.result == "skipped" and $skippable
-                    and (.key | IN("check", "node-range", "asan", "conformance"))))'
+                    and (.key | IN("check", "node-range", "asan", "conformance", "threejs"))))'

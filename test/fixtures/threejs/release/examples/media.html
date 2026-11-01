@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>media</title></head>
+<body>
+<script type="module">
+import { solid } from './lib/solid.js';
+const query = matchMedia('( color-gamut: p3 )');
+query.addEventListener('change', () => console.error('change fired'));
+query.addListener(() => {});
+if (query.matches !== false || query.media !== '( color-gamut: p3 )') console.error('matchMedia answered ' + query.matches + ' for ' + query.media);
+solid();
+</script>
+</body>
+</html>

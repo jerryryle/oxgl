@@ -19,7 +19,7 @@ import { listPages, versionAtLeast } from '../conformance/lists.mjs';
 import { pageURL, runPages } from '../conformance/pool.mjs';
 import { main, runConformance } from '../conformance/run.mjs';
 import { startServer } from '../conformance/server.mjs';
-import { ensureSuite } from '../conformance/suite.mjs';
+import { ensureCheckout, ensureSuite } from '../conformance/suite.mjs';
 
 const FIXTURES = join(import.meta.dirname, 'fixtures', 'conformance');
 
@@ -747,6 +747,22 @@ test('Suite fetched by pinned commit: sparse copy, reused, abandoned and incompl
   }
 });
 
+test('Checkout with its own paths and marker: only those paths, reused once the marker exists', () => {
+  const dir = mkdtempSync(join(tmpdir(), 'oxgl-conformance-'));
+  try {
+    const pin = fixtureRepository(dir);
+    const cache = join(dir, 'cache');
+    mkdirSync(join(cache, pin.commit), { recursive: true }); // no marker: replaced
+    const checkout = ensureCheckout(pin, cache, { paths: ['/README.md'], marker: 'README.md' });
+    assert.equal(checkout, join(cache, pin.commit));
+    assert.ok(existsSync(join(checkout, 'README.md')));
+    assert.ok(!existsSync(join(checkout, 'sdk')), 'only the named paths are checked out');
+    assert.equal(ensureCheckout({ ...pin, repository: 'file:///nonexistent' }, cache, { paths: ['/README.md'], marker: 'README.md' }), checkout);
+  } finally {
+    rmSync(dir, { recursive: true, force: true });
+  }
+});
+
 const LIMIT_MS = 3000;
 
 test('Long page that keeps reporting: the time limit counts from the last result', async () => {
@@ -768,8 +784,41 @@ test('Long page that keeps reporting: the time limit counts from the last result
     const [hang] = await run('hang.html');
     assert.equal(hang.outcome, 'TIMEOUT');
     assert.equal(hang.message, `no new result for ${LIMIT_MS / 1000} s`);
+    assert.equal(hang.limit, 'idle');
     assert.equal(hang.passed, 1);
   } finally {
     await server.close();
   }
+});
+
+test('Total limit: a page that keeps reporting is timed out once it has run that long', async () => {
+  const server = await startServer(join(FIXTURES, 'suite'));
+  try {
+    const [steady] = await runPages([{ suite: 'webgl1', path: 'steady.html', expected: 'PASS' }], {
+      origin: server.origin,
+      timeoutMs: LIMIT_MS,
+      totalMs: 1500,
+      script: join(FIXTURES, 'faulty-page.mjs'),
+    });
+    assert.equal(steady.outcome, 'TIMEOUT');
+    assert.equal(steady.limit, 'total');
+    assert.equal(steady.message, 'ran 1.5 s in total');
+    assert.ok(steady.durationMs < LIMIT_MS, `ran ${steady.durationMs} ms`);
+  } finally {
+    await server.close();
+  }
+});
+
+test('page processes get the arguments and Node options the runner asks for', async () => {
+  const [record] = await runPages([{ suite: 'webgl1', path: 'pass.html', expected: 'PASS' }], {
+    origin: 'http://127.0.0.1:1',
+    timeoutMs: LIMIT_MS,
+    script: join(FIXTURES, 'argv-page.mjs'),
+    args: (page, endEarly) => [page.path, String(endEarly)],
+    execArgv: ['--experimental-vm-modules'],
+  });
+  assert.equal(record.outcome, 'PASS');
+  const { args, execArgv } = JSON.parse(record.message);
+  assert.deepEqual(args, ['pass.html', 'false']);
+  assert.ok(execArgv.includes('--experimental-vm-modules'), JSON.stringify(execArgv));
 });

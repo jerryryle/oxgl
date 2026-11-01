@@ -40,6 +40,14 @@ runner's canvas package (node-canvas at the time; now `@napi-rs/canvas`).
   one software context at startup, before starting other threads. The cause is
   ANGLE's `ScopedVkLoaderEnvironment`; this entry goes away once the pinned
   ANGLE stops doing it (tracked in `angle/README.md`, "Known upstream issues").
+- **SwiftShader can get the depth of a near-clipped triangle wrong.** With the
+  software backend, a large triangle that the near plane clips can be drawn
+  with depths that are too near, hiding geometry in front of it. A typical
+  case is a ground plane of two triangles that passes under the camera, which
+  then hides objects standing on it. GPU backends are unaffected. Subdividing
+  the large geometry (for example `new THREE.PlaneGeometry(6, 6, 32, 32)`
+  instead of `PlaneGeometry(6, 6)`) avoids it. Tracked in `angle/README.md`,
+  "Known upstream issues".
 - **Each thread that uses oxgl leaves about 72 bytes behind.** ANGLE allocates
   per-thread state on a thread's first EGL call and intentionally never frees
   it, so a worker thread that created a context leaks those bytes when it
@@ -101,6 +109,23 @@ const gl = createContext({ width: 256, height: 256, webgl2: true });
 const renderer = new THREE.WebGLRenderer({ canvas: gl.canvas, context: gl });
 renderer.setSize(256, 256, false); // false: a HeadlessCanvas has no style
 ```
+
+`npm run threejs` renders three.js's own WebGL examples (release r186) through
+oxgl and compares each frame with the reference screenshot the release keeps
+for it (see `CONTRIBUTING.md`). On Linux arm64 with the software backend, of
+the 354 examples it runs (377 less 23 that three.js's own test also skips):
+
+- 228 match their reference within three.js's threshold (0.1% of pixels);
+- 67 differ by up to 5% of pixels: 63 at line, polygon and text edges, where
+  SwiftShader rasterizes differently from the GPU that made the reference,
+  and 4 by HTML drawn over the canvas, which the runner does not render;
+- 59 do not match. 51 of these hit limits of the test runner rather than
+  oxgl: remote assets it refuses, pages drawn with CSS, SVG or a 2D canvas,
+  views placed by CSS flow layout, HTML content around the canvas, module
+  workers, or no `AudioContext`. 8 differ for known reasons: SwiftShader (3,
+  including the near-clipped triangle under "Known issues"), random noise
+  (3), more compressed texture formats in SwiftShader, and a wall-clock
+  timer. None is unexplained.
 
 ### Backends
 
@@ -212,6 +237,7 @@ npm run build      # build the native addon (release) and the TypeScript package
 npm run lint       # rustfmt, clippy (pedantic, warnings as errors), ESLint, tsc, license check
 npm test           # node:test suites in test/ (run after build)
 npm run conformance   # Khronos WebGL conformance suites, judged against conformance/expectations.txt
+npm run threejs    # three.js's WebGL examples, judged against threejs/expectations.txt
 npm run notices    # regenerate THIRD_PARTY_NOTICES after changing Rust dependencies
 cargo test --workspace --exclude oxgl-node   # Rust tests (oxgl-node is tested from Node)
 ```

@@ -17,10 +17,12 @@ to `main`. A newer push to a pull request cancels its earlier run.
 | `node-range` | Linux arm64 | Node tests on Node 22.22.2 (the `engines` floor) and Node 26 |
 | `asan` | Linux arm64 and x64 | Rust tests under AddressSanitizer and LeakSanitizer |
 | `conformance` | Linux x64 and arm64, macOS arm64, Windows x64 and arm64 | both Khronos conformance suites with `OXGL_BACKEND=software`, judged against the `conformance/expectations.txt` entries that apply on each platform; each report is uploaded as `conformance-results-<runner>-<suite>` (see Conformance tests below) |
+| `threejs` | Linux arm64 | three.js's own WebGL examples with `OXGL_BACKEND=software`, each frame judged against its reference screenshot and `threejs/expectations.txt`; the report and failing examples' images are uploaded as `threejs-results` (see three.js examples below) |
 | `gpu` | self-hosted `oxgl-gpu` runner | Node tests on a real GPU; skipped unless the `OXGL_GPU_RUNNER` repository variable is `true` |
 | `ci` | Linux | succeeds only when every job above except `gpu` succeeded |
 
 `check` and `conformance` run on every supported platform (see the README).
+`threejs` runs on Linux arm64, where its expectations were seeded.
 `node-range` runs on Linux arm64 only: N-API makes the addon independent of the
 Node version. The README lists the conformance pages whose results differ by
 platform, and why.
@@ -30,7 +32,7 @@ Branches → branch protection rule for `main` → Require status checks → `ci
 Jobs can then be added or renamed without changing that setting.
 
 `workflow-lint` and `repo-checks` run on every change. The jobs that build or
-test oxgl (`check`, `node-range`, `asan`, `conformance`, `gpu`) are skipped
+test oxgl (`check`, `node-range`, `asan`, `conformance`, `threejs`, `gpu`) are skipped
 when every changed file is on the skip list in `ci.yml`'s `changes` job:
 Markdown, `openspec/`, `.claude/`, `LICENSE`, `.editorconfig` and the
 workflow linters' config. `ci` passes those skips and fails any other. Add a
@@ -190,3 +192,84 @@ where it helps. Moving a page to `SKIP` is a manual edit.
 
 Every run writes `conformance-results.json` with each page's outcome, result
 counts, duration and first failure message or error.
+
+## three.js examples
+
+`npm run threejs` runs three.js's own WebGL examples against the built package
+(`npm run build` first) and compares each rendered frame with the reference
+screenshot the release keeps for it. The release is the commit pinned in
+`threejs/pin.json` (r186). The first run fetches its `build/`, `examples/` and
+`test/e2e/` into `.cache/threejs/` (about 290 MB to download, 720 MB on disk;
+about a minute), and later runs reuse that copy until the pin changes. The
+suite is every `examples/*.html` except `index.html` and the WebGPU examples
+(`webgpu_*`). The `three` devDependency, which the benchmarks and unit tests
+use, is separate from the pin.
+
+Each example runs in jsdom in its own Node process, with the same window the
+conformance runner gives its pages (oxgl contexts, images, workers, video), an
+800×500 viewport at device pixel ratio 1, element sizes and offsets from CSS
+lengths (`width`, `height`, and `top`, `right`, `bottom`, `left` for
+absolutely positioned elements, but no flow layout), a `matchMedia` that
+matches nothing, and its `<script type="module">` run as ES modules through
+its import map. Requests are served from the
+checkout; `http:` and `https:` requests to any other origin are refused and
+named in the report, so examples that load remote assets fail. Every example
+follows the sequence of three.js's `test/e2e/puppeteer.js`, using the
+release's own `deterministic-injection.js` (seeded `Math.random`, frozen
+clock, held animation frames) and `clean-page.js`:
+
+1. wait until no request has been in flight for 1 s, and for videos;
+2. wait 1 s per MB served, at most 30 s, for parsing;
+3. release one animation frame, and wait up to 5 s for it;
+4. build the viewport: start from the body's background, read each WebGL
+   canvas's drawing buffer as it holds it, and composite it as a browser
+   does (premultiplied or not, by its context) at its place: its parent's
+   origin, with canvases that share an origin side by side in document
+   order. Then halve the frame to 400×250;
+5. compare it with `examples/screenshots/<example>.jpg`: a pixel differs when
+   its RGB distance exceeds 0.1 of the maximum, and the frame matches when at
+   most 0.1% of its pixels differ (the example's tolerance).
+
+An escaped error, a `console.error` (three.js reports shader errors that way)
+or a failed request fails the example even when its frame matches, as in
+upstream's test. A page without a WebGL canvas, or with one past the
+viewport, fails with a message saying so. HTML and CSS content around or
+behind the canvases is not drawn.
+
+`threejs/expectations.txt` lists every example that is not expected to pass,
+one per line as `<example> <OUTCOME> # <reason>`, where OUTCOME is `FAIL`,
+`TIMEOUT`, `CRASH`, `SKIP` or `DIFF <p>%`. A `DIFF` entry is a tolerance: the
+example passes while at most p% of its pixels differ (0.1 < p <= 5). It is for
+frames that differ from Chrome's only by rasterization noise, so a regression
+past the tolerance still fails. A run fails on any difference from the file,
+as the conformance run does; an example listed as `FAIL` or `DIFF` that now
+matches within 0.1% must lose its entry.
+
+```sh
+OXGL_BACKEND=software npm run threejs                              # every example
+OXGL_BACKEND=software npm run threejs -- --filter webgl_shadowmap   # examples whose name contains this
+OXGL_BACKEND=software npm run threejs -- --filter webgl_shadowmap --update   # rewrite their entries
+```
+
+Other options: `--include-skipped`, `--jobs <n>` (default: as for the
+conformance run), `--timeout <seconds>`, how long an example may go without
+progress (default 60; each finished request and each step above counts), and
+`--total-timeout <seconds>`, how long it may run in all (default 300, upstream's
+network timeout).
+
+`--update` rewrites the entries of the examples that ran. An example whose only
+fault is an image difference of at most 5% gets `DIFF` at that percentage,
+rounded up to a whole percent; a larger difference is written as `FAIL` with
+its percentage. An existing `DIFF` is kept while its example stays within it,
+removed once the example matches within 0.1%, and never raised: an example
+beyond its tolerance is written as `FAIL`. Review the diff. Triage each new
+`FAIL`, `TIMEOUT` and `CRASH` to name its cause: an oxgl defect, ANGLE or
+SwiftShader, or a runner gap (no flow layout or HTML rendering, module
+workers are not supported, remote assets are refused).
+
+Every run writes `threejs-results.json`, with each example's outcome, the
+percentage of differing pixels, duration, the time limit it reached for a
+`TIMEOUT`, and its first error or refused request. For every example that did
+not pass, `threejs-output/` holds `<example>-actual.png`, `-expected.png` and
+`-diff.png` (differing pixels in red). Compare with CI on Linux arm64 under
+`OXGL_BACKEND=software`; other platforms' SwiftShader can render differently.

@@ -42,7 +42,8 @@
     "bench": "node bench/run.mjs",
     "conformance": "node conformance/run.mjs",
     "notices": "node scripts/notices.mjs",
-    "test": "node --test \"test/**/*.test.mjs\""
+    "test": "node --test \"test/**/*.test.mjs\"",
+    "threejs": "node threejs/run.mjs"
   },
   "devDependencies": {
     "@eslint/js": "10.0.1",

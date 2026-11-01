@@ -1,0 +1,12 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>polling</title></head>
+<body>
+<script type="module">
+import { solid } from './lib/solid.js';
+// Never idle: a request every 200 ms, so only the total limit ends it.
+setInterval(() => fetch('lib/solid.js'), 200);
+solid();
+</script>
+</body>
+</html>

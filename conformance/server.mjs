@@ -31,10 +31,26 @@ const TYPES = {
   '.wasm': 'application/wasm',
 };
 
-/** Starts serving `root`; resolves to `{ origin, close }`. */
-export async function startServer(root) {
+/**
+ * Starts serving `root`; resolves to `{ origin, close, activity }`.
+ * `activity()` gives the requests in flight, the bytes served and when a
+ * request last started or finished; `onResponse(req, res)` is called as each
+ * finishes.
+ */
+export async function startServer(root, { onResponse } = {}) {
   const base = resolve(root);
+  let inFlight = 0;
+  let bytes = 0;
+  let lastChange = performance.now();
   const server = createServer((req, res) => {
+    inFlight += 1;
+    lastChange = performance.now();
+    res.once('close', () => {
+      inFlight -= 1;
+      bytes += res.statusCode === 200 && req.method !== 'HEAD' ? Number(res.getHeader('content-length') ?? 0) : 0;
+      lastChange = performance.now();
+      onResponse?.(req, res);
+    });
     const file = resolveFile(base, req.url ?? '/');
     if (file === undefined) {
       res.writeHead(403).end();
@@ -70,6 +86,7 @@ export async function startServer(root) {
   return {
     origin: `http://127.0.0.1:${port}`,
     close: () => new Promise((done) => server.close(() => done(undefined))),
+    activity: () => ({ inFlight, bytes, lastChange }),
   };
 }
 
