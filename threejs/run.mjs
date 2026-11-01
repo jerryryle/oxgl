@@ -127,6 +127,8 @@ export async function runThreejs({
       ...records.map((r) => ({
         name: r.path,
         expected: expectedOf(r.path),
+        // For the results page (openspec results-page).
+        reason: applying.get(keyOf(SUITE, r.path))?.reason ?? null,
         outcome: r.outcome ?? 'HARNESS_ERROR',
         diffPercent: r.extra?.diffPercent ?? null,
         durationMs: r.durationMs,
@@ -137,7 +139,7 @@ export async function runThreejs({
         refused: r.extra?.refused ?? null,
         contextErrors: r.contextErrors ?? [],
       })),
-      ...selection.skipped.map((s) => ({ name: s.path, expected: 'SKIP', outcome: 'SKIP' })),
+      ...selection.skipped.map((s) => ({ name: s.path, expected: 'SKIP', reason: applying.get(keyOf(SUITE, s.path))?.reason ?? null, outcome: 'SKIP' })),
     ],
     unexpected: verdict.unexpected.map((u) => ({ name: u.path, expected: u.expected, outcome: u.outcome, diffPercent: u.diffPercent ?? null })),
     stale: verdict.stale.map((e) => ({ name: e.path, outcome: e.outcome })),

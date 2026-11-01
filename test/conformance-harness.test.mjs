@@ -11,8 +11,10 @@ import { test } from 'node:test';
 import {
   concludeRun,
   formatExpectations,
+  hostPlatform,
   normalizeReason,
   parseExpectations,
+  PLATFORMS,
   selectPages,
 } from '../conformance/expectations.mjs';
 import { listPages, versionAtLeast } from '../conformance/lists.mjs';
@@ -643,6 +645,22 @@ test('Report after a failed run: the regressed page\'s failure message is in the
   assert.equal(ok, false);
   assert.deepEqual(report.unexpected, [{ suite: 'webgl1', path: 'fail-result.html', expected: 'PASS', outcome: 'FAIL' }]);
   assert.equal(pageOf(report, 'webgl1', 'fail-result.html').message, 'expected 1, got 2');
+});
+
+test('Report entries record the reason of the expectation that applied', async () => {
+  const other = PLATFORMS.find((p) => p !== hostPlatform());
+  const { report } = await runFixtures(
+    { webgl1: ['fail-result.html', 'pass.html', 'skipped.html'] },
+    [
+      'webgl1 fail-result.html FAIL # known: the fixture fails',
+      `webgl1 pass.html FAIL [${other}] # only on another platform`,
+      'webgl1 skipped.html SKIP # not run here',
+    ].join('\n'),
+  );
+  assert.equal(pageOf(report, 'webgl1', 'fail-result.html').reason, 'known: the fixture fails');
+  // An entry limited to another platform doesn't apply, so there's no reason.
+  assert.equal(pageOf(report, 'webgl1', 'pass.html').reason, null);
+  assert.deepEqual(pageOf(report, 'webgl1', 'skipped.html'), { path: 'skipped.html', expected: 'SKIP', reason: 'not run here', outcome: 'SKIP' });
 });
 
 test('page URLs carry the suite\'s WebGL version', () => {

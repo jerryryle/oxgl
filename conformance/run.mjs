@@ -103,10 +103,14 @@ export async function runConformance({
         const skipped = selection.skipped.filter((s) => s.suite === suite);
         const counts = { PASS: 0, FAIL: 0, TIMEOUT: 0, CRASH: 0, SKIP: skipped.length, HARNESS_ERROR: 0 };
         for (const r of ran) counts[r.outcome ?? 'HARNESS_ERROR'] += 1;
+        // The reason of the expectation that applied on this platform, for
+        // the results page (openspec results-page).
+        const reasonOf = (path) => applying.get(keyOf(suite, path))?.reason ?? null;
         const entries = [
           ...ran.map((r) => ({
             path: r.path,
             expected: r.expected,
+            reason: reasonOf(r.path),
             outcome: r.outcome ?? 'HARNESS_ERROR',
             passed: r.passed ?? 0,
             failed: r.failed ?? 0,
@@ -116,7 +120,7 @@ export async function runConformance({
             error: r.error ?? null,
             contextErrors: r.contextErrors ?? [],
           })),
-          ...skipped.map((s) => ({ path: s.path, expected: 'SKIP', outcome: 'SKIP' })),
+          ...skipped.map((s) => ({ path: s.path, expected: 'SKIP', reason: reasonOf(s.path), outcome: 'SKIP' })),
         ];
         return [suite, { counts, pages: entries }];
       }),

@@ -29,7 +29,10 @@ and `CONTRIBUTING.md`.
 Supported and tested: Linux x64 and Linux arm64 (glibc), macOS arm64, Windows
 x64 and Windows arm64. Each has a pinned ANGLE bundle, and CI runs the Rust and
 Node tests and both Khronos conformance suites on each with the software
-backend. Conformance results differ from Linux arm64 only in these pages, which
+backend. The [results page](https://jerryryle.github.io/oxgl/) shows every
+conformance page's and three.js example's result on each platform from the
+latest CI run on `main`, with the reason for each one that doesn't pass.
+Conformance results differ from Linux arm64 only in these pages, which
 `conformance/expectations.txt` lists for the platforms they apply to:
 
 - On x64 (Linux and Windows), 18 deqp pages that render to 32-bit integer

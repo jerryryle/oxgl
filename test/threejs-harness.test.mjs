@@ -455,3 +455,11 @@ test('Default parallelism: the command uses the conformance default and records 
   await assert.rejects(threejsMain(['--jobs', '0']), /--jobs must be a positive integer/);
   await assert.rejects(threejsMain(['--total-timeout', '0']), /--total-timeout must be a positive number/);
 });
+
+test('Report entries record the reason of the expectation that applied', async () => {
+  const { report } = await command(['solid', 'console-error', 'skipped'], 'console-error FAIL # known: logs a shader error\nskipped SKIP # not run here\n');
+  const entry = (name) => report.examples.find((e) => e.name === name);
+  assert.equal(entry('console-error').reason, 'known: logs a shader error');
+  assert.equal(entry('solid').reason, null);
+  assert.deepEqual(entry('skipped'), { name: 'skipped', expected: 'SKIP', reason: 'not run here', outcome: 'SKIP' });
+});
