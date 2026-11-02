@@ -38,7 +38,7 @@ env:
 
 jobs:
   # Whether the jobs that build or test oxgl (build, check, node-test, asan,
-  # conformance, threejs, gpu) are needed. heavy is false only when every changed file
+  # conformance, threejs) are needed. heavy is false only when every changed file
   # is on the skip list below or is a results page file. The list may name only
   # files that no build, lint or test step reads; anything else, including a new
   # path, runs every job. When the changed files can't be determined (a new
@@ -79,7 +79,9 @@ jobs:
             heavy=false
             while IFS= read -r f; do
               case "$f" in
-                *.md|openspec/*|.claude/*|assets/*|LICENSE|.editorconfig|.github/dependabot.yml|.github/zizmor.yml|.github/actionlint.yaml) ;;
+                # Markdown that pack.mjs reads, so it is not documentation.
+                scripts/platform-README.md) heavy=true; break ;;
+                *.md|openspec/*|.claude/*|assets/*|LICENSE|.editorconfig|.github/dependabot.yml|.github/zizmor.yml) ;;
                 scripts/results-page.html|scripts/results-page.mjs|test/results-page.test.mjs) page=true ;;
                 *) heavy=true; break ;;
               esac
@@ -403,28 +405,6 @@ jobs:
           args=()
           [ "$BUILD_STD" = true ] && args+=(-Zbuild-std)
           cargo +"$ASAN_NIGHTLY" test --workspace --exclude oxgl-node --locked "${args[@]}" --target "$TARGET"
-
-  # Extension point: GPU coverage on a self-hosted runner, enabled by setting
-  # the OXGL_GPU_RUNNER repository variable to 'true'. Not required by `ci`.
-  # It tests the build's packages; the runner may be any supported platform,
-  # so it downloads every platform's and the unpack script picks the host's.
-  gpu:
-    needs: [changes, build]
-    if: vars.OXGL_GPU_RUNNER == 'true' && needs.changes.outputs.heavy == 'true'
-    runs-on: [self-hosted, oxgl-gpu]
-    steps:
-      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          persist-credentials: false
-      - run: npm ci
-      # A path in the workspace, so the step needs no shell of a given kind.
-      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
-        with:
-          pattern: "{package-main,packages-*}"
-          path: packages
-          merge-multiple: true
-      - run: node scripts/unpack-packages.mjs packages
-      - run: npm test
 
   # Both Khronos conformance suites on every supported platform, judged against
   # the conformance/expectations.txt entries that apply there (openspec
