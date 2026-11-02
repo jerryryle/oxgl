@@ -1,5 +1,6 @@
 // Packs the host's platform package (@oxgl-js/<platform>: the addon, its
-// ANGLE libraries and THIRD_PARTY_NOTICES from dist/) and the main package,
+// ANGLE libraries and THIRD_PARTY_NOTICES from dist/, and a README from
+// scripts/platform-README.md) and the main package,
 // @oxgl-js/oxgl, into <out-dir> (openspec release, "Packages released
 // together"). The platform manifest is generated from the host's entry in
 // `napi.targets`; the main manifest gains `optionalDependencies` on every
@@ -17,17 +18,39 @@ import { npm as runNpm } from './npm.mjs';
 
 const SCOPE = '@oxgl-js';
 
-// Target triple → the Node `process.platform`, `process.arch` and libc it runs on.
-const OS = { linux: 'linux', darwin: 'darwin', windows: 'win32' };
+// Target triple → the Node `process.platform`, `process.arch` and libc it
+// runs on, and the OS's name in the README.
+const OS = {
+  linux: { platform: 'linux', label: 'Linux' },
+  darwin: { platform: 'darwin', label: 'macOS' },
+  windows: { platform: 'win32', label: 'Windows' },
+};
 const CPU = { x86_64: 'x64', aarch64: 'arm64' };
 
 function hostOf(triple) {
   // <cpu>-<vendor>-<os>[-<abi>]: x86_64-unknown-linux-gnu, aarch64-apple-darwin.
   const [cpu, , os, abi] = triple.split('-');
-  const platform = OS[os];
   const arch = CPU[cpu];
-  if (platform === undefined || arch === undefined) throw new Error(`pack: unsupported target ${triple}`);
-  return { platform, arch, libc: abi === 'gnu' ? 'glibc' : undefined };
+  if (OS[os] === undefined || arch === undefined) throw new Error(`pack: unsupported target ${triple}`);
+  return { ...OS[os], arch, libc: abi === 'gnu' ? 'glibc' : undefined };
+}
+
+/**
+ * The platform package's README: scripts/platform-README.md with the package
+ * name and the platform's label filled in (openspec release, "Platform
+ * packages point to the main package").
+ */
+function readme({ name, label, arch, libc }) {
+  const values = { package: name, platform: `${label} ${arch}${libc === undefined ? '' : ` (${libc})`}` };
+  let text = readFileSync(new URL('platform-README.md', import.meta.url), 'utf8');
+  for (const [key, value] of Object.entries(values)) {
+    const placeholder = `{{${key}}}`;
+    if (!text.includes(placeholder)) throw new Error(`pack: scripts/platform-README.md has no ${placeholder}`);
+    text = text.replaceAll(placeholder, () => value);
+  }
+  const left = text.match(/\{\{[^}\n]*\}*/g);
+  if (left !== null) throw new Error(`pack: scripts/platform-README.md has unknown placeholders ${left.join(', ')}`);
+  return text;
 }
 
 /** Runs npm in `cwd` and returns its stdout. */
@@ -51,6 +74,7 @@ const targets = root.napi.targets.map((triple) => {
 const hostTarget = platformString(process.platform, process.arch);
 const target = targets.find((t) => t.name === `${SCOPE}/${hostTarget}`);
 if (target === undefined) throw new Error(`pack: ${hostTarget} is not in napi.targets`);
+const platformReadme = readme(target);
 
 const stage = mkdtempSync(join(tmpdir(), 'oxgl-pack-'));
 try {
@@ -64,6 +88,7 @@ try {
     cpSync(from, join(platformDir, file), { recursive: true });
   }
   cpSync('LICENSE', join(platformDir, 'LICENSE'));
+  writeFileSync(join(platformDir, 'README.md'), platformReadme);
   writeFileSync(
     join(platformDir, 'package.json'),
     `${JSON.stringify(
