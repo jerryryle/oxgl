@@ -37,7 +37,7 @@ env:
   ZIZMOR_VERSION: "1.31.1"
 
 jobs:
-  # Whether the jobs that build or test oxgl (check, node-range, asan,
+  # Whether the jobs that build or test oxgl (build, check, node-test, asan,
   # conformance, threejs, gpu) are needed. heavy is false only when every changed file
   # is on the skip list below or is a results page file. The list may name only
   # files that no build, lint or test step reads; anything else, including a new
@@ -52,8 +52,8 @@ jobs:
       heavy: ${{ steps.match.outputs.heavy }}
       page: ${{ steps.match.outputs.page }}
       # Whether this run releases: a run on main whose version npm doesn't
-      # have yet (openspec release). Only then do the check jobs keep their
-      # packages and the release job run.
+      # have yet (openspec release). Only then do the build jobs keep their
+      # packages for a week and the release job run.
       release: ${{ steps.release.outputs.release || 'false' }}
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
@@ -114,8 +114,104 @@ jobs:
       - name: zizmor
         env:
           GH_TOKEN: ${{ github.token }}
-        run: zizmor --config .github/zizmor.yml .github/workflows
+        run: zizmor --config .github/zizmor.yml .github/workflows .github/actions
 
+  # Builds and packs oxgl once per platform (openspec continuous-integration,
+  # "Each platform is built once per run"). Every job that tests oxgl's
+  # addon or JavaScript downloads these packages and unpacks them into dist/
+  # with scripts/unpack-packages.mjs, so the tests and the release use the
+  # same files.
+  build:
+    needs: changes
+    if: needs.changes.outputs.heavy == 'true'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04-arm, ubuntu-24.04, macos-15, windows-2025, windows-11-arm]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+      - name: Install the pinned Rust toolchain
+        run: rustup toolchain install
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          cache: npm
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: |
+            ~/.cargo/registry/index
+            ~/.cargo/registry/cache
+            ~/.cargo/git/db
+            target
+          # No restore-keys: falling back to an older entry would carry its
+          # stale target/ forward, so the cache would only ever grow. Its own
+          # key: check builds other profiles, and sharing a key would let
+          # whichever job saves first own the entry.
+          key: cargo-build-${{ matrix.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+      # oxgl-sys/build.rs verifies the bundle's digest when it downloads it.
+      # A restored cache entry is used as-is. Cache entries a pull request
+      # writes are visible only to that pull request, so only runs on main can
+      # write one that other branches restore.
+      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          path: ~/.cargo/oxgl-angle
+          key: angle-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('angle/bundles.toml') }}
+      - run: npm ci
+      - run: npm run build
+      # Installs the packed packages into an empty project and renders with
+      # them (openspec continuous-integration, "Packed packages are
+      # smoke-tested"). Every leg packs its own main tarball, the same
+      # JavaScript on every platform; one leg, ubuntu-24.04-arm, keeps it as
+      # the package-main artifact, so the run has exactly one, which every
+      # test job and the release use. Tarballs are named exactly: the main
+      # one, oxgl-js-oxgl-<version>.tgz, matches any oxgl-js-* pattern meant
+      # for the platform ones.
+      - name: Pack and smoke-test the packages
+        id: pack
+        env:
+          OS: ${{ matrix.os }}
+        run: |
+          node scripts/pack.mjs "$RUNNER_TEMP/packages"
+          node scripts/smoke-packed.mjs "$RUNNER_TEMP/packages"
+          version="$(jq -r .version package.json)"
+          platform="$(node --input-type=module -e "import { platformString } from './dist/resolve-native.js'; console.log(platformString(process.platform, process.arch))")"
+          main="$RUNNER_TEMP/packages/oxgl-js-oxgl-$version.tgz"
+          if [ "$OS" = ubuntu-24.04-arm ]; then
+            mkdir "$RUNNER_TEMP/main" && mv "$main" "$RUNNER_TEMP/main/"
+          else
+            rm "$main"
+          fi
+          echo "platform-tarball=$RUNNER_TEMP/packages/oxgl-js-$platform-$version.tgz" >> "$GITHUB_OUTPUT"
+      - name: Require glibc 2.34 at most (Linux)
+        if: runner.os == 'Linux'
+        env:
+          TARBALL: ${{ steps.pack.outputs.platform-tarball }}
+        run: scripts/check-glibc.sh "$TARBALL"
+      # A release keeps them long enough to rerun a failed release job.
+      # Otherwise long enough for "Re-run failed jobs" after a weekend: it
+      # reruns only the failed test jobs, not this one.
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: packages-${{ matrix.os }}
+          path: ${{ runner.temp }}/packages/*.tgz
+          if-no-files-found: error
+          retention-days: ${{ needs.changes.outputs.release == 'true' && 7 || 3 }}
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: matrix.os == 'ubuntu-24.04-arm'
+        with:
+          name: package-main
+          path: ${{ runner.temp }}/main/*.tgz
+          if-no-files-found: error
+          retention-days: ${{ needs.changes.outputs.release == 'true' && 7 || 3 }}
+
+  # Lint and the Rust tests on every platform. Needs no addon build, so it
+  # starts at once.
   check:
     needs: changes
     if: needs.changes.outputs.heavy == 'true'
@@ -131,16 +227,6 @@ jobs:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # The conformance runner, and its harness tests, decode videos with ffmpeg.
-      - name: Install ffmpeg
-        env:
-          HOMEBREW_NO_AUTO_UPDATE: "1"
-        run: |
-          case "$RUNNER_OS" in
-            Linux) sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg ;;
-            macOS) brew install ffmpeg ;;
-            Windows) choco install -y --no-progress ffmpeg ;;
-          esac
       - name: Install the pinned Rust toolchain
         run: rustup toolchain install
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
@@ -154,13 +240,8 @@ jobs:
             ~/.cargo/registry/cache
             ~/.cargo/git/db
             target
-          # No restore-keys: falling back to an older entry would carry its
-          # stale target/ forward, so the cache would only ever grow.
-          key: cargo-${{ matrix.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
-      # oxgl-sys/build.rs verifies the bundle's digest when it downloads it.
-      # A restored cache entry is used as-is. Cache entries a pull request
-      # writes are visible only to that pull request, so only runs on main can
-      # write one that other branches restore.
+          key: cargo-check-${{ matrix.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
+      # The Rust tests render with SwiftShader through the pinned bundle.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: ~/.cargo/oxgl-angle
@@ -169,40 +250,6 @@ jobs:
       - run: npm run lint:rust
       - run: npm run lint:js
       - run: cargo test --workspace --exclude oxgl-node --locked
-      - run: npm run build
-      - run: npm test
-        env:
-          OXGL_BACKEND: software
-      # Installs the packed packages into an empty project and renders with
-      # them (openspec continuous-integration, "Packed packages are
-      # smoke-tested"). Every leg packs its own main tarball; only
-      # ubuntu-24.04-arm keeps it, so the release has exactly one. Tarballs are
-      # named exactly: the main one, oxgl-js-oxgl-<version>.tgz, matches any
-      # oxgl-js-* pattern meant for the platform ones.
-      - name: Pack and smoke-test the packages
-        id: pack
-        env:
-          OS: ${{ matrix.os }}
-        run: |
-          node scripts/pack.mjs "$RUNNER_TEMP/packages"
-          node scripts/smoke-packed.mjs "$RUNNER_TEMP/packages"
-          version="$(jq -r .version package.json)"
-          platform="$(node --input-type=module -e "import { platformString } from './dist/resolve-native.js'; console.log(platformString(process.platform, process.arch))")"
-          [ "$OS" = ubuntu-24.04-arm ] || rm "$RUNNER_TEMP/packages/oxgl-js-oxgl-$version.tgz"
-          echo "platform-tarball=$RUNNER_TEMP/packages/oxgl-js-$platform-$version.tgz" >> "$GITHUB_OUTPUT"
-      - name: Require glibc 2.34 at most (Linux)
-        if: runner.os == 'Linux'
-        env:
-          TARBALL: ${{ steps.pack.outputs.platform-tarball }}
-        run: scripts/check-glibc.sh "$TARBALL"
-      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
-        if: needs.changes.outputs.release == 'true'
-        with:
-          name: packages-${{ matrix.os }}
-          path: ${{ runner.temp }}/packages/*.tgz
-          if-no-files-found: error
-          # Long enough to rerun a failed release job.
-          retention-days: 7
 
   # Host-independent checks, run once.
   repo-checks:
@@ -243,49 +290,41 @@ jobs:
           fallback: none
       - run: npm run lint:licenses
 
-  # Both ends of `engines`. N-API makes the addon independent of the Node
-  # version, so Linux alone covers it. The build tooling needs a newer Node
-  # than the engines floor, so build on 24 and test on each version.
-  node-range:
-    needs: changes
+  # The Node test suite with the build's packages, on every platform on Node
+  # 24, and on Linux arm64 also on both ends of `engines`. N-API makes the
+  # addon independent of the Node version, so Linux alone covers the range.
+  node-test:
+    needs: [changes, build]
     if: needs.changes.outputs.heavy == 'true'
     strategy:
       fail-fast: false
       matrix:
-        node: [22.22.2, 26]
-    runs-on: ubuntu-24.04-arm
+        os: [ubuntu-24.04-arm, ubuntu-24.04, macos-15, windows-2025, windows-11-arm]
+        node: [24]
+        include:
+          - os: ubuntu-24.04-arm
+            node: 22.22.2
+          - os: ubuntu-24.04-arm
+            node: 26
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      # The conformance runner, and its harness tests, decode videos with ffmpeg.
-      - name: Install ffmpeg
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
-      - name: Install the pinned Rust toolchain
-        run: rustup toolchain install
-      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
-        with:
-          node-version: 24
-          cache: npm
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-          # Its own key: this job builds only release, and sharing check's key
-          # would let whichever job saves first own the entry.
-          key: cargo-node-range-${{ runner.arch }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cargo/oxgl-angle
-          key: angle-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('angle/bundles.toml') }}
-      - run: npm ci
-      - run: npm run build
+      # The conformance runner's harness tests decode videos with ffmpeg.
+      - uses: ./.github/actions/install-ffmpeg
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: ${{ matrix.node }}
+          cache: npm
+      - run: npm ci
+      # The run's main package and this platform's (see build).
+      - uses: ./.github/actions/use-packages
+        with:
+          runner: ${{ matrix.os }}
       - run: npm test
         env:
           OXGL_BACKEND: software
@@ -367,17 +406,24 @@ jobs:
 
   # Extension point: GPU coverage on a self-hosted runner, enabled by setting
   # the OXGL_GPU_RUNNER repository variable to 'true'. Not required by `ci`.
+  # It tests the build's packages; the runner may be any supported platform,
+  # so it downloads every platform's and the unpack script picks the host's.
   gpu:
-    needs: changes
+    needs: [changes, build]
     if: vars.OXGL_GPU_RUNNER == 'true' && needs.changes.outputs.heavy == 'true'
     runs-on: [self-hosted, oxgl-gpu]
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
-      - run: rustup toolchain install
       - run: npm ci
-      - run: npm run build
+      # A path in the workspace, so the step needs no shell of a given kind.
+      - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+        with:
+          pattern: "{package-main,packages-*}"
+          path: packages
+          merge-multiple: true
+      - run: node scripts/unpack-packages.mjs packages
       - run: npm test
 
   # Both Khronos conformance suites on every supported platform, judged against
@@ -385,7 +431,7 @@ jobs:
   # conformance-testing). Each platform and suite runs in parallel and uploads
   # its report whether it passes or fails.
   conformance:
-    needs: changes
+    needs: [changes, build]
     if: needs.changes.outputs.heavy == 'true'
     strategy:
       fail-fast: false
@@ -401,40 +447,23 @@ jobs:
         with:
           persist-credentials: false
       # The conformance runner decodes videos with ffmpeg.
-      - name: Install ffmpeg
-        env:
-          HOMEBREW_NO_AUTO_UPDATE: "1"
-        run: |
-          case "$RUNNER_OS" in
-            Linux) sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg ;;
-            macOS) brew install ffmpeg ;;
-            Windows) choco install -y --no-progress ffmpeg ;;
-          esac
-      - name: Install the pinned Rust toolchain
-        run: rustup toolchain install
+      - uses: ./.github/actions/install-ffmpeg
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-          key: cargo-${{ matrix.os }}-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cargo/oxgl-angle
-          key: angle-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('angle/bundles.toml') }}
-      # The suite is fetched by its pinned commit; the cache is keyed by the pin.
+      # The suite is fetched by its pinned commit, without line-ending
+      # conversion; the cache is keyed by the pin. `-lf`: entries saved before
+      # that may hold converted copies.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .cache/conformance
-          key: conformance-suite-${{ hashFiles('conformance/suite.json') }}
+          key: conformance-suite-lf-${{ hashFiles('conformance/suite.json') }}
       - run: npm ci
-      - run: npm run build
+      # The run's main package and this platform's (see build).
+      - uses: ./.github/actions/use-packages
+        with:
+          runner: ${{ matrix.os }}
       # macos-15 runners are slow and variable: passing pages went up to 53 s
       # between results there, so macOS gets a longer limit, which costs time
       # only for pages that stop without finishing.
@@ -452,53 +481,52 @@ jobs:
           name: conformance-results-${{ matrix.os }}-${{ matrix.suite }}
           path: conformance-results.json
 
-  # three.js r186's own WebGL examples, each frame judged against the
-  # release's reference screenshot and threejs/expectations.txt (openspec
+  # three.js r186's own WebGL examples on every supported platform, each frame
+  # judged against the release's reference screenshot and the
+  # threejs/expectations.txt entries that apply there (openspec
   # threejs-examples). Runs alongside the conformance jobs; uploads its report
   # and failing examples' images whether it passes or fails.
   threejs:
-    needs: changes
+    needs: [changes, build]
     if: needs.changes.outputs.heavy == 'true'
-    runs-on: ubuntu-24.04-arm
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [ubuntu-24.04-arm, ubuntu-24.04, macos-15, windows-2025, windows-11-arm]
+    runs-on: ${{ matrix.os }}
+    defaults:
+      run:
+        shell: bash
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
       # The runner refuses to start without ffmpeg, as the conformance runner does.
-      - name: Install ffmpeg
-        run: sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg
-      - name: Install the pinned Rust toolchain
-        run: rustup toolchain install
+      - uses: ./.github/actions/install-ffmpeg
       - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: |
-            ~/.cargo/registry/index
-            ~/.cargo/registry/cache
-            ~/.cargo/git/db
-            target
-          key: cargo-ubuntu-24.04-arm-${{ hashFiles('rust-toolchain.toml', 'Cargo.lock') }}
-      - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          path: ~/.cargo/oxgl-angle
-          key: angle-${{ runner.os }}-${{ runner.arch }}-${{ hashFiles('angle/bundles.toml') }}
-      # The release is fetched by its pinned commit; the cache is keyed by the pin.
+      # The release is fetched by its pinned commit, without line-ending
+      # conversion; the cache is keyed by the pin. `-lf`: entries saved before
+      # that may hold converted copies.
       - uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
         with:
           path: .cache/threejs
-          key: threejs-release-${{ hashFiles('threejs/pin.json') }}
+          key: threejs-release-lf-${{ hashFiles('threejs/pin.json') }}
       - run: npm ci
-      - run: npm run build
+      # The run's main package and this platform's (see build).
+      - uses: ./.github/actions/use-packages
+        with:
+          runner: ${{ matrix.os }}
       - run: npm run threejs
         env:
           OXGL_BACKEND: software
+      # Artifact names must be unique within a run, hence the platform suffix.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
-          name: threejs-results
+          name: threejs-results-${{ matrix.os }}
           path: |
             threejs-results.json
             threejs-output/
@@ -509,7 +537,7 @@ jobs:
   # upstream failure, a broken `if:`) fails the check.
   ci:
     if: always()
-    needs: [changes, workflow-lint, check, repo-checks, node-range, asan, conformance, threejs]
+    needs: [changes, workflow-lint, build, check, repo-checks, node-test, asan, conformance, threejs]
     runs-on: ubuntu-24.04
     steps:
       - name: Require every needed job to succeed
@@ -521,16 +549,16 @@ jobs:
             | all(to_entries[];
                 .value.result == "success"
                 or (.value.result == "skipped" and $skippable
-                    and (.key | IN("check", "node-range", "asan", "conformance", "threejs"))))'
+                    and (.key | IN("build", "check", "node-test", "asan", "conformance", "threejs"))))'
 
   # Publishes a version npm doesn't have yet, from the tarballs this run's
-  # check jobs packed and smoke-tested (openspec release). Trusted publishing:
+  # build jobs packed and smoke-tested and its test jobs ran (openspec release). Trusted publishing:
   # npm accepts this job's OIDC token for the `npm` environment, which only
   # main may deploy to, so no npm token exists. A rerun publishes only what a
   # failed run left out.
   release:
-    needs: [changes, check, ci]
-    if: needs.changes.outputs.release == 'true' && needs.check.result == 'success' && needs.ci.result == 'success'
+    needs: [changes, build, ci]
+    if: needs.changes.outputs.release == 'true' && needs.build.result == 'success' && needs.ci.result == 'success'
     runs-on: ubuntu-24.04
     environment: npm
     # Serializes overlapping runs on main; never cancel a publish.
@@ -552,7 +580,7 @@ jobs:
           registry-url: https://registry.npmjs.org
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         with:
-          pattern: packages-*
+          pattern: "{package-main,packages-*}"
           path: packages
           merge-multiple: true
       - run: node scripts/release.mjs packages
@@ -658,12 +686,12 @@ jobs:
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         if: needs.changes.outputs.page != 'true'
         with:
-          pattern: "{conformance-results-*,threejs-results}"
+          pattern: "{conformance-results-*,threejs-results*}"
           path: reports
       - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
         if: needs.changes.outputs.page == 'true' && steps.source.outputs.found == 'true'
         with:
-          pattern: "{conformance-results-*,threejs-results}"
+          pattern: "{conformance-results-*,threejs-results*}"
           path: reports
           run-id: ${{ steps.source.outputs.run-id }}
           github-token: ${{ github.token }}

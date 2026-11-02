@@ -5,3 +5,9 @@ rules:
       # Every action, first-party included, is pinned to a full commit SHA.
       policies:
         "*": hash-pin
+  # It asks for GitHub's `$/...` form (July 2026) for this repository's own
+  # actions, which actionlint, up to at least v1.7.12, rejects as an action
+  # without a ref (rhysd/actionlint#711). Re-enable it, and switch to `$/`,
+  # once an actionlint release accepts that form.
+  self-repository:
+    disable: true

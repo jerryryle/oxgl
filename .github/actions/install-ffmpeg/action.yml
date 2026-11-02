@@ -1,0 +1,17 @@
+# ffmpeg and ffprobe, which the conformance and three.js runners, and the
+# conformance harness tests, use to decode videos.
+name: Install ffmpeg
+description: Installs ffmpeg with the runner OS's package manager.
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        HOMEBREW_NO_AUTO_UPDATE: "1"
+      run: |
+        case "$RUNNER_OS" in
+          Linux) sudo apt-get update && sudo apt-get install -y --no-install-recommends ffmpeg ;;
+          macOS) brew install ffmpeg ;;
+          Windows) choco install -y --no-progress ffmpeg ;;
+          *) echo "::error::no ffmpeg install for $RUNNER_OS"; exit 1 ;;
+        esac

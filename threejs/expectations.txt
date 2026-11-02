@@ -51,7 +51,8 @@ webgl_buffergeometry_lines DIFF 1% # rasterization: 0.26% of pixels differ
 webgl_buffergeometry_lines_indexed DIFF 1% # rasterization: 0.16% of pixels differ
 webgl_buffergeometry_points DIFF 2% # rasterization: 1.73% of pixels differ
 webgl_buffergeometry_points_interleaved DIFF 2% # rasterization: 1.70% of pixels differ
-webgl_camera_logarithmicdepthbuffer DIFF 2% # runner: the HTML labels and split border over the canvases are not composited (1.73% of pixels differ)
+webgl_camera_logarithmicdepthbuffer DIFF 2% [linux-arm64 macos-arm64 windows-arm64] # runner: the HTML labels and split border over the canvases are not composited (1.73% of pixels differ)
+webgl_camera_logarithmicdepthbuffer DIFF 3% [linux-x64 windows-x64] # runner: the HTML labels and split border over the canvases are not composited, and on x64 more of the normal z-buffer view's z-fighting differs (2.20% of pixels differ)
 webgl_custom_attributes_points DIFF 2% # rasterization: 1.45% of pixels differ
 webgl_effects_ascii FAIL # runner: no WebGL canvas in the document (renders with CSS, SVG or 2D)
 webgl_framebuffer_texture DIFF 1% # rasterization: 0.36% of pixels differ
@@ -133,7 +134,7 @@ webgl_renderer_pathtracer SKIP # upstream: needs more time to render
 webgl_reversed_depth_buffer DIFF 4% # runner: the HTML labels and note over the canvases are not composited (3.44% of pixels differ)
 webgl_shadowmap SKIP # upstream: timing issues
 webgl_shadowmap_progressive SKIP # upstream: needs more time to render
-webgl_shadowmap_viewer DIFF 1% # rasterization: 0.54% of pixels differ
+webgl_shadowmap_viewer DIFF 1% [linux-arm64] # rasterization: 0.54% of pixels differ
 webgl_test_memory2 SKIP # upstream: times out
 webgl_test_wide_gamut DIFF 2% # runner: the HTML labels and slider over the canvas are not composited (1.90% of pixels differ)
 webgl_video_kinect SKIP # upstream: video hangs CI
@@ -141,8 +142,8 @@ webgl_video_panorama_equirectangular SKIP # upstream: video hangs CI
 webgl_volume_instancing DIFF 1% # rasterization: 0.80% of pixels differ
 webgl_volume_perlin DIFF 1% # rasterization: 0.26% of pixels differ
 webgl_worker_offscreencanvas FAIL # runner: posting a transferred OffscreenCanvas to a worker fails (DataCloneError)
-webxr_vr_handinput_pointerclick DIFF 1% # rasterization: 0.28% of pixels differ
-webxr_vr_handinput_pointerdrag DIFF 1% # rasterization: 0.28% of pixels differ
+webxr_vr_handinput_pointerclick DIFF 1% [linux-arm64] # rasterization: 0.28% of pixels differ
+webxr_vr_handinput_pointerdrag DIFF 1% [linux-arm64] # rasterization: 0.28% of pixels differ
 webxr_vr_layers FAIL # runner: jsdom has no Range.getBoundingClientRect
 webxr_vr_sandbox FAIL # runner: jsdom has no Range.getBoundingClientRect
 webxr_vr_teleport DIFF 2% # rasterization: 1.57% of pixels differ

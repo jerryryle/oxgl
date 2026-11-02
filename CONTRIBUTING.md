@@ -14,12 +14,13 @@ cancels the earlier one; runs on `main` are never cancelled.
 | Job | Runs on | Checks |
 |---|---|---|
 | `workflow-lint` | Linux | actionlint, and zizmor with `.github/zizmor.yml` (every action pinned to a commit SHA, minimal permissions, no template injection) |
-| `check` | Linux x64 and arm64, macOS arm64, Windows x64 and arm64 | rustfmt, clippy (pedantic, warnings as errors), Rust tests, ESLint and tsc, native + TS build, Node tests with `OXGL_BACKEND=software`, then the packed packages installed into an empty project and rendered with (`scripts/pack.mjs`, `scripts/smoke-packed.mjs`) and, on Linux, that no library in the package needs glibc newer than 2.34 (`scripts/check-glibc.sh`); in a run that releases, the tarballs are uploaded as `packages-<runner>` |
+| `build` | Linux x64 and arm64, macOS arm64, Windows x64 and arm64 | native + TS build, then the packed packages installed into an empty project and rendered with (`scripts/pack.mjs`, `scripts/smoke-packed.mjs`) and, on Linux, that no library in the package needs glibc newer than 2.34 (`scripts/check-glibc.sh`); the platform tarball is uploaded as `packages-<runner>`, and Linux arm64 also uploads the `@oxgl-js/oxgl` tarball as `package-main`, each kept 7 days in a run that releases and 3 days otherwise |
+| `check` | Linux x64 and arm64, macOS arm64, Windows x64 and arm64 | rustfmt, clippy (pedantic, warnings as errors), Rust tests, ESLint and tsc |
 | `repo-checks` | Linux | the ANGLE pin check and the bump script's tests, ESLint and the tests of the results page builder, dependency licenses and `THIRD_PARTY_NOTICES` |
-| `node-range` | Linux arm64 | Node tests on Node 22.22.2 (the `engines` floor) and Node 26 |
+| `node-test` | Linux x64 and arm64, macOS arm64, Windows x64 and arm64 | Node tests with `OXGL_BACKEND=software` on Node 24, and on Linux arm64 also on Node 22.22.2 (the `engines` floor) and Node 26 |
 | `asan` | Linux arm64 and x64 | Rust tests under AddressSanitizer and LeakSanitizer |
 | `conformance` | Linux x64 and arm64, macOS arm64, Windows x64 and arm64 | both Khronos conformance suites with `OXGL_BACKEND=software`, judged against the `conformance/expectations.txt` entries that apply on each platform; each report is uploaded as `conformance-results-<runner>-<suite>` (see Conformance tests below) |
-| `threejs` | Linux arm64 | three.js's own WebGL examples with `OXGL_BACKEND=software`, each frame judged against its reference screenshot and `threejs/expectations.txt`; the report and failing examples' images are uploaded as `threejs-results` (see three.js examples below) |
+| `threejs` | Linux x64 and arm64, macOS arm64, Windows x64 and arm64 | three.js's own WebGL examples with `OXGL_BACKEND=software`, each frame judged against its reference screenshot and the `threejs/expectations.txt` entries that apply on each platform; the report and failing examples' images are uploaded as `threejs-results-<runner>` (see three.js examples below) |
 | `gpu` | self-hosted `oxgl-gpu` runner | Node tests on a real GPU; skipped unless the `OXGL_GPU_RUNNER` repository variable is `true` |
 | `ci` | Linux | succeeds only when every job above except `gpu` succeeded |
 | `release` | Linux | after `ci`, on `main` only, when npm doesn't have `package.json`'s version yet: publishes the run's tarballs (see Releases below) |
@@ -27,18 +28,28 @@ cancels the earlier one; runs on `main` are never cancelled.
 | `pages` | Linux | on `main` only: publishes the page `results` built to GitHub Pages |
 | `merge-bump` | Linux | after `ci`, on a manual run of the `angle-bump` branch: merges the bump pull request if it is exactly the bot's change, and starts the run on `main` |
 
-`check` and `conformance` run on every supported platform (see the README).
-`threejs` runs on Linux arm64, where its expectations were seeded.
-`node-range` runs on Linux arm64 only: N-API makes the addon independent of the
-Node version. The README lists the conformance pages whose results differ by
-platform, and why.
+`build` builds and packs oxgl once per platform. `node-test`, `conformance`,
+`threejs` and `gpu` don't build: each downloads the run's `@oxgl-js/oxgl`
+tarball and its platform's, and unpacks them into `dist/` with
+`scripts/unpack-packages.mjs`, so every test runs the files the release
+publishes. They wait for every platform's `build`, and none runs when one
+fails. Locally, `npm run build` gives an equivalent `dist/`, with source maps
+and `native.d.cts` besides. For a run's exact files, download `package-main`
+and your platform's `packages-<runner>`, move both tarballs into one directory,
+remove `dist/`, and run `node scripts/unpack-packages.mjs <that directory>`.
+
+`build`, `check`, `node-test`, `conformance` and `threejs` run on every
+supported platform (see the README). `node-test`'s extra Node versions run on
+Linux arm64 only: N-API makes the addon independent of the Node version. The
+README lists the conformance pages and three.js examples whose results differ
+by platform, and why.
 
 Branch protection on `main` should require the single `ci` check (Settings →
 Branches → branch protection rule for `main` → Require status checks → `ci`).
 Jobs can then be added or renamed without changing that setting.
 
 `workflow-lint` and `repo-checks` run on every change. The jobs that build or
-test oxgl (`check`, `node-range`, `asan`, `conformance`, `threejs`, `gpu`) are skipped
+test oxgl (`build`, `check`, `node-test`, `asan`, `conformance`, `threejs`, `gpu`) are skipped
 when every changed file is on the skip list in `ci.yml`'s `changes` job:
 Markdown, `openspec/`, `.claude/`, `assets/`, `LICENSE`, `.editorconfig` and the
 workflow linters' config. `ci` passes those skips and fails any other. Add a
@@ -100,9 +111,10 @@ These are done once, by the maintainer, in this order:
    unscoped `oxgl`; those stay unused.) The run on `main` packs and
    smoke-tests, and its `release` job fails, because npm has no trusted
    publisher yet. Until `@oxgl-js/oxgl` is on npm the daily bump does nothing.
-3. Download that run's `packages-*` artifacts and, signed in to npm as a member
-   of the `oxgl-js` org, run `npm publish <tarball> --access public` for each
-   platform tarball, `oxgl-js-<platform>-0.1.1.tgz`, then for the main one,
+3. Download that run's `package-main` and `packages-*` artifacts and, signed
+   in to npm as a member of the `oxgl-js` org, run
+   `npm publish <tarball> --access public` for each platform tarball,
+   `oxgl-js-<platform>-0.1.1.tgz`, then for the main one,
    `oxgl-js-oxgl-0.1.1.tgz`. Pick them by name: `oxgl-js-*.tgz` matches the
    main tarball too.
 4. On each of the six packages' Settings page on npmjs.com, add a trusted
@@ -130,7 +142,7 @@ runs the suites, and on `main` the `pages` job publishes it.
 - **Building it locally** from any run's artifacts:
 
   ```sh
-  gh run download <run-id> -p 'conformance-results-*' -p threejs-results -D results
+  gh run download <run-id> -p 'conformance-results-*' -p 'threejs-results*' -D results
   node scripts/results-page.mjs --commit "$(gh run view <run-id> --json headSha -q .headSha)" results results.html
   ```
 
@@ -171,7 +183,7 @@ npm run lint:licenses
 ```sh
 go install github.com/rhysd/actionlint/cmd/actionlint@<ACTIONLINT_VERSION>
 "$(go env GOPATH)/bin/actionlint"
-uvx zizmor@<ZIZMOR_VERSION> --config .github/zizmor.yml .github/workflows
+uvx zizmor@<ZIZMOR_VERSION> --config .github/zizmor.yml .github/workflows .github/actions
 ```
 
 `asan` on Linux arm64:

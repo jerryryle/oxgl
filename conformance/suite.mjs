@@ -44,7 +44,9 @@ export function ensureCheckout(pin, cacheDir, { paths, marker }) {
   git('remote', 'add', 'origin', pin.repository);
   git('sparse-checkout', 'set', '--no-cone', ...paths);
   git('fetch', '--quiet', '--depth=1', '--filter=blob:none', 'origin', pin.commit);
-  git('checkout', '--quiet', 'FETCH_HEAD');
+  // The commit's bytes on every host: Git for Windows usually sets
+  // core.autocrlf, which would serve CRLF copies of text files there only.
+  git('-c', 'core.autocrlf=false', '-c', 'core.eol=lf', 'checkout', '--quiet', 'FETCH_HEAD');
   // A copy without its marker is incomplete (edited or partly deleted).
   if (existsSync(checkout) && !complete()) rmSync(checkout, { recursive: true, force: true });
   try {

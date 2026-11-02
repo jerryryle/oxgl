@@ -6,7 +6,7 @@ import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { parseArgs } from 'node:util';
 
-import { applicable, concludeRun, DEFAULT_TOLERANCE, formatExpectations, keyOf, parseExpectations, selectPages } from '../conformance/expectations.mjs';
+import { applicable, concludeRun, DEFAULT_TOLERANCE, formatExpectations, hostPlatform, keyOf, parseExpectations, selectPages } from '../conformance/expectations.mjs';
 import { defaultJobs, runPages } from '../conformance/pool.mjs';
 import { requireCanvas, requireFfmpeg } from '../conformance/run.mjs';
 import { REPO_ROOT } from '../conformance/suite.mjs';
@@ -117,7 +117,9 @@ export async function runThreejs({
     idleTimeoutSeconds: timeoutS,
     totalTimeoutSeconds: totalTimeoutS,
     jobs,
-    platform: `${process.platform}-${process.arch}`,
+    // Named as the expectations and the results page name it (macos-arm64,
+    // not darwin-arm64).
+    platform: hostPlatform(),
     timestamp: new Date(started).toISOString(),
     durationMs: Date.now() - started,
     options: { filter: filter ?? null, includeSkipped, update },
