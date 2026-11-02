@@ -14,11 +14,11 @@ CI SHALL run on every pull request targeting `main` and every push to `main`, an
 
 #### Scenario: Documentation-only change
 - **WHEN** a pull request changes only `README.md` and files under `openspec/`
-- **THEN** workflow lint and the repository checks run, the jobs that build or test oxgl (the Rust and Node checks, the Node version range, AddressSanitizer, conformance, the three.js examples and the optional GPU job) are skipped, and the `ci` check passes
+- **THEN** workflow lint and the repository checks run, the jobs that build or test oxgl (the build, the Rust checks, the Node tests, AddressSanitizer, conformance and the three.js examples) are skipped, and the `ci` check passes
 
 #### Scenario: Skip list holds only unread files
 - **WHEN** a reviewer reads the skip list
-- **THEN** it names only Markdown documentation, OpenSpec artifacts, agent configuration, repository assets (`assets/`, such as the social card), the license text, editor configuration and the workflow linters' configuration
+- **THEN** it names only Markdown documentation, OpenSpec artifacts, agent configuration, repository assets (`assets/`, such as the social card), the license text, editor configuration, and Dependabot's and zizmor's configuration
 
 #### Scenario: Asset-only change
 - **WHEN** a pull request changes only files under `assets/`
@@ -63,11 +63,15 @@ On each platform, CI SHALL run `cargo fmt --check`, `cargo clippy --workspace --
 - **THEN** CI fails rather than updating the lockfile
 
 ### Requirement: Node checks in software mode
-On each platform, CI SHALL install dependencies with `npm ci`, run the JS lint and type check, build the native addon and package, and run the Node test suite (including the soak test) with `OXGL_BACKEND=software`.
+On each platform, CI SHALL install dependencies with `npm ci` and run the JS lint and type check. It SHALL run the Node test suite (including the soak test) with `OXGL_BACKEND=software` against that platform's packages from the run's build (Each platform is built once per run), on Node 24 on every platform and on both ends of `engines` on Linux arm64.
 
 #### Scenario: Software rendering on every platform
 - **WHEN** the Node test step runs
 - **THEN** `OXGL_BACKEND` is `software` and clear-then-readPixels and soak tests execute (not skip) on every platform in the matrix
+
+#### Scenario: Oldest supported Node
+- **WHEN** the Node tests run on Linux arm64 on Node 22.22.2
+- **THEN** they use the same Linux arm64 packages as the Node 24 leg, and pass
 
 ### Requirement: AddressSanitizer job
 CI SHALL include Linux arm64 and Linux x64 jobs that build and run the Rust test suites, including the SwiftShader integration and soak tests, with AddressSanitizer and LeakSanitizer enabled. Any sanitizer report SHALL fail the job.
@@ -127,6 +131,10 @@ CI SHALL expose a single aggregate check named `ci` that succeeds only when ever
 - **WHEN** the job that determines the changed files fails
 - **THEN** the `ci` check reports failure
 
+#### Scenario: Tests skipped after a failed build
+- **WHEN** the build fails on one platform, so the Node tests, conformance and three.js jobs are skipped
+- **THEN** the `ci` check reports failure
+
 ### Requirement: License check
 CI SHALL run the project's license check on every pull request: dependency licenses against the allowlist, and `THIRD_PARTY_NOTICES` against the current dependency graph. A failure SHALL fail the aggregate `ci` check.
 
@@ -135,7 +143,7 @@ CI SHALL run the project's license check on every pull request: dependency licen
 - **THEN** the license check step fails and the `ci` check fails
 
 ### Requirement: Conformance job
-CI SHALL run both conformance suites (conformance-testing) on every supported platform (Linux x64, Linux arm64, macOS arm64, Windows x64 and Windows arm64) with `OXGL_BACKEND=software`, each judged against the checked-in expectations that apply on that platform, in jobs that build the package first. Every such job SHALL be required by the aggregate `ci` check and SHALL upload its results report, named by runner and suite, as a workflow artifact whether it passes or fails.
+CI SHALL run both conformance suites (conformance-testing) on every supported platform (Linux x64, Linux arm64, macOS arm64, Windows x64 and Windows arm64) with `OXGL_BACKEND=software`, each judged against the checked-in expectations that apply on that platform, against that platform's packages from the run's build. Every such job SHALL be required by the aggregate `ci` check and SHALL upload its results report, named by runner and suite, as a workflow artifact whether it passes or fails.
 
 #### Scenario: Conformance regression fails CI
 - **WHEN** a pull request makes a conformance page that is expected to pass fail
@@ -154,11 +162,15 @@ CI SHALL run both conformance suites (conformance-testing) on every supported pl
 - **THEN** the job restores the suite from a cache keyed by that commit instead of fetching it
 
 ### Requirement: three.js examples job
-CI SHALL run the three.js example suite (threejs-examples) on Linux arm64 with `OXGL_BACKEND=software`, judged against the checked-in expectations, in a job that builds the package first. The job SHALL be required by the aggregate `ci` check, skipped as the other heavy jobs are, and SHALL upload its report and output images as workflow artifacts whether it passes or fails.
+CI SHALL run the three.js example suite (threejs-examples) on every supported platform with `OXGL_BACKEND=software`, each judged against the checked-in expectations that apply on that platform, against that platform's packages from the run's build. Every such job SHALL be required by the aggregate `ci` check, skipped as the other heavy jobs are, and SHALL upload its report and output images, named by runner, as workflow artifacts whether it passes or fails.
 
 #### Scenario: Example regression fails CI
 - **WHEN** a pull request makes an example that is expected to pass render a frame that does not match its reference
 - **THEN** the three.js job fails, naming the example, and the `ci` check fails
+
+#### Scenario: Platform-only example regression
+- **WHEN** a pull request makes an example fail on macOS arm64 only
+- **THEN** that platform's three.js job fails, naming the example, and the `ci` check fails
 
 #### Scenario: Images available after failure
 - **WHEN** the three.js job fails
@@ -221,7 +233,7 @@ CI SHALL also run when started manually (`workflow_dispatch`) on any branch, run
 - **THEN** every job runs against the branch's head commit, the `ci` check is reported on that commit, and an earlier manual run still in progress on that branch is cancelled unless the branch is `main`
 
 ### Requirement: Packed packages are smoke-tested
-On each supported platform, CI SHALL pack `@oxgl-js/oxgl` and that platform's package with `npm pack`, and install both tarballs into an empty project outside the repository. It SHALL then import the package there and render with `backend: 'software'`. A failure SHALL fail the `ci` check. On `main`, when the version is not yet on npm, each platform job SHALL keep its platform tarball as a run artifact for the release, and exactly one designated job SHALL also keep its `@oxgl-js/oxgl` tarball.
+On each supported platform, CI SHALL pack `@oxgl-js/oxgl` and that platform's package with `npm pack`, and install both tarballs into an empty project outside the repository. It SHALL then import the package there and render with `backend: 'software'`. A failure SHALL fail the `ci` check. Each platform's build job SHALL keep its platform tarball as a run artifact, and exactly one designated build job SHALL also keep its `@oxgl-js/oxgl` tarball.
 
 #### Scenario: Packaging mistake caught
 - **WHEN** a pull request leaves the ANGLE libraries out of a platform package's file list
@@ -230,3 +242,18 @@ On each supported platform, CI SHALL pack `@oxgl-js/oxgl` and that platform's pa
 #### Scenario: Test runs against the tarballs
 - **WHEN** the smoke test runs
 - **THEN** it resolves `@oxgl-js/oxgl` and the platform package from the empty project's `node_modules`, not from the repository's `dist/`, and a context created with `backend: 'software'` clears and reads back the clear color
+
+### Requirement: Each platform is built once per run
+In each run, CI SHALL build and pack oxgl once per supported platform, in one build job per platform, and SHALL upload that platform's packages as a run artifact. Every job that runs oxgl's Node tests, conformance suites or three.js examples SHALL run them against those packages, unpacked into `dist/`, and SHALL NOT build the addon itself. The `@oxgl-js/oxgl` package every such job uses SHALL be the single one the run keeps for the release.
+
+#### Scenario: Tests judge the packed files
+- **WHEN** the macOS arm64 conformance job runs
+- **THEN** its `dist/` holds exactly the files of the run's `@oxgl-js/oxgl` tarball and the macOS arm64 build job's `@oxgl-js/darwin-arm64` tarball, and the job compiles no Rust
+
+#### Scenario: Build failure on one platform
+- **WHEN** the Windows x64 build fails
+- **THEN** no job that tests the run's packages runs, on any platform, since the run has no complete set of packages, and the `ci` check fails
+
+#### Scenario: Packages kept on every run
+- **WHEN** a pull request's run finishes
+- **THEN** each platform's packages can be downloaded from the run, whether or not the run releases
