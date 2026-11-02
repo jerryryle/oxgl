@@ -5,7 +5,7 @@ import { once } from 'node:events';
 import { test } from 'node:test';
 
 import * as THREE from 'three';
-import { createContext } from 'oxgl';
+import { createContext } from '@oxgl-js/oxgl';
 
 const SIZE = 64;
 

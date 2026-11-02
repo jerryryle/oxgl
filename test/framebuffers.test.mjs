@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { createContext, WebGLFramebuffer, WebGLRenderbuffer } from 'oxgl';
+import { createContext, WebGLFramebuffer, WebGLRenderbuffer } from '@oxgl-js/oxgl';
 
 import { program } from './gl-helpers.mjs';
 import { allPixels, readAll } from './helpers.mjs';

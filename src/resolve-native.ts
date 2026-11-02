@@ -70,7 +70,7 @@ export function resolveNative(host: NativeHost, lookup: NativeLookup): ResolvedN
   }
   if (pkgDir === undefined) {
     throw nativeMissing(
-      `${pkg} is not installed; reinstall oxgl without omitting optional dependencies`,
+      `${pkg} is not installed; reinstall @oxgl-js/oxgl without omitting optional dependencies`,
       undefined,
       hostName,
     );

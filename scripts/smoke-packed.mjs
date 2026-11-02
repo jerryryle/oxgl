@@ -22,21 +22,21 @@ const tarballs = readdirSync(from)
   .map((file) => resolve(from, file));
 if (tarballs.length !== 2) throw new Error(`smoke: expected 2 tarballs in ${from}, found ${String(tarballs.length)}`);
 
-// The rendering check, run by node inside the project so `oxgl` and its
+// The rendering check, run by node inside the project so @oxgl-js/oxgl and its
 // platform package resolve from that project's node_modules.
 const CHECK = `
 import assert from 'node:assert/strict';
 import { realpathSync } from 'node:fs';
 import { createRequire } from 'node:module';
 import { sep } from 'node:path';
-import { createContext } from 'oxgl';
+import { createContext } from '@oxgl-js/oxgl';
 
 // Both paths go through the same realpath: on the Windows runners the temp
 // directory is an 8.3 short name (RUNNER~1), which the module resolver and
 // the working directory may spell differently.
 const project = realpathSync.native(process.cwd());
-const resolved = realpathSync.native(createRequire(import.meta.url).resolve('oxgl'));
-assert.ok(resolved.startsWith(project + sep), \`oxgl resolved outside \${project}: \${resolved}\`);
+const resolved = realpathSync.native(createRequire(import.meta.url).resolve('@oxgl-js/oxgl'));
+assert.ok(resolved.startsWith(project + sep), \`@oxgl-js/oxgl resolved outside \${project}: \${resolved}\`);
 
 const gl = createContext({ width: 4, height: 4, backend: 'software' });
 gl.clearColor(0, 1, 0, 1);

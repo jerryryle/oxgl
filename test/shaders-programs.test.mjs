@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { createContext, WebGLActiveInfo } from 'oxgl';
+import { createContext, WebGLActiveInfo } from '@oxgl-js/oxgl';
 
 import { FRAGMENT, program, shader, VERTEX } from './gl-helpers.mjs';
 

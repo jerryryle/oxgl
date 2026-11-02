@@ -2,7 +2,7 @@
 // process.env copy and reports what createContext does.
 import { parentPort, workerData } from 'node:worker_threads';
 
-import { createContext } from 'oxgl';
+import { createContext } from '@oxgl-js/oxgl';
 
 process.env.OXGL_BACKEND = workerData.override;
 try {

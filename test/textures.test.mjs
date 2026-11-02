@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { createContext, WebGLSampler, WebGLTexture } from 'oxgl';
+import { createContext, WebGLSampler, WebGLTexture } from '@oxgl-js/oxgl';
 
 import { program } from './gl-helpers.mjs';
 import { readAll } from './helpers.mjs';

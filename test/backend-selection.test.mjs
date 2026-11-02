@@ -6,7 +6,7 @@ import { once } from 'node:events';
 import { test } from 'node:test';
 import { Worker } from 'node:worker_threads';
 
-import { createContext } from 'oxgl';
+import { createContext } from '@oxgl-js/oxgl';
 
 import { allPixels, gpuSkipReason, readAll, withBackendEnv } from './helpers.mjs';
 

@@ -10,7 +10,7 @@ Every distributed package SHALL include `LICENSE`. Each platform package SHALL a
 - **THEN** it contains `LICENSE` and `THIRD_PARTY_NOTICES`, and the latter names every crate compiled into the addon and every component in that platform's ANGLE bundle license directory
 
 #### Scenario: Main package carries the license
-- **WHEN** the `oxgl` package tarball produced by `npm pack` is listed
+- **WHEN** the `@oxgl-js/oxgl` package tarball produced by `npm pack` is listed
 - **THEN** it contains `LICENSE`, and no native addon or ANGLE library
 
 #### Scenario: Notices stay current

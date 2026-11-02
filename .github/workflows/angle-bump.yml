@@ -45,8 +45,8 @@ jobs:
         run: |
           # Until the first release is on npm (the one-time bootstrap in
           # CONTRIBUTING.md), a bump can't be released.
-          if ! npm view oxgl version > /dev/null 2>&1; then
-            echo "::notice::oxgl is not on npm yet; bumps start after the first release"
+          if ! npm view @oxgl-js/oxgl version > /dev/null 2>&1; then
+            echo "::notice::@oxgl-js/oxgl is not on npm yet; bumps start after the first release"
             exit 0
           fi
           # Whether the branch is only the bot's commit, changing only what a

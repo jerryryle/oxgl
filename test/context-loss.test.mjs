@@ -4,7 +4,7 @@ import { once } from 'node:events';
 import { setTimeout as delay } from 'node:timers/promises';
 import { test } from 'node:test';
 
-import { createContext, WebGLContextEvent } from 'oxgl';
+import { createContext, WebGLContextEvent } from '@oxgl-js/oxgl';
 
 import { program, quad, color } from './gl-helpers.mjs';
 import { allPixels, readAll } from './helpers.mjs';

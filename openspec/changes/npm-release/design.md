@@ -5,7 +5,7 @@
 - **How a build is laid out today.** `npm run build` writes the addon (`dist/oxgl.<platform>.node`), napi's loader (`dist/native.cjs`), the host's ANGLE libraries (`dist/angle/`) and `dist/THIRD_PARTY_NOTICES` into `dist/`. `src/native.ts` loads `./native.cjs` and passes `dist/angle/` to `native.init`. `oxgl-sys`'s loader requires that directory to be absolute. `package.json` is `private`, and its `files` list publishes all of `dist/`.
 - **How CI is set up.** `ci.yml`'s `check` job already builds and tests the release build on all five platforms. Branch protection on `main` (the "Default (bypassable)" ruleset) requires the aggregate `ci` check, with strict up-to-date branches and squash merges only. It requires no approving review. Tags are not protected.
 - **The pattern to copy.** oxgl-angle already bumps ANGLE without anyone doing anything: `angle-bump.yml` opens a pull request with the default token and dispatches the build on the branch. A `merge-bump` job merges the pull request when it passes and is exactly the bot's change. Pushes, pull requests and merges made with the default token start no workflows, so each step dispatches the next one explicitly.
-- **What exists on npm.** The `npm` GitHub environment exists, and only `main` can deploy from it. The package name `oxgl` is unclaimed on npm. The `oxgl` org name was taken, so the platform packages use the `oxgl-js` org (scope `@oxgl-js`), which the maintainer has created.
+- **What exists on npm.** The `npm` GitHub environment exists, and only `main` can deploy from it. The `oxgl` org name was taken, so the packages use the `oxgl-js` org (scope `@oxgl-js`), which the maintainer has created. The unscoped name `oxgl` looked free, but npm refuses it (D7). The first bootstrap published the five platform packages at `0.1.0` before npm refused `oxgl`; `@oxgl-js/oxgl` is unpublished.
 
 ## Goals / Non-Goals
 
@@ -49,7 +49,7 @@ napi's generated loader names platform packages `<packageName>-<triple>`, so it 
 
 `napi.targets` stays the only list of platforms. Alternative considered: `napi create-npm-dirs`, which writes the same manifests but names them `<packageName>-<platform>`, so it can't produce `@oxgl-js/<platform>`.
 
-**`optionalDependencies` exist only in the published `oxgl` manifest.** `scripts/pack.mjs` packs `oxgl` from a staging copy of the root package whose manifest gains `optionalDependencies` on all five platform packages, at exactly the root version. The repository's `package.json` never lists them, because a lockfile can't record a package that isn't published yet. npm 11.20 confirms this:
+**`optionalDependencies` exist only in the published `@oxgl-js/oxgl` manifest.** `scripts/pack.mjs` packs `@oxgl-js/oxgl` from a staging copy of the root package whose manifest gains `optionalDependencies` on all five platform packages, at exactly the root version. The repository's `package.json` never lists them, because a lockfile can't record a package that isn't published yet. npm 11.20 confirms this:
 - `npm ci` fails with `EUSAGE` ("Missing: … from lock file") when `package.json` lists an optional dependency the lockfile couldn't resolve.
 - `npm install` of a tarball whose optional dependencies return 404 succeeds and installs the rest.
 
@@ -58,17 +58,17 @@ So a version bump touches only `version` in `package.json` and `package-lock.jso
 Alternative considered: naming the packages `@oxgl-js/oxgl-<triple>` to keep napi's loader. That gives uglier names, and the ANGLE directory still has to be found separately.
 
 ### D3. Packing and smoke-testing in `check`, publishing in a separate job
-- **In `check`, after `npm test`:** `scripts/pack.mjs` stages `dist/`'s platform files with the generated manifest (D2) and runs `npm pack` there. It also packs the staged root copy. A root `files` list keeps the `.node` file and `angle/` out of `oxgl`.
+- **In `check`, after `npm test`:** `scripts/pack.mjs` stages `dist/`'s platform files with the generated manifest (D2) and runs `npm pack` there. It also packs the staged root copy. A root `files` list keeps the `.node` file and `angle/` out of `@oxgl-js/oxgl`.
 - **The smoke test:** `npm install --ignore-scripts` both tarballs into a fresh directory under `$RUNNER_TEMP`, then run a short script that renders with `backend: 'software'`. It must be `npm install`, not `npm ci`: the other four platform packages at an unpublished version return 404, and `npm install` skips them (D2).
-- **Whether this run releases:** the `changes` job gains a `release` output. It is `true` only on `refs/heads/main` when `npm view oxgl@<version>` fails, meaning the version isn't published yet. This is the same query the release would make, done once per run.
+- **Whether this run releases:** the `changes` job gains a `release` output. It is `true` only on `refs/heads/main` when `npm view @oxgl-js/oxgl@<version>` fails, meaning the version isn't published yet. This is the same query the release would make, done once per run.
 - **Uploads:** only when `release` is `true`, each leg uploads its platform tarball as `packages-<os>`, kept for 7 days to cover reruns.
-- **Where `oxgl` comes from:** only the `ubuntu-24.04-arm` leg also uploads its root tarball, which every leg packs and smoke-tests for itself. So the release has exactly one `oxgl` tarball and no same-named files to collide, even when it downloads every artifact into one directory. The bytes can differ between legs (npm pack records file modes differently on Windows), so the choice must not depend on download order.
+- **Where `@oxgl-js/oxgl` comes from:** only the `ubuntu-24.04-arm` leg also uploads its root tarball, which every leg packs and smoke-tests for itself. So the release has exactly one `@oxgl-js/oxgl` tarball and no same-named files to collide, even when it downloads every artifact into one directory. The bytes can differ between legs (npm pack records file modes differently on Windows), so the choice must not depend on download order.
 
 The `release` job has `needs: [changes, check, ci]`, since a job reads only its direct needs. It runs only when `changes.outputs.release == 'true'` and both `check` and `ci` succeeded, so a push without a version bump never starts it.
 - **Setup:** it has `environment: npm`, `permissions: id-token: write, contents: write`, and `concurrency: npm-release` with no cancelling, which serializes overlapping `main` runs. It uses no caches and checks out with `persist-credentials: false`. It uses the npm bundled with Node 24: OIDC trusted publishing needs npm 11.5.1 or later, which Node has bundled since 24.5.0 (24.22.2 ships 11.19.1). Installing a pinned npm instead would be an install outside the lockfile, which zizmor's `adhoc-packages` audit flags.
 - **Steps:**
   1. Read the version.
-  2. For each platform tarball, then `oxgl`: skip it if `npm view <name>@<version>` succeeds, otherwise `npm publish <tgz> --provenance --access public`.
+  2. For each platform tarball, then `@oxgl-js/oxgl`: skip it if `npm view <name>@<version>` succeeds, otherwise `npm publish <tgz> --provenance --access public`.
   3. Unless the GitHub Release `v<version>` already exists, run `gh release create v<version> --target $GITHUB_SHA --generate-notes`, which also creates the tag.
 
 There's no check for a tag on another commit: the only way to get one is to tag a version by hand before CI releases it. If that happens, `gh release create` uses the existing tag. That's accepted (see Risks).
@@ -85,8 +85,8 @@ There's no check for a tag on another commit: the only way to get one is to tag 
 
   The first two come from the release metadata `gh` already fetches; the third is one compare-API call. `merge-bump` reruns `bump.py`, so the check runs again before the merge.
 - **Why the origin check:** the bump replaces the person who used to copy digests from oxgl-angle's release run, and CI only checks the downloads against the release's own `SHA256SUMS`. Without a check, anyone who can create a release in oxgl-angle could ship binaries to npm. With it, only oxgl-angle's own workflows can, and those run from code already on its `main`. A personal token, even a leaked one, creates releases and uploads assets under its owner's name, not the bot's, so a release it made or an asset it replaced is refused. What remains is listed under Risks.
-- **Before the first release:** the workflow does nothing while `npm view oxgl` reports no published version at all. Until the bootstrap (Migration Plan) is done, a bump can't be released, and merging one would only change what `0.1.0` contains. This reuses the registry query the version step already makes.
-- **The version:** the workflow then runs `npm version patch --no-git-tag-version`, which updates `package-lock.json` too, unless `npm view oxgl@<current>` fails, meaning the current version isn't released yet.
+- **Before the first release:** the workflow does nothing while `npm view @oxgl-js/oxgl` reports no published version at all. Until the bootstrap (Migration Plan) is done, a bump can't be released, and merging one would only change what the first release contains. This reuses the registry query the version step already makes.
+- **The version:** the workflow then runs `npm version patch --no-git-tag-version`, which updates `package-lock.json` too, unless `npm view @oxgl-js/oxgl@<current>` fails, meaning the current version isn't released yet.
 - **The PR:** it commits with the subject `Pin oxgl-angle <tag>`, force-pushes `angle-bump`, opens or edits the PR, and runs `gh workflow run ci.yml --ref angle-bump`.
 - **Leaving branches alone:** a branch carrying other commits, a `skip-bump` label and closing stale bumps all follow oxgl-angle's `angle-bump.yml`.
 
@@ -109,6 +109,15 @@ Built on the Ubuntu 24.04 runners, the addon needs `GLIBC_2.34` (measured with `
 
 Alternative considered: linking against an old glibc with napi-rs's `--use-napi-cross` toolchain. It was tested and works: the addon needed only `GLIBC_2.17`, the tests passed, and the package rendered on Debian 11. It was rejected as more than the need: an experimental toolchain downloaded at build time and a separate build command on the Linux legs, to reach glibc 2.31–2.33 systems (mainly Ubuntu 20.04 and Debian 11), which are past their standard support.
 
+### D7. The main package is `@oxgl-js/oxgl`
+The first release failed: npm answers `403 Forbidden - PUT https://registry.npmjs.org/oxgl - Package name too similar to existing packages ol,xml`. npm checks unscoped names against existing ones; scoped names are exempt. So the main package joins the platform packages in the `@oxgl-js` scope.
+- **The version becomes `0.1.1`:** the bootstrap had already published the five platform packages at `0.1.0`. A `@oxgl-js/oxgl@0.1.0` would have to come from a later run than those, against the release spec's rule that every package is the packed file of one run. At `0.1.1`, all six come from one run. The platform `0.1.0`s stay on npm, with no main package that depends on them.
+- **What it renames:** only the published main package, so its manifest, the lockfile, the pack, smoke and release scripts, CI, the ANGLE bump's npm queries (`angle-bump.yml` and `angle/scripts/bump.sh`), the docs, the resolver's user-facing messages and the tests that import the package by name. The resolver (D2) finds the platform packages through its own manifest's `optionalDependencies`, not its own name, but its `OXGL_NATIVE_MISSING` message tells the user which package to reinstall.
+- **What keeps its name:** the repository, the Rust crates, the platform packages, the `v<version>` tag, `napi.binaryName` and so the addon file `oxgl.<platform>.node`, and the `oxgl` that `VENDOR` and `RENDERER` return (context-state spec).
+- **The tarball name:** `npm pack` names a scoped package's tarball `<scope>-<name>-<version>.tgz`, so the main tarball becomes `oxgl-js-oxgl-<version>.tgz`. That matches the `oxgl-js-*.tgz` pattern the platform tarballs share. Every script and CI step therefore picks tarballs by exact name: the main one is `oxgl-js-oxgl-<version>.tgz`, and each platform one is `oxgl-js-<platform>-<version>.tgz` for a platform in `napi.targets`. No pattern stands for "the platform tarballs".
+
+Alternative considered: another unscoped name. Any short name may hit the same similarity check, and the scope already holds the platform packages.
+
 ## Safety rules
 
 This change touches no Rust code, so the unsafe confinement, no-panic, handle and ArrayBuffer-lifetime rules don't change. The only runtime change is in `src/native.ts`:
@@ -118,21 +127,22 @@ This change touches no Rust code, so the unsafe confinement, no-panic, handle an
 ## Risks / Trade-offs
 
 - **[A new ANGLE regresses something the tests don't cover, and it publishes automatically]** → The bump runs the full CI: five platforms, ASan, and both conformance suites. That's the bar every human change meets too. A bad version is fixed by a later version, since npm versions can't be replaced.
-- **[A release fails partway, so npm has some packages of a version]** → Platform packages go first and `oxgl` last, so no published `oxgl` points at a missing platform package. Rerunning the job completes the release (release spec).
+- **[A release fails partway, so npm has some packages of a version]** → Platform packages go first and `@oxgl-js/oxgl` last, so no published `@oxgl-js/oxgl` points at a missing platform package. Rerunning the job completes the release (release spec).
 - **[The tag or GitHub Release is missing after a publish]** → Rerunning the job skips the published packages and creates the tag and the release.
-- **[The first release can't use OIDC]** → npm only lets you add a trusted publisher to a package that already exists. The bootstrap is in the migration plan below. `0.1.0` has no provenance as a result.
+- **[The first release can't use OIDC]** → npm only lets you add a trusted publisher to a package that already exists. The bootstrap is in the migration plan below. The bootstrapped version, `0.1.1`, has no provenance as a result.
 - **[Someone who can change oxgl-angle's `main` or run its workflows ships a tampered bundle]** → Accepted. The origin check (D4) stops releases made outside oxgl-angle's workflows, but not a workflow that has itself been compromised. A stronger check, verifying build-provenance attestations of the bundles, needs oxgl-angle to attest them first, so it's left for later.
 - **[The bump can't open its pull request]** → The default token can open pull requests only when the repository allows it. jerryryle/oxgl has that setting off today (`can_approve_pull_request_reviews: false`), so turning it on is migration step 1.
 - **[The bot merge is blocked by the ruleset]** → The ruleset requires no review, and the default token can merge once `ci` passes. If `main` moved, the strict up-to-date rule blocks the merge, and the next daily run refreshes the bump.
 - **[A person tags `v<version>` by hand on a different commit before CI releases that version]** → Accepted. The GitHub Release attaches to the hand-made tag, and the published packages' provenance still names the commit they were built from. Fix it by moving the tag.
 - **[Linux systems with glibc older than 2.34 can't use the package]** → Accepted: they get `OXGL_NATIVE_MISSING`-style load errors naming the missing `GLIBC_` version. Mainly Ubuntu 20.04 and Debian 11, both past standard support. Linking against an old glibc (D6's alternative) is the way back if that changes.
+- **[Five platform packages are left at `0.1.0` with no main package]** → Accepted. Nothing installs them: no `@oxgl-js/oxgl` lists them, and installing one directly gives a platform package with no JS API. Deprecate them with `npm deprecate` if they confuse anyone.
 - **[Artifacts expire before a rerun]** → Retention is 7 days. After that, a rerun of the whole workflow on `main` rebuilds and republishes the missing packages.
 
 ## Migration Plan
 
 1. Before merging, the maintainer turns on "Allow GitHub Actions to create and approve pull requests" in jerryryle/oxgl's Actions settings. oxgl-angle already has it on. Without it, the bump's `gh pr create` fails with the default token.
-2. Merge the change with the version at `0.1.0`. The `main` run packs and smoke-tests, and then its `release` job fails because no trusted publisher exists yet. Until step 3 is done, the daily ANGLE bump does nothing (D4), so `main` stays at the merged pin.
-3. The maintainer downloads that run's `packages-*` artifacts, and runs `npm publish <tgz> --access public` for the five platform tarballs and then `oxgl`.
+2. Merge the change with the version at `0.1.1` (D7). The `main` run packs and smoke-tests, and then its `release` job fails because no trusted publisher exists yet. Until step 3 is done, the daily ANGLE bump does nothing (D4), so `main` stays at the merged pin.
+3. The maintainer downloads that run's `packages-*` artifacts, and runs `npm publish <tgz> --access public` for the five platform tarballs and then `@oxgl-js/oxgl`.
 4. On each of the six packages' settings pages, the maintainer adds a trusted publisher:
 
    | Field | Value |
@@ -143,7 +153,7 @@ This change touches no Rust code, so the unsafe confinement, no-panic, handle an
    | Environment | `npm` |
 
    Then they set "Require 2FA and disallow tokens".
-5. Rerun that run's `release` job. It finds all six packages published and creates `v0.1.0` and its GitHub Release.
+5. Rerun that run's `release` job. It finds all six packages published and creates `v0.1.1` and its GitHub Release.
 6. From then on, a version bump or an ANGLE bump releases without anyone doing anything.
 
 Rollback: remove the `release` and `merge-bump` jobs and disable `angle-bump.yml`. Published versions stay; deprecate one with `npm deprecate` if needed.

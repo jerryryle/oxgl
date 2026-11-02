@@ -1,6 +1,6 @@
 // Publishes the packed packages in <dir> (openspec release): every platform
-// package before `oxgl`, skipping any version npm already has, so a rerun
-// completes a release that failed partway. Then tags the commit and creates
+// package before the main package, @oxgl-js/oxgl, skipping any version npm
+// already has, so a rerun completes a release that failed partway. Then tags the commit and creates
 // the GitHub Release, unless it exists. With --dry-run it reports what it
 // would do and changes nothing.
 //
@@ -42,26 +42,29 @@ const packages = readdirSync(dir)
     const tarball = join(dir, file);
     return { tarball, ...manifest(tarball) };
   });
-const main = packages.filter((pkg) => pkg.name === 'oxgl');
-if (main.length !== 1) throw new Error(`release: expected one oxgl tarball in ${dir}, found ${String(main.length)}`);
-const [oxgl] = main;
-const platforms = packages.filter((pkg) => pkg !== oxgl);
-const { version } = oxgl;
+// Told apart by manifest name, not file name: the main package packs to
+// oxgl-js-oxgl-<version>.tgz, which looks like a platform tarball.
+const MAIN = '@oxgl-js/oxgl';
+const mains = packages.filter((pkg) => pkg.name === MAIN);
+if (mains.length !== 1) throw new Error(`release: expected one ${MAIN} tarball in ${dir}, found ${String(mains.length)}`);
+const [main] = mains;
+const platforms = packages.filter((pkg) => pkg !== main);
+const { version } = main;
 
 // The tarballs must be one release: every optional dependency present, at
 // exactly the release version.
-const expected = Object.entries(oxgl.optionalDependencies ?? {});
+const expected = Object.entries(main.optionalDependencies ?? {});
 const found = new Map(platforms.map((pkg) => [pkg.name, pkg.version]));
 for (const [name, range] of expected) {
   if (range !== version || found.get(name) !== version) {
-    throw new Error(`release: ${name}@${version} is missing (found ${found.get(name) ?? 'none'}, oxgl lists ${range})`);
+    throw new Error(`release: ${name}@${version} is missing (found ${found.get(name) ?? 'none'}, ${MAIN} lists ${range})`);
   }
 }
 if (platforms.length !== expected.length) {
-  throw new Error(`release: ${dir} holds packages oxgl does not list: ${[...found.keys()].join(', ')}`);
+  throw new Error(`release: ${dir} holds packages ${MAIN} does not list: ${[...found.keys()].join(', ')}`);
 }
 
-for (const pkg of [...platforms, oxgl]) {
+for (const pkg of [...platforms, main]) {
   if (succeeds('npm', ['view', `${pkg.name}@${version}`, 'version'])) {
     console.log(`release: ${pkg.name}@${version} is already on npm`);
   } else if (dryRun) {

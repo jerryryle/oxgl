@@ -2,7 +2,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { createContext } from 'oxgl';
+import { createContext } from '@oxgl-js/oxgl';
 
 test('bind and query', () => {
   const gl = createContext({ width: 1, height: 1 });

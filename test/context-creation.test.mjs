@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 
-import { createContext, WebGL2RenderingContext, WebGLRenderingContext } from 'oxgl';
+import { createContext, WebGL2RenderingContext, WebGLRenderingContext } from '@oxgl-js/oxgl';
 
 import { allPixels, countNativeCalls, liveContexts, readAll } from './helpers.mjs';
 
@@ -76,7 +76,7 @@ test('headless host: no DISPLAY or WAYLAND_DISPLAY', () => {
   delete env.DISPLAY;
   delete env.WAYLAND_DISPLAY;
   const script = `
-    import { createContext } from 'oxgl';
+    import { createContext } from '@oxgl-js/oxgl';
     const gl = createContext({ width: 4, height: 4, backend: 'software' });
     gl.destroy();
     console.log('ok');

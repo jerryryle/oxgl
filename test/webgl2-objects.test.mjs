@@ -3,7 +3,7 @@ import assert from 'node:assert/strict';
 import { setTimeout as delay } from 'node:timers/promises';
 import { test } from 'node:test';
 
-import { createContext, WebGLQuery, WebGLSync, WebGLTransformFeedback, WebGLVertexArrayObject } from 'oxgl';
+import { createContext, WebGLQuery, WebGLSync, WebGLTransformFeedback, WebGLVertexArrayObject } from '@oxgl-js/oxgl';
 
 import { program } from './gl-helpers.mjs';
 import { allPixels, readAll } from './helpers.mjs';

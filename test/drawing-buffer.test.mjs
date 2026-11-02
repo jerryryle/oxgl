@@ -4,7 +4,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { createContext, HeadlessCanvas } from 'oxgl';
+import { createContext, HeadlessCanvas } from '@oxgl-js/oxgl';
 
 import { allPixels, liveContexts, readAll, withBackendEnv } from './helpers.mjs';
 

@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import { setFlagsFromString } from 'node:v8';
 import { runInNewContext } from 'node:vm';
 
-import { createContext, WebGLBuffer, WebGLObject, WebGLProgram, WebGLShader } from 'oxgl';
+import { createContext, WebGLBuffer, WebGLObject, WebGLProgram, WebGLShader } from '@oxgl-js/oxgl';
 
 import { color, program, quad } from './gl-helpers.mjs';
 import { allPixels, liveObjects, readAll } from './helpers.mjs';

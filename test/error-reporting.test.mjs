@@ -5,7 +5,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { createContext, WebGLRenderingContext } from 'oxgl';
+import { createContext, WebGLRenderingContext } from '@oxgl-js/oxgl';
 
 function context(t) {
   const gl = createContext({ width: 2, height: 2 });

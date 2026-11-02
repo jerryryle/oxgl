@@ -26,10 +26,10 @@ After the `ci` check passes for a run on `main`, the release SHALL publish the v
 - **THEN** nothing is published
 
 ### Requirement: Packages released together
-A release SHALL consist of `oxgl` and one platform package per supported platform: `@oxgl-js/linux-x64-gnu`, `@oxgl-js/linux-arm64-gnu`, `@oxgl-js/darwin-arm64`, `@oxgl-js/win32-x64-msvc` and `@oxgl-js/win32-arm64-msvc`, all at the same version. `oxgl` SHALL list every platform package as an optional dependency at exactly that version. Each platform package SHALL declare its `os`, `cpu` and, on Linux, `libc`, so npm installs only the matching one.
+A release SHALL consist of `@oxgl-js/oxgl` and one platform package per supported platform: `@oxgl-js/linux-x64-gnu`, `@oxgl-js/linux-arm64-gnu`, `@oxgl-js/darwin-arm64`, `@oxgl-js/win32-x64-msvc` and `@oxgl-js/win32-arm64-msvc`, all at the same version. `@oxgl-js/oxgl` SHALL list every platform package as an optional dependency at exactly that version. Each platform package SHALL declare its `os`, `cpu` and, on Linux, `libc`, so npm installs only the matching one.
 
 #### Scenario: Versions agree
-- **WHEN** the published `oxgl@0.1.4` manifest is read
+- **WHEN** the published `@oxgl-js/oxgl@0.1.4` manifest is read
 - **THEN** its `optionalDependencies` name all five platform packages at exactly `0.1.4`, and each of those is published at `0.1.4`
 
 #### Scenario: Platform package constraints
@@ -37,22 +37,26 @@ A release SHALL consist of `oxgl` and one platform package per supported platfor
 - **THEN** it declares `os: ["linux"]`, `cpu: ["arm64"]` and `libc: ["glibc"]`
 
 ### Requirement: Published files are the tested files
-Each platform package published SHALL be the packed file that the same CI run built and smoke-tested on that platform (continuous-integration, "Packed packages are smoke-tested"). The `oxgl` package SHALL likewise be the packed file one of that run's smoke tests installed. The release SHALL NOT build or pack anything itself.
+Each platform package published SHALL be the packed file that the same CI run built and smoke-tested on that platform (continuous-integration, "Packed packages are smoke-tested"). The `@oxgl-js/oxgl` package SHALL likewise be the packed file one of that run's smoke tests installed. The release SHALL NOT build or pack anything itself.
 
 #### Scenario: Release uses the run's tarballs
 - **WHEN** the release publishes `@oxgl-js/win32-arm64-msvc`
 - **THEN** the published tarball's SHA-512 integrity matches the tarball the same run's Windows arm64 job packed and smoke-tested
 
 ### Requirement: A partial release can be completed by a rerun
-The release SHALL publish the platform packages before `oxgl`, and SHALL skip each package that npm already has at the version being released. Rerunning a release that failed partway SHALL therefore publish only what is missing. It SHALL never republish or overwrite a published version.
+The release SHALL publish the platform packages before `@oxgl-js/oxgl`, and SHALL skip each package that npm already has at the version being released. Rerunning a release that failed partway SHALL therefore publish only what is missing. It SHALL never republish or overwrite a published version.
 
 #### Scenario: Rerun after a failure
 - **WHEN** a release published three platform packages, then failed, and the run's release job is rerun
-- **THEN** the rerun publishes the remaining two platform packages and then `oxgl`, and leaves the three published ones unchanged
+- **THEN** the rerun publishes the remaining two platform packages and then `@oxgl-js/oxgl`, and leaves the three published ones unchanged
 
-#### Scenario: `oxgl` never precedes its platform packages
+#### Scenario: Main tarball told apart from the platform tarballs
+- **WHEN** the release's directory holds `oxgl-js-oxgl-0.1.1.tgz` and the five `oxgl-js-<platform>-0.1.1.tgz` platform tarballs
+- **THEN** it publishes each of the five platform packages once, and then `@oxgl-js/oxgl` once from `oxgl-js-oxgl-0.1.1.tgz`
+
+#### Scenario: `@oxgl-js/oxgl` never precedes its platform packages
 - **WHEN** publishing any platform package fails
-- **THEN** `oxgl` at that version is not published
+- **THEN** `@oxgl-js/oxgl` at that version is not published
 
 ### Requirement: Trusted publishing with provenance
 The release SHALL authenticate to npm through trusted publishing (OIDC), from a job in the `npm` GitHub environment, which only `main` may deploy to. No npm token SHALL be stored in the repository or its secrets. Every package SHALL be published with a provenance attestation that names the repository, workflow and commit.

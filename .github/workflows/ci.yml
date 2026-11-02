@@ -93,7 +93,7 @@ jobs:
           version="$(jq -r .version package.json)"
           # A failed lookup counts as unreleased; the release then checks each
           # package itself.
-          if npm view "oxgl@$version" version >/dev/null 2>&1; then release=false; else release=true; fi
+          if npm view "@oxgl-js/oxgl@$version" version >/dev/null 2>&1; then release=false; else release=true; fi
           echo "release=$release" | tee -a "$GITHUB_OUTPUT"
 
   workflow-lint:
@@ -175,18 +175,26 @@ jobs:
           OXGL_BACKEND: software
       # Installs the packed packages into an empty project and renders with
       # them (openspec continuous-integration, "Packed packages are
-      # smoke-tested"). Every leg packs its own oxgl tarball; only
-      # ubuntu-24.04-arm keeps it, so the release has exactly one.
+      # smoke-tested"). Every leg packs its own main tarball; only
+      # ubuntu-24.04-arm keeps it, so the release has exactly one. Tarballs are
+      # named exactly: the main one, oxgl-js-oxgl-<version>.tgz, matches any
+      # oxgl-js-* pattern meant for the platform ones.
       - name: Pack and smoke-test the packages
+        id: pack
         env:
           OS: ${{ matrix.os }}
         run: |
           node scripts/pack.mjs "$RUNNER_TEMP/packages"
           node scripts/smoke-packed.mjs "$RUNNER_TEMP/packages"
-          [ "$OS" = ubuntu-24.04-arm ] || rm "$RUNNER_TEMP"/packages/oxgl-[0-9]*.tgz
+          version="$(jq -r .version package.json)"
+          platform="$(node --input-type=module -e "import { platformString } from './dist/resolve-native.js'; console.log(platformString(process.platform, process.arch))")"
+          [ "$OS" = ubuntu-24.04-arm ] || rm "$RUNNER_TEMP/packages/oxgl-js-oxgl-$version.tgz"
+          echo "platform-tarball=$RUNNER_TEMP/packages/oxgl-js-$platform-$version.tgz" >> "$GITHUB_OUTPUT"
       - name: Require glibc 2.34 at most (Linux)
         if: runner.os == 'Linux'
-        run: scripts/check-glibc.sh "$RUNNER_TEMP"/packages/oxgl-js-*.tgz
+        env:
+          TARBALL: ${{ steps.pack.outputs.platform-tarball }}
+        run: scripts/check-glibc.sh "$TARBALL"
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: needs.changes.outputs.release == 'true'
         with:
