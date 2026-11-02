@@ -2,6 +2,7 @@
 // (part of `npm run lint:js`). Never executed.
 import {
   createContext,
+  encodePNG,
   type ContextOptions,
   HeadlessCanvas,
   type WebGLContextAttributes,
@@ -43,6 +44,7 @@ expectType<Equal<typeof gl1, WebGLRenderingContext>>();
 expectType<Equal<typeof gl1Explicit, WebGLRenderingContext>>();
 expectType<Equal<typeof gl2, WebGL2RenderingContext>>();
 expectType<Equal<typeof either, WebGLRenderingContext | WebGL2RenderingContext>>();
+expectType<Equal<ReturnType<typeof encodePNG>, Promise<Uint8Array>>>();
 
 expectType<Equal<typeof gl1.COLOR_BUFFER_BIT, 0x00004000>>();
 expectType<Equal<typeof WebGL2RenderingContext.CONTEXT_LOST_WEBGL, 0x9242>>();

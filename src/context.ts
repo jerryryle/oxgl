@@ -321,6 +321,15 @@ export function canvasPixels(canvas: object): Pixels | undefined {
   return native.drawingBufferPixels(owner.index, owner.version) ?? EMPTY;
 }
 
+/**
+ * `gl`'s drawing buffer as unpremultiplied RGBA8, top row first, or `null`
+ * when the context is lost or destroyed: what `encodePNG` encodes.
+ */
+export function contextPixels(gl: ContextBase): { data: Uint8Array; width: number; height: number } | null {
+  const s = contextState(gl);
+  return s.destroyed ? null : native.drawingBufferPixels(s.index, s.version);
+}
+
 let imageDecoder: ((image: object) => Pixels | undefined) | undefined;
 
 /**
@@ -334,6 +343,18 @@ export function setImageDecoder(decoder: ((image: object) => Pixels | undefined)
   imageDecoder = decoder;
 }
 
+/** Typed arrays an `ImageData`-shaped source's `data` may be: 8-bit samples, or 16-bit ones. */
+const PIXEL_VIEWS = new Set(['Uint8Array', 'Uint8ClampedArray', 'Int8Array', 'Uint16Array']);
+
+/**
+ * Whether `data` holds pixels oxgl reads: by its tag rather than
+ * `instanceof`, so typed arrays from another realm count. Other views (float
+ * arrays, `DataView`) would be read as scrambled RGBA8.
+ */
+function isPixelView(data: unknown): data is ArrayBufferView {
+  return ArrayBuffer.isView(data) && PIXEL_VIEWS.has((data as { [Symbol.toStringTag]?: unknown })[Symbol.toStringTag] as string);
+}
+
 /**
  * A `TexImageSource` as RGBA8, top row first (design: "TexImageSource"):
  * an `ImageData`-shaped object, an oxgl context's canvas, an object with a
@@ -342,7 +363,7 @@ export function setImageDecoder(decoder: ((image: object) => Pixels | undefined)
 function imagePixels(source: unknown, method: string, position: number): Pixels {
   if (typeof source !== 'object' || source === null) throw typeError(method, position, 'TexImageSource');
   const shaped = source as Partial<Pixels> & { naturalWidth?: unknown; naturalHeight?: unknown; ownerDocument?: unknown };
-  if (ArrayBuffer.isView(shaped.data) && typeof shaped.width === 'number' && typeof shaped.height === 'number') {
+  if (isPixelView(shaped.data) && typeof shaped.width === 'number' && typeof shaped.height === 'number') {
     return { data: shaped.data, width: shaped.width, height: shaped.height };
   }
   const owner = canvasContexts.get(source);
@@ -477,6 +498,8 @@ function compressed(s: ContextState, call: number, args: NativeTexArgs, rest: un
 
 /** A context's state; assigned by `ContextBase`'s static block. */
 let contextState: (gl: ContextBase) => ContextState;
+/** Whether `value` is a context oxgl created; assigned by `ContextBase`'s static block. */
+export let isContext: (value: unknown) => value is WebGLRenderingContext | WebGL2RenderingContext;
 /** Gives a restored context its new state; assigned by `ContextBase`'s static block. */
 let replaceState: (gl: ContextBase, s: ContextState) => void;
 /** `framebufferTextureLayer`'s attachment; assigned by `ContextBase`'s static block. */
@@ -969,6 +992,8 @@ abstract class ContextBase {
       gl.#resizeTo(width, height);
     };
     contextState = (gl) => gl.#s;
+    isContext = (value): value is WebGLRenderingContext | WebGL2RenderingContext =>
+      typeof value === 'object' && value !== null && #s in value;
     replaceState = (gl, s) => {
       gl.#s = s;
     };
@@ -3291,7 +3316,7 @@ for (const name of ['resize', 'destroy']) Object.defineProperty(ContextBase.prot
 flattenPrototype(WebGLRenderingContext);
 flattenPrototype(WebGL2RenderingContext);
 
-function codedError(code: string, message: string): Error {
+export function codedError(code: string, message: string): Error {
   return Object.assign(new Error(message), { code });
 }
 

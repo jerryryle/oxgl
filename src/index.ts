@@ -33,6 +33,7 @@ export {
 } from './objects.js';
 
 export type { ExtensionMap } from './extensions.js';
+export { encodePNG } from './png.js';
 
 /** Version of the JS ↔ native interface reported by the loaded addon. */
 export const nativeAbiVersion: number = native.nativeAbiVersion();

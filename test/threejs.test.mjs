@@ -97,6 +97,28 @@ test('a data texture with nearest filtering', () => {
   finish(gl, renderer);
 });
 
+test('a texture whose image is an ImageData-shaped object', () => {
+  const { gl, renderer } = setup();
+  // Top row first, as image libraries decode: red, green over blue, white.
+  const data = new Uint8Array([255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 255, 255, 255, 255]);
+  const texture = new THREE.Texture({ width: 2, height: 2, data });
+  texture.magFilter = THREE.NearestFilter;
+  texture.minFilter = THREE.NearestFilter;
+  texture.generateMipmaps = false;
+  texture.colorSpace = THREE.NoColorSpace;
+  texture.needsUpdate = true;
+  const scene = new THREE.Scene();
+  scene.add(new THREE.Mesh(new THREE.PlaneGeometry(2, 2), new THREE.MeshBasicMaterial({ map: texture })));
+  renderer.outputColorSpace = THREE.LinearSRGBColorSpace;
+  renderer.render(scene, orthoCamera());
+  // flipY (on by default for a Texture) puts the source's top row at the top.
+  near(pixel(gl, 8, 56), [255, 0, 0, 255]);
+  near(pixel(gl, 56, 56), [0, 255, 0, 255]);
+  near(pixel(gl, 8, 8), [0, 0, 255, 255]);
+  near(pixel(gl, 56, 8), [255, 255, 255, 255]);
+  finish(gl, renderer);
+});
+
 test('a half-float render target read back', () => {
   const { gl, renderer } = setup();
   const target = new THREE.WebGLRenderTarget(4, 4, { type: THREE.HalfFloatType });

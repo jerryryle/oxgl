@@ -159,6 +159,88 @@ pixels rather than 1.73%, mostly where its normal z-buffer view shows
 z-fighting. `threejs/expectations.txt` lists the platforms each entry applies
 to.
 
+### Images and textures
+
+Node has no `<img>` element or image decoder, so the `TexImageSource` forms of
+`texImage2D`, `texSubImage2D`, `texImage3D` and `texSubImage3D` take:
+
+- an `ImageData`-shaped object, `{ width, height, data }`, whose `data` is an
+  8-bit typed array (a `Uint8Array`, `Uint8ClampedArray` or Node `Buffer`) of
+  RGBA pixels, top row first and not premultiplied, or a `Uint16Array` of
+  16-bit RGBA pixels. Other arrays, such as a `Float32Array`, throw a
+  `TypeError`, and `data` too short for `width × height` pixels generates
+  `INVALID_OPERATION`;
+- another oxgl context's `canvas`;
+- any object with `getContext('2d')`, such as an `@napi-rs/canvas` canvas.
+
+Decoding a file with an image library gives an `ImageData`-shaped object
+directly. With [`sharp`](https://www.npmjs.com/package/sharp):
+
+```js
+import sharp from 'sharp';
+
+const { data, info } = await sharp('wood.png').ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, { width: info.width, height: info.height, data });
+```
+
+With [`pngjs`](https://www.npmjs.com/package/pngjs), whose decoded image is
+already `{ width, height, data }`:
+
+```js
+import { readFileSync } from 'node:fs';
+import { PNG } from 'pngjs';
+
+const image = PNG.sync.read(readFileSync('wood.png'));
+gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+```
+
+A 2D canvas library works too, by drawing the image into a canvas and uploading
+the canvas. A 2D canvas stores premultiplied pixels, so semi-transparent pixels
+lose some precision this way; opaque images upload exactly.
+
+```js
+import { createCanvas, loadImage } from '@napi-rs/canvas';
+
+const img = await loadImage('wood.png');
+const canvas = createCanvas(img.width, img.height);
+canvas.getContext('2d').drawImage(img, 0, 0);
+gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+```
+
+In three.js, an `ImageData`-shaped object is a texture's image like any other:
+
+```js
+const texture = new THREE.Texture(image); // image from sharp or pngjs, as above
+texture.colorSpace = THREE.SRGBColorSpace;
+texture.needsUpdate = true;
+```
+
+### Saving a PNG
+
+`encodePNG(gl)` (not part of WebGL) resolves with a PNG of the context's
+drawing buffer, as a browser's `canvas.toDataURL('image/png')` would encode
+it: top row first, with alpha unpremultiplied. It reads the drawing buffer
+whatever framebuffer is bound and leaves all context state unchanged.
+
+```js
+import { writeFile } from 'node:fs/promises';
+import { createContext, encodePNG } from '@oxgl-js/oxgl';
+
+const gl = createContext({ width: 64, height: 32 });
+gl.clearColor(0, 1, 0, 1);
+gl.clear(gl.COLOR_BUFFER_BIT);
+await writeFile('frame.png', await encodePNG(gl));
+gl.destroy();
+```
+
+The pixels are read during the call, so drawing afterwards does not change the
+result. Compression runs on libuv's thread pool, so it does not block the event
+loop; that pool has 4 threads by default, shared with `fs` and `dns.lookup`, so
+a server encoding many large frames at once may want a larger
+`UV_THREADPOOL_SIZE`. The result is a Node `Buffer`, declared as `Uint8Array`
+so the package's TypeScript declarations need no Node types. On a lost or
+destroyed context the promise rejects with `OXGL_CONTEXT_LOST`.
+
 ### Backends
 
 | `backend` | Renders with |
@@ -217,6 +299,7 @@ Invalid options throw a `TypeError` or `RangeError`. Other failures throw an
 | `OXGL_INVALID_BACKEND` | `OXGL_BACKEND` has a value other than `auto`, `gpu`, `software`, or empty |
 | `OXGL_CONTEXT_CREATION_FAILED` | no backend could create the context, for example WebGL 2 on a backend without OpenGL ES 3.0, or `failIfMajorPerformanceCaveat` with the software backend |
 | `OXGL_NATIVE_MISSING` | the native addon or its ANGLE libraries are missing or failed to load |
+| `OXGL_CONTEXT_LOST` | `encodePNG` was given a lost or destroyed context (the promise rejects) |
 
 WebGL errors are reported through `getError()`, as in a browser.
 
