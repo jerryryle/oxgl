@@ -150,12 +150,14 @@ the 354 examples it runs (377 less 23 that three.js's own test also skips):
   (3), more compressed texture formats in SwiftShader, and a wall-clock
   timer. None is unexplained.
 
-macOS arm64 and Windows arm64 give the same outcomes, except that 3 of the
+The other platforms give the same outcomes, with two exceptions. 3 of the
 examples that differ on Linux arm64 (`webgl_shadowmap_viewer` and the two
 `webxr_vr_handinput_pointer*` examples) match their reference within 0.1%
-there. SwiftShader's output for them differs by operating system, not by CPU
-architecture; the cause is not yet known. `threejs/expectations.txt` lists the
-platforms each entry applies to.
+everywhere else; why only Linux arm64 differs is not yet known. On x64 (Linux
+and Windows), `webgl_camera_logarithmicdepthbuffer` differs in 2.20% of
+pixels rather than 1.73%, mostly where its normal z-buffer view shows
+z-fighting. `threejs/expectations.txt` lists the platforms each entry applies
+to.
 
 ### Backends
 
