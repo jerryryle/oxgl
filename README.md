@@ -4,10 +4,14 @@
 [![npm](https://img.shields.io/npm/v/@oxgl-js/oxgl)](https://www.npmjs.com/package/@oxgl-js/oxgl)
 [![license](https://img.shields.io/badge/license-BSD--3--Clause-blue)](LICENSE)
 
-Standards-compliant WebGL 1 and WebGL 2 for Node.js, rendered headless through
-ANGLE, with a SwiftShader software fallback. The full WebGL 1 and WebGL 2 APIs
-are implemented, with extensions and context loss, and are checked against the
-Khronos conformance suite; three.js renders through it unmodified.
+Oxgl is headless WebGL 1 and WebGL 2 for Node.js that strives for standards
+compliance. It renders through ANGLE. By default it uses the GPU when one is
+available and the SwiftShader software renderer otherwise. It implements the
+WebGL 1 and WebGL 2 APIs, including extensions and context loss, except for a
+few drawing-buffer members the WebGL specification added recently (see Known
+issues). It is tested against the Khronos WebGL conformance suites.
+
+Three.js works with oxgl without any changes to three.js (see three.js below).
 
 ## Install
 
@@ -15,54 +19,64 @@ Khronos conformance suite; three.js renders through it unmodified.
 npm install @oxgl-js/oxgl
 ```
 
-Prebuilt for Linux x64 and arm64 (glibc 2.34 or newer, such as Ubuntu 22.04 or
-Debian 12), macOS arm64, and Windows x64 and arm64, on Node.js 22.22.2 or
-newer. Installing needs no Rust toolchain, compiler or install script: npm
-downloads only the host's platform package (`@oxgl-js/<platform>`), which holds
-the native addon and its ANGLE libraries. Linux with musl (such as Alpine) has
-no build; importing oxgl there throws an error with
-`code === 'OXGL_NATIVE_MISSING'`. To build from source, see Prerequisites below
-and `CONTRIBUTING.md`.
+Oxgl needs Node.js 22.22.2 or newer, on one of the platforms below. Installing
+needs no Rust toolchain, compiler or install script: npm downloads only the
+package for your platform, which holds the native addon and its ANGLE
+libraries. To build from source, see Prerequisites below and
+`CONTRIBUTING.md`.
 
 ## Platforms
 
-Supported and tested: Linux x64 and Linux arm64 (glibc), macOS arm64, Windows
-x64 and Windows arm64. Each has a pinned ANGLE bundle, and CI runs the Rust and
-Node tests, both Khronos conformance suites and three.js's examples on each with
-the software backend. The [results page](https://jerryryle.github.io/oxgl/)
-shows every conformance page's and three.js example's result on each platform
-from the latest CI run on `main`, with the reason for each one that doesn't
-pass.
-Conformance results differ from Linux arm64 only in these pages, which
-`conformance/expectations.txt` lists for the platforms they apply to:
+| Platform | Package | GPU backend |
+|---|---|---|
+| Linux x64 (glibc) | `@oxgl-js/linux-x64-gnu` | Vulkan |
+| Linux arm64 (glibc) | `@oxgl-js/linux-arm64-gnu` | Vulkan |
+| macOS arm64 | `@oxgl-js/darwin-arm64` | Metal |
+| Windows x64 | `@oxgl-js/win32-x64-msvc` | Direct3D 11 |
+| Windows arm64 | `@oxgl-js/win32-arm64-msvc` | Direct3D 11 |
 
-- On x64 (Linux and Windows), 18 deqp pages that render to 32-bit integer
-  color buffers (`rgba32i`, `r32ui` and similar) fail their image comparisons,
-  because of a bug in the WebGL conformance tests: their shaders convert floats
-  just past the 32-bit integer range, which GLSL leaves undefined, and the
-  reference images assume the result is clamped. arm64 clamps and x86 does not.
-  The native dEQP tests fixed this in 2018; the WebGL port has not.
+On Linux, oxgl needs glibc 2.34 or newer, such as Ubuntu 22.04 or Debian 12.
+There is no build for Linux with musl (such as Alpine), for macOS on Intel, or
+for any other platform; importing oxgl there throws an error with
+`code === 'OXGL_NATIVE_MISSING'`.
 
-Docker on a Mac exposes no GPU to Linux containers, so the Linux arm64 runs use
-the software backend. The GPU backend path has been checked on macOS arm64
-(ANGLE Metal on an Apple GPU): all Node tests pass, and the Khronos results match
-Linux arm64 except for differences in image decoding by the conformance
-runner's canvas package (node-canvas at the time; now `@napi-rs/canvas`).
+CI runs the Rust and Node tests, both Khronos conformance suites and three.js's
+examples on all five platforms, with the software backend; it does not yet test
+the GPU backends. The [results page](https://jerryryle.github.io/oxgl/) shows
+every conformance page's and three.js example's result on each platform from
+the latest CI run on `main`, with the reason for each one that doesn't pass.
+The results are the same on every platform, apart from the x64 pages listed
+under Known issues and the three.js examples noted in the three.js section
+below.
 
 ## Known issues
 
-- **SwiftShader initialization briefly changes process-global state.** The
-  first SwiftShader context in a process (`backend: 'software'`,
-  `OXGL_BACKEND=software`, or an `'auto'` context the GPU cannot provide,
-  whether there is no usable GPU or one GPU context fails to create, for
-  example when GPU memory runs out) makes ANGLE set
-  `VK_ICD_FILENAMES` and, on Linux and Windows, change the working directory
-  for a few milliseconds, then restore both. A thread that reads the
-  environment or uses a relative path at that moment can misbehave or crash.
-  GPU backends are unaffected. To control when this happens, create and destroy
-  one software context at startup, before starting other threads. The cause is
-  ANGLE's `ScopedVkLoaderEnvironment`; this entry goes away once the pinned
-  ANGLE stops doing it (tracked in `angle/README.md`, "Known upstream issues").
+- **Some recent WebGL additions are missing.** Oxgl does not implement
+  `drawingBufferColorSpace`, `unpackColorSpace`, `drawingBufferFormat` or
+  `drawingBufferStorage()`, which the WebGL specification added recently. The
+  Khronos conformance suite doesn't require them, and its pages pass without
+  them.
+- **18 WebGL 2 conformance pages fail with the software backend on x64.** On
+  Linux x64 and Windows x64, 18 deqp pages that render to 32-bit integer color
+  buffers (`rgba32i`, `r32ui` and similar) fail their image comparisons. The
+  bug is in the tests: their shaders convert floats just outside the 32-bit
+  integer range, which GLSL leaves undefined, and the reference images assume
+  the result is clamped. On arm64 the conversion clamps and on x86 it does not,
+  so the same pages pass on arm64. The native dEQP tests fixed this in 2018
+  (VK-GL-CTS commit 6624c8aa); their WebGL port has not.
+  `conformance/expectations.txt` lists the pages.
+- **SwiftShader initialization briefly changes process-global state.** When a
+  process creates its first SwiftShader context, ANGLE sets `VK_ICD_FILENAMES`
+  and, on Linux and Windows, changes the working directory for a few
+  milliseconds, then restores both. A thread that reads the environment or uses
+  a relative path at that moment can misbehave or crash. This happens with
+  `backend: 'software'`, with `OXGL_BACKEND=software`, and when an `'auto'`
+  context falls back to SwiftShader, for example because there is no usable GPU
+  or GPU memory has run out. GPU contexts are unaffected. To control when it
+  happens, create and destroy one software context at startup, before starting
+  other threads. The cause is ANGLE's `ScopedVkLoaderEnvironment`, and the issue
+  will go away when the pinned ANGLE stops doing this (tracked in
+  `angle/README.md`, "Known upstream issues").
 - **SwiftShader can get the depth of a near-clipped triangle wrong.** With the
   software backend, a large triangle that the near plane clips can be drawn
   with depths that are too near, hiding geometry in front of it. A typical
@@ -122,7 +136,10 @@ canvas. `gl.resize(width, height)` (not part of WebGL) does the same for any
 context, also updating a `HeadlessCanvas`. A resize clears the buffer and
 keeps all other state, including the viewport.
 
-Libraries that take a canvas and a context, such as three.js, can use both:
+### three.js
+
+Three.js needs no changes to work with oxgl. Pass it an oxgl context and that
+context's canvas:
 
 ```js
 import * as THREE from 'three';
@@ -148,7 +165,7 @@ the 354 examples it runs (377 less 23 that three.js's own test also skips):
   workers, or no `AudioContext`. 8 differ for known reasons: SwiftShader (3,
   including the near-clipped triangle under "Known issues"), random noise
   (3), more compressed texture formats in SwiftShader, and a wall-clock
-  timer. None is unexplained.
+  timer.
 
 The other platforms give the same outcomes, with two exceptions. 3 of the
 examples that differ on Linux arm64 (`webgl_shadowmap_viewer` and the two
@@ -305,28 +322,26 @@ WebGL errors are reported through `getError()`, as in a browser.
 
 ## Performance
 
-`npm run bench` measures per-call overhead, draws, transfers and two three.js
-scenes. On Linux arm64 in Docker (16 cores, software backend, 2 s per case):
+To measure performance on your own machine, build oxgl and run the benchmarks:
 
-| Case | Result |
-|---|---|
-| `enable` (a state call: WebIDL conversion and the native call) | 11.6 M calls/s |
-| `uniform4f` | 7.3 M calls/s |
-| `drawArrays`, one small triangle | 53 k draws/s |
-| `bufferSubData`, 1 MiB | 32 GB/s |
-| `texSubImage2D`, 512×512 RGBA8 | 26 GB/s |
-| `readPixels`, 256×256 RGBA8 | 3.3 GB/s |
-| three.js, 1000 lit meshes | 52 frames/s |
-| three.js, one 128×64-segment lit sphere | 1230 frames/s |
+```sh
+npm run build
+npm run bench
+```
 
-Draws cost the same as calling ANGLE directly (51.9 k draws/s in
-`cargo test -p oxgl-sys --test angle --release raw_draw_rate -- --ignored`):
-the time is SwiftShader's, and a GPU backend draws much faster. oxgl adds
-about 100 ns per call.
+They measure state calls, uniform updates, draws, buffer and texture uploads,
+`readPixels`, and two three.js scenes, and report operations per second or
+bytes per second for each. They use the backend `OXGL_BACKEND` selects (the
+default is `auto`) and run each case for 1 second; to run longer, set
+`OXGL_BENCH_MS` to a time in milliseconds. Results vary widely between
+machines and backends, so compare them on one machine.
 
-On the GPU backend (macOS arm64, ANGLE Metal, Apple M4 Max), the same
-benchmarks give 715 k small draws/s and 830 frames/s for the 1000-mesh
-three.js scene.
+Oxgl adds little overhead of its own: about 100 ns per WebGL call on Linux
+arm64, for checking the arguments and calling into native code. Most of the
+time for draws and three.js frames is spent in the renderer, which on the
+software backend is SwiftShader, so a GPU backend is usually much faster for
+draws. To compare draws with calling ANGLE directly, run
+`cargo test -p oxgl-sys --test angle --release raw_draw_rate -- --ignored`.
 
 ## Prerequisites
 
