@@ -21,15 +21,14 @@ cancels the earlier one; runs on `main` are never cancelled.
 | `asan` | Linux arm64 and x64 | Rust tests under AddressSanitizer and LeakSanitizer |
 | `conformance` | Linux x64 and arm64, macOS arm64, Windows x64 and arm64 | both Khronos conformance suites with `OXGL_BACKEND=software`, judged against the `conformance/expectations.txt` entries that apply on each platform; each report is uploaded as `conformance-results-<runner>-<suite>` (see Conformance tests below) |
 | `threejs` | Linux x64 and arm64, macOS arm64, Windows x64 and arm64 | three.js's own WebGL examples with `OXGL_BACKEND=software`, each frame judged against its reference screenshot and the `threejs/expectations.txt` entries that apply on each platform; the report and failing examples' images are uploaded as `threejs-results-<runner>` (see three.js examples below) |
-| `gpu` | self-hosted `oxgl-gpu` runner | Node tests on a real GPU; skipped unless the `OXGL_GPU_RUNNER` repository variable is `true` |
-| `ci` | Linux | succeeds only when every job above except `gpu` succeeded |
+| `ci` | Linux | succeeds only when every job above succeeded |
 | `release` | Linux | after `ci`, on `main` only, when npm doesn't have `package.json`'s version yet: publishes the run's tarballs (see Releases below) |
 | `results` | Linux | after `conformance` and `threejs`, even when they fail: builds the results page from their reports (or, for a page-only change, from the latest `main` run's) and uploads it as `results-page`; not part of `ci` (see Results page below) |
 | `pages` | Linux | on `main` only: publishes the page `results` built to GitHub Pages |
 | `merge-bump` | Linux | after `ci`, on a manual run of the `angle-bump` branch: merges the bump pull request if it is exactly the bot's change, and starts the run on `main` |
 
-`build` builds and packs oxgl once per platform. `node-test`, `conformance`,
-`threejs` and `gpu` don't build: each downloads the run's `@oxgl-js/oxgl`
+`build` builds and packs oxgl once per platform. `node-test`, `conformance`
+and `threejs` don't build: each downloads the run's `@oxgl-js/oxgl`
 tarball and its platform's, and unpacks them into `dist/` with
 `scripts/unpack-packages.mjs`, so every test runs the files the release
 publishes. They wait for every platform's `build`, and none runs when one
@@ -49,12 +48,12 @@ Branches → branch protection rule for `main` → Require status checks → `ci
 Jobs can then be added or renamed without changing that setting.
 
 `workflow-lint` and `repo-checks` run on every change. The jobs that build or
-test oxgl (`build`, `check`, `node-test`, `asan`, `conformance`, `threejs`, `gpu`) are skipped
-when every changed file is on the skip list in `ci.yml`'s `changes` job:
-Markdown, `openspec/`, `.claude/`, `assets/`, `LICENSE`, `.editorconfig` and the
-workflow linters' config. `ci` passes those skips and fails any other. Add a
-path to the list only if no build, lint or test step reads it; anything not
-listed, including a new directory, runs every job.
+test oxgl (`build`, `check`, `node-test`, `asan`, `conformance`, `threejs`)
+are skipped when every changed file is on the skip list in `ci.yml`'s `changes`
+job: Markdown, `openspec/`, `.claude/`, `assets/`, `LICENSE`, `.editorconfig`,
+and Dependabot's and zizmor's config. `ci` passes those skips and fails any other. Add a path to
+the list only if no build, lint or test step reads it; anything not listed,
+including a new directory, runs every job.
 
 A change to only the results page's own files (`scripts/results-page.html`,
 `scripts/results-page.mjs`, `test/results-page.test.mjs`), plus anything on the
