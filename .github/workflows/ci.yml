@@ -79,6 +79,8 @@ jobs:
             heavy=false
             while IFS= read -r f; do
               case "$f" in
+                # Markdown that pack.mjs reads, so it is not documentation.
+                scripts/platform-README.md) heavy=true; break ;;
                 *.md|openspec/*|.claude/*|assets/*|LICENSE|.editorconfig|.github/dependabot.yml|.github/zizmor.yml) ;;
                 scripts/results-page.html|scripts/results-page.mjs|test/results-page.test.mjs) page=true ;;
                 *) heavy=true; break ;;

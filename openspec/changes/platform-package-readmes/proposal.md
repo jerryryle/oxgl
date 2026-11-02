@@ -23,6 +23,7 @@ The five platform packages (`@oxgl-js/linux-x64-gnu` and the others) are publish
   ```
 
 - **`scripts/pack.mjs` fills it in.** It writes the filled template as the staged platform package's `README.md`, beside the manifest it already generates and from the same target data. The labels are `Linux x64 (glibc)`, `Linux arm64 (glibc)`, `macOS arm64`, `Windows x64` and `Windows arm64`. A placeholder missing from the template fails the pack, as a missing marker fails the results page (`scripts/results-page.mjs`), and so does any `{{` left after filling in, such as a misspelled or unknown placeholder. The manifest's `files` is unchanged, since npm always packs a root `README.md`.
+- **CI still builds when only the template changes.** The `changes` job's skip list matches `*.md`, which would take in the template, though `pack.mjs` reads it (continuous-integration, "Skip list holds only unread files"). A case ahead of `*.md` runs every job for it, and `CONTRIBUTING.md` says so.
 
 ### Out of scope
 
@@ -41,4 +42,5 @@ None.
 
 ## Impact
 
-- `scripts/pack.mjs` and the new `scripts/platform-README.md`. The smoke test, release and CI are unchanged.
+- `scripts/pack.mjs` and the new `scripts/platform-README.md`.
+- `.github/workflows/ci.yml` and `CONTRIBUTING.md`: the template is kept off the skip list. The smoke test and release are unchanged.

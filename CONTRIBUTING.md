@@ -50,8 +50,9 @@ Jobs can then be added or renamed without changing that setting.
 `workflow-lint` and `repo-checks` run on every change. The jobs that build or
 test oxgl (`build`, `check`, `node-test`, `asan`, `conformance`, `threejs`)
 are skipped when every changed file is on the skip list in `ci.yml`'s `changes`
-job: Markdown, `openspec/`, `.claude/`, `assets/`, `LICENSE`, `.editorconfig`,
-and Dependabot's and zizmor's config. `ci` passes those skips and fails any other. Add a path to
+job: Markdown (except `scripts/platform-README.md`, which `pack.mjs` reads),
+`openspec/`, `.claude/`, `assets/`, `LICENSE`, `.editorconfig`, and Dependabot's
+and zizmor's config. `ci` passes those skips and fails any other. Add a path to
 the list only if no build, lint or test step reads it; anything not listed,
 including a new directory, runs every job.
 
