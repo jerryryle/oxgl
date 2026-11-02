@@ -743,6 +743,9 @@ function fixtureRepository(dir) {
   mkdirSync(join(repo, 'sdk', 'tests'), { recursive: true });
   writeFileSync(join(repo, 'sdk', 'tests', '00_test_list.txt'), 'conformance/00_test_list.txt\n');
   writeFileSync(join(repo, 'README.md'), 'outside sdk/tests\n');
+  // As in three.js: text files are normalized, so the checkout's line endings
+  // follow core.eol.
+  writeFileSync(join(repo, '.gitattributes'), '* text=auto\n');
   const git = (...args) => execFileSync('git', args, { cwd: repo, encoding: 'utf8' }).trim();
   git('init', '--quiet');
   git('config', 'uploadpack.allowAnySHA1InWant', 'true');
@@ -795,6 +798,28 @@ test('Checkout with its own paths and marker: only those paths, reused once the 
   } finally {
     rmSync(dir, { recursive: true, force: true });
   }
+});
+
+test('Windows host converting line endings: the checkout has the commit\'s bytes', (t) => {
+  const dir = mkdtempSync(join(tmpdir(), 'oxgl-conformance-'));
+  t.after(() => rmSync(dir, { recursive: true, force: true }));
+  const pin = fixtureRepository(dir);
+  // Git for Windows' usual configuration, in the environment of the git
+  // commands ensureCheckout starts.
+  const saved = { ...process.env };
+  t.after(() => {
+    for (const key of Object.keys(process.env)) if (!(key in saved)) delete process.env[key];
+    Object.assign(process.env, saved);
+  });
+  Object.assign(process.env, {
+    GIT_CONFIG_COUNT: '2',
+    GIT_CONFIG_KEY_0: 'core.autocrlf',
+    GIT_CONFIG_VALUE_0: 'true',
+    GIT_CONFIG_KEY_1: 'core.eol',
+    GIT_CONFIG_VALUE_1: 'crlf',
+  });
+  const tests = ensureSuite(pin, join(dir, 'cache'));
+  assert.equal(readFileSync(join(tests, '00_test_list.txt'), 'utf8'), 'conformance/00_test_list.txt\n');
 });
 
 const LIMIT_MS = 3000;

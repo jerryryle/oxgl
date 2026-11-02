@@ -1,0 +1,20 @@
+# Puts the run's packages into dist/ (openspec continuous-integration, "Each
+# platform is built once per run"): the @oxgl-js/oxgl tarball (package-main)
+# and the platform tarball the build on `runner` packed (packages-<runner>),
+# unpacked by scripts/unpack-packages.mjs. Runs after checkout.
+name: Use the run's packages
+description: Downloads this run's main package and one platform's, and unpacks them into dist/.
+inputs:
+  runner:
+    description: The build job's runner whose platform package to use, such as macos-15.
+    required: true
+runs:
+  using: composite
+  steps:
+    - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      with:
+        pattern: "{package-main,packages-${{ inputs.runner }}}"
+        path: ${{ runner.temp }}/packages
+        merge-multiple: true
+    - shell: bash
+      run: node scripts/unpack-packages.mjs "$RUNNER_TEMP/packages"

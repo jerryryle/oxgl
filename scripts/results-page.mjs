@@ -31,7 +31,7 @@ const SECTIONS = [
   {
     suite: 'threejs',
     title: 'three.js examples',
-    about: "three.js's own examples, each frame compared with the release's reference screenshot. These run on Linux arm64 only.",
+    about: "three.js's own examples, each frame compared with the release's reference screenshot, run on every platform.",
   },
 ];
 

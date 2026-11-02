@@ -8,7 +8,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { after, before, test } from 'node:test';
 
-import { applicable, concludeRun, formatExpectations, judge, parseExpectations, updateExpectations } from '../conformance/expectations.mjs';
+import { applicable, concludeRun, formatExpectations, hostPlatform, judge, parseExpectations, PLATFORMS, updateExpectations } from '../conformance/expectations.mjs';
 import { defaultJobs, runPages } from '../conformance/pool.mjs';
 import { startServer } from '../conformance/server.mjs';
 import { crossOrigin, workerClass } from '../conformance/workers.mjs';
@@ -432,6 +432,10 @@ test('Filtered run: only matching examples run, other entries are neither checke
   assert.deepEqual(report.stale, []);
   assert.equal(report.jobs, 2);
   assert.equal(report.tag, 'fixture');
+  // Named as the expectations and the results page name it, not by Node's
+  // process.platform (darwin, win32).
+  assert.equal(report.platform, hostPlatform());
+  assert.ok(PLATFORMS.includes(report.platform), report.platform);
 });
 
 test('Raising the total limit: a slow example is judged instead of timing out, and the report records both limits', async () => {

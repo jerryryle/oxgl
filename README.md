@@ -28,10 +28,11 @@ and `CONTRIBUTING.md`.
 
 Supported and tested: Linux x64 and Linux arm64 (glibc), macOS arm64, Windows
 x64 and Windows arm64. Each has a pinned ANGLE bundle, and CI runs the Rust and
-Node tests and both Khronos conformance suites on each with the software
-backend. The [results page](https://jerryryle.github.io/oxgl/) shows every
-conformance page's and three.js example's result on each platform from the
-latest CI run on `main`, with the reason for each one that doesn't pass.
+Node tests, both Khronos conformance suites and three.js's examples on each with
+the software backend. The [results page](https://jerryryle.github.io/oxgl/)
+shows every conformance page's and three.js example's result on each platform
+from the latest CI run on `main`, with the reason for each one that doesn't
+pass.
 Conformance results differ from Linux arm64 only in these pages, which
 `conformance/expectations.txt` lists for the platforms they apply to:
 
@@ -148,6 +149,13 @@ the 354 examples it runs (377 less 23 that three.js's own test also skips):
   including the near-clipped triangle under "Known issues"), random noise
   (3), more compressed texture formats in SwiftShader, and a wall-clock
   timer. None is unexplained.
+
+macOS arm64 and Windows arm64 give the same outcomes, except that 3 of the
+examples that differ on Linux arm64 (`webgl_shadowmap_viewer` and the two
+`webxr_vr_handinput_pointer*` examples) match their reference within 0.1%
+there. SwiftShader's output for them differs by operating system, not by CPU
+architecture; the cause is not yet known. `threejs/expectations.txt` lists the
+platforms each entry applies to.
 
 ### Backends
 
