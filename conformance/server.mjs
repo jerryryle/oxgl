@@ -45,9 +45,11 @@ export async function startServer(root, { onResponse } = {}) {
   const server = createServer((req, res) => {
     inFlight += 1;
     lastChange = performance.now();
+    // The file's size, once it is being sent; a response cut short adds none.
+    let size = 0;
     res.once('close', () => {
       inFlight -= 1;
-      bytes += res.statusCode === 200 && req.method !== 'HEAD' ? Number(res.getHeader('content-length') ?? 0) : 0;
+      if (res.writableFinished) bytes += size;
       lastChange = performance.now();
       onResponse?.(req, res);
     });
@@ -70,9 +72,13 @@ export async function startServer(root, { onResponse } = {}) {
       'content-type': TYPES[extname(file).toLowerCase()] ?? 'application/octet-stream',
       'content-length': stats.size,
     });
-    if (req.method === 'HEAD') res.end();
+    if (req.method === 'HEAD') {
+      res.end();
+      return;
+    }
+    size = stats.size;
     // A read failing after the stat fails this request, not the run.
-    else createReadStream(file).on('error', () => res.destroy()).pipe(res);
+    createReadStream(file).on('error', () => res.destroy()).pipe(res);
   });
   // A page can run synchronously for longer than the default 5 s keep-alive
   // timeout; the server then closes the page's idle connection, and the

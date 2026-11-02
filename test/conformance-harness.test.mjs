@@ -405,6 +405,21 @@ test('suite server serves files under the root, on loopback only, and refuses pa
   }
 });
 
+test('suite server counts the bytes of the files it serves, and none for a refusal, a missing file or HEAD', async () => {
+  const server = await startServer(join(FIXTURES, 'suite'));
+  try {
+    await get(server.origin, '/served.txt');
+    await get(server.origin, '/missing.txt');
+    await get(server.origin, '/../outside.txt');
+    await new Promise((done, fail) => request(`${server.origin}/served.txt`, { method: 'HEAD' }, (res) => res.resume().on('end', done)).on('error', fail).end());
+    // The server counts a response once it closes, which can follow the client's end.
+    while (server.activity().inFlight > 0) await new Promise((done) => setImmediate(done));
+    assert.equal(server.activity().bytes, 'served\n'.length);
+  } finally {
+    await server.close();
+  }
+});
+
 // --- Page runner ------------------------------------------------------------
 
 // Long enough that a page ending at once is clearly not waiting out the limit
