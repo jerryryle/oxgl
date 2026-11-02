@@ -2,10 +2,10 @@
 // ANGLE libraries and THIRD_PARTY_NOTICES from dist/) and the main package,
 // @oxgl-js/oxgl, into <out-dir> (openspec release, "Packages released
 // together"). The platform manifest is generated from the host's entry in
-// `napi.targets`; the main manifest gains `optionalDependencies` on every target at exactly the
-// root version. Neither is written to the repository: a lockfile cannot record
-// a package that is not published yet, so `npm ci` would fail if
-// package.json listed them.
+// `napi.targets`; the main manifest gains `optionalDependencies` on every
+// target at exactly the root version. Neither is written to the repository:
+// a lockfile cannot record a package that is not published yet, so `npm ci`
+// would fail if package.json listed them.
 //
 //     node scripts/pack.mjs <out-dir>
 import { cpSync, existsSync, mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from 'node:fs';
@@ -84,8 +84,8 @@ try {
     )}\n`,
   );
 
-  // The main package holds exactly the files `npm pack` would take from the repository,
-  // with the optional dependencies added to its manifest.
+  // The main package holds exactly the files `npm pack` would take from the
+  // repository, with the optional dependencies added to its manifest.
   const rootDir = join(stage, 'main');
   const [listing] = JSON.parse(npm(['pack', '--dry-run', '--json', '--ignore-scripts'], '.'));
   // The addon and ANGLE belong in the platform package only (openspec

@@ -1,12 +1,12 @@
 // Publishes the packed packages in <dir> (openspec release): every platform
 // package before the main package, @oxgl-js/oxgl, skipping any version npm
-// already has, so a rerun completes a release that failed partway. Then tags the commit and creates
-// the GitHub Release, unless it exists. With --dry-run it reports what it
-// would do and changes nothing.
+// already has, so a rerun completes a release that failed partway. Then tags
+// the commit and creates the GitHub Release, unless it exists. With --dry-run
+// it reports what it would do and changes nothing.
 //
 //     node scripts/release.mjs <dir> [--dry-run]
 import { execFileSync } from 'node:child_process';
-import { readdirSync } from 'node:fs';
+import { readdirSync, readFileSync } from 'node:fs';
 import { join } from 'node:path';
 
 const args = process.argv.slice(2);
@@ -43,8 +43,9 @@ const packages = readdirSync(dir)
     return { tarball, ...manifest(tarball) };
   });
 // Told apart by manifest name, not file name: the main package packs to
-// oxgl-js-oxgl-<version>.tgz, which looks like a platform tarball.
-const MAIN = '@oxgl-js/oxgl';
+// oxgl-js-oxgl-<version>.tgz, which looks like a platform tarball. Its name is
+// the repository's, as scripts/pack.mjs packs it.
+const MAIN = JSON.parse(readFileSync('package.json', 'utf8')).name;
 const mains = packages.filter((pkg) => pkg.name === MAIN);
 if (mains.length !== 1) throw new Error(`release: expected one ${MAIN} tarball in ${dir}, found ${String(mains.length)}`);
 const [main] = mains;
