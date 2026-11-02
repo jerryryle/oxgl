@@ -71,6 +71,10 @@ Each example SHALL run with the pinned `test/e2e/deterministic-injection.js` ins
 - **WHEN** an example loads 80 MB of models and textures
 - **THEN** the parse allowance is 30 s, and the example is not timed out by the runner's own waits
 
+#### Scenario: Allowance from the bytes served
+- **WHEN** an example is served 4 MB in all and draws its content 3 s after its last load arrives (cf. three.js `webgl_loader_gltf_transmission`, whose model is decoded after the idle wait)
+- **THEN** the runner releases the frame no sooner than 4 s after the idle wait, and the frame shows the content
+
 ### Requirement: The captured frame
 The captured frame SHALL be the viewport after the released animation frame: the body's background, with each WebGL canvas composited onto it (Canvases composited like a browser) at its place (Canvas placement), halved to 400×250 by averaging 2×2 blocks, as upstream scales its screenshots. A document with no WebGL canvas, or with a canvas that extends past the 800×500 viewport, SHALL produce `FAIL`.
 
