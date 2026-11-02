@@ -5,13 +5,13 @@ import { test } from 'node:test';
 import { loadNative } from '../dist/load-native.js';
 
 test('ESM import loads the native addon', async () => {
-  const oxgl = await import('oxgl');
+  const oxgl = await import('@oxgl-js/oxgl');
   assert.equal(oxgl.nativeAbiVersion, 13);
 });
 
 test('CommonJS require returns the same exports as import', async () => {
-  const required = createRequire(import.meta.url)('oxgl');
-  const imported = await import('oxgl');
+  const required = createRequire(import.meta.url)('@oxgl-js/oxgl');
+  const imported = await import('@oxgl-js/oxgl');
   assert.equal(required.nativeAbiVersion, imported.nativeAbiVersion);
 });
 

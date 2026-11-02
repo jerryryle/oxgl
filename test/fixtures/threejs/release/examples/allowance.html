@@ -1,0 +1,14 @@
+<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>allowance</title></head>
+<body>
+<script type="module">
+import { solid } from './lib/solid.js';
+// Draws 2 s after its load arrives: after the quiet period, so only the
+// parse allowance for the bytes served holds the frame back for it.
+fetch('lib/large.txt')
+  .then((response) => response.arrayBuffer())
+  .then(() => setTimeout(() => solid({ animate: false }), 2000));
+</script>
+</body>
+</html>

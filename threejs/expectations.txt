@@ -44,7 +44,7 @@ webgl_animation_keyframes DIFF 1% # rasterization: 0.26% of pixels differ
 webgl_animation_skinning_morph DIFF 1% # rasterization: 0.86% of pixels differ
 webgl_batch_lod_bvh FAIL # runner: loads a remote asset, refused: https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.9.10/build/index.module.js
 webgl_buffergeometry_custom_attributes_particles DIFF 2% # rasterization: 1.23% of pixels differ
-webgl_buffergeometry_glbufferattribute FAIL # timing: swaps its positions on a 2 s wall-clock interval (8.84% of pixels differ)
+webgl_buffergeometry_glbufferattribute FAIL # timing: swaps its positions on a 2 s wall-clock interval, so the frame depends on how long the runner waits (0.104% of pixels differ)
 webgl_buffergeometry_instancing DIFF 1% # rasterization: 0.23% of pixels differ
 webgl_buffergeometry_instancing_billboards DIFF 1% # rasterization: 0.54% of pixels differ
 webgl_buffergeometry_lines DIFF 1% # rasterization: 0.26% of pixels differ

@@ -172,7 +172,7 @@ before(() => {
     }
     writeFileSync(join(screenshots, `${name}.jpg`), canvas.toBuffer('image/png'));
   };
-  for (const name of ['solid', 'boxes', 'media', 'no-loop', 'modules', 'load-events', 'three', 'embedded', 'console-error', 'remote', 'worker-remote', 'polling', 'throws']) {
+  for (const name of ['solid', 'allowance', 'boxes', 'media', 'no-loop', 'modules', 'load-events', 'three', 'embedded', 'console-error', 'remote', 'worker-remote', 'polling', 'throws']) {
     reference(name, [[BLUE]]);
   }
   reference('transparent-black', [[[0, 0, 0]]]);
@@ -303,10 +303,15 @@ test('Example without an animation loop: judged on the frame it rendered on load
   passes(record);
 });
 
+test('Allowance from the bytes served: the frame waits for content drawn after the quiet period', async () => {
+  // About 10 KB served at 4 minutes per megabyte is an allowance of over 2 s.
+  passes(await run('allowance', { timing: { allowanceMsPerMB: 240_000, renderWaitMs: 100 } }));
+});
+
 test('Large assets: the parse allowance is capped, so the runner\'s own waits do not time it out', async () => {
-  // A rate of 10 minutes per megabyte would wait far past the limit without the cap.
+  // About 10 minutes per kilobyte: the page's 0.8 KB would wait over 7 minutes without the cap.
   const started = performance.now();
-  const record = await run('solid', { timing: { allowanceMsPerMB: 600_000, allowanceCapMs: 200 }, timeoutMs: 5000 });
+  const record = await run('solid', { timing: { allowanceMsPerMB: 600_000_000, allowanceCapMs: 200 }, timeoutMs: 5000 });
   passes(record);
   assert.ok(performance.now() - started < 5000);
 });

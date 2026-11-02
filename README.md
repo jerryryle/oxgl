@@ -1,7 +1,7 @@
 # oxgl
 
 [![ci](https://github.com/jerryryle/oxgl/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jerryryle/oxgl/actions/workflows/ci.yml)
-[![npm](https://img.shields.io/npm/v/oxgl)](https://www.npmjs.com/package/oxgl)
+[![npm](https://img.shields.io/npm/v/@oxgl-js/oxgl)](https://www.npmjs.com/package/@oxgl-js/oxgl)
 [![license](https://img.shields.io/badge/license-BSD--3--Clause-blue)](LICENSE)
 
 Standards-compliant WebGL 1 and WebGL 2 for Node.js, rendered headless through
@@ -12,7 +12,7 @@ Khronos conformance suite; three.js renders through it unmodified.
 ## Install
 
 ```sh
-npm install oxgl
+npm install @oxgl-js/oxgl
 ```
 
 Prebuilt for Linux x64 and arm64 (glibc 2.34 or newer, such as Ubuntu 22.04 or
@@ -80,7 +80,7 @@ runner's canvas package (node-canvas at the time; now `@napi-rs/canvas`).
 ## Usage
 
 ```js
-import { createContext } from 'oxgl';
+import { createContext } from '@oxgl-js/oxgl';
 
 const gl = createContext({ width: 64, height: 32 });
 gl.clearColor(0, 1, 0, 1);
@@ -125,7 +125,7 @@ Libraries that take a canvas and a context, such as three.js, can use both:
 
 ```js
 import * as THREE from 'three';
-import { createContext } from 'oxgl';
+import { createContext } from '@oxgl-js/oxgl';
 
 const gl = createContext({ width: 256, height: 256, webgl2: true });
 const renderer = new THREE.WebGLRenderer({ canvas: gl.canvas, context: gl });

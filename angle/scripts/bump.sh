@@ -11,7 +11,7 @@ cd "$(dirname "$0")/../.."
 tag="$(python3 angle/scripts/bump.py "$@")"
 [ -n "$tag" ] || exit 0
 current="$(node -p 'require("./package.json").version')"
-if npm view "oxgl@$current" version > /dev/null 2>&1; then
+if npm view "@oxgl-js/oxgl@$current" version > /dev/null 2>&1; then
   npm version patch --no-git-tag-version --ignore-scripts > /dev/null
 fi
 echo "$tag"

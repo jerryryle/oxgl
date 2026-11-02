@@ -69,7 +69,7 @@ changes, bump `version` in `package.json` and `package-lock.json` in a pull
 request (`npm version patch --no-git-tag-version`, or `minor`/`major`). After
 it merges and `ci` passes on `main`, the `release` job:
 
-1. Publishes the five platform packages (`@oxgl-js/<platform>`), then `oxgl`,
+1. Publishes the five platform packages (`@oxgl-js/<platform>`), then `@oxgl-js/oxgl`,
    from the tarballs that run's `check` jobs packed and smoke-tested, with npm
    trusted publishing and provenance. No npm token is stored anywhere.
 2. Creates the tag `v<version>` and a GitHub Release with generated notes.
@@ -95,18 +95,22 @@ These are done once, by the maintainer, in this order:
 1. In this repository's Settings → Actions → General, turn on "Allow GitHub
    Actions to create and approve pull requests": the bump opens its pull
    request with the default token.
-2. Merge the release change with `version` at `0.1.0`. The run on `main` packs
-   and smoke-tests, and its `release` job fails, because npm has no trusted
-   publisher yet. Until `0.1.0` is on npm the daily bump does nothing.
+2. Merge the release change with `version` at `0.1.1`. (The first attempt
+   published the five platform packages at `0.1.0` before npm refused the
+   unscoped `oxgl`; those stay unused.) The run on `main` packs and
+   smoke-tests, and its `release` job fails, because npm has no trusted
+   publisher yet. Until `@oxgl-js/oxgl` is on npm the daily bump does nothing.
 3. Download that run's `packages-*` artifacts and, signed in to npm as a member
    of the `oxgl-js` org, run `npm publish <tarball> --access public` for each
-   `oxgl-js-*.tgz`, then for `oxgl-0.1.0.tgz`.
+   platform tarball, `oxgl-js-<platform>-0.1.1.tgz`, then for the main one,
+   `oxgl-js-oxgl-0.1.1.tgz`. Pick them by name: `oxgl-js-*.tgz` matches the
+   main tarball too.
 4. On each of the six packages' Settings page on npmjs.com, add a trusted
    publisher: GitHub Actions, owner `jerryryle`, repository `oxgl`, workflow
    `ci.yml`, environment `npm`. Then set "Require two-factor authentication and
    disallow tokens".
 5. Rerun that run's `release` job. It finds the packages published and creates
-   `v0.1.0` and its GitHub Release.
+   `v0.1.1` and its GitHub Release.
 
 The `npm` GitHub environment, which only `main` may deploy to, already exists.
 
@@ -220,7 +224,7 @@ for 2D contexts and image decoding, and the runner exposes its `ImageData`
 class to pages; many texture pages need these before they reach oxgl. `npm ci`
 installs its prebuilt binary on every target, with no system libraries; the
 runner stops with an error naming it if it cannot be loaded. It is a
-devDependency only, so `npm install oxgl` never downloads it.
+devDependency only, so `npm install @oxgl-js/oxgl` never downloads it.
 
 The WebGL constants in `src/generated/webgl-constants.ts` come from the IDL
 files at the same commit. When you move the pin, regenerate them with `node

@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { createContext } from 'oxgl';
+import { createContext } from '@oxgl-js/oxgl';
 
 function context(t, options = {}) {
   const gl = createContext({ width: 4, height: 4, ...options });
@@ -296,7 +296,7 @@ test('version strings', (t) => {
 test('getShaderPrecisionFormat', async (t) => {
   const gl = context(t);
   const format = gl.getShaderPrecisionFormat(gl.FRAGMENT_SHADER, gl.HIGH_FLOAT);
-  const { WebGLShaderPrecisionFormat } = await import('oxgl');
+  const { WebGLShaderPrecisionFormat } = await import('@oxgl-js/oxgl');
   assert.ok(format instanceof WebGLShaderPrecisionFormat);
   const all = [format.rangeMin, format.rangeMax, format.precision];
   assert.ok(

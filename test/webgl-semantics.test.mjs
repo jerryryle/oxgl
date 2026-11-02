@@ -3,7 +3,7 @@
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
 
-import { createContext } from 'oxgl';
+import { createContext } from '@oxgl-js/oxgl';
 
 import { program } from './gl-helpers.mjs';
 

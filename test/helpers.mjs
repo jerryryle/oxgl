@@ -72,7 +72,7 @@ export async function gpuSkipReason() {
   if (forced !== undefined && forced !== '' && forced !== 'gpu') {
     return `OXGL_BACKEND=${forced} forces another backend`;
   }
-  const { createContext } = await import('oxgl');
+  const { createContext } = await import('@oxgl-js/oxgl');
   try {
     createContext({ width: 1, height: 1, backend: 'gpu' }).destroy();
     return undefined;

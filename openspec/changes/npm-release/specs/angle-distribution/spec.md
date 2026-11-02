@@ -3,7 +3,7 @@
 ## ADDED Requirements
 
 ### Requirement: New bundle releases are proposed daily
-Once a day, once any version of `oxgl` is on npm, a workflow SHALL compare the recipe repository's latest release with the bundle version oxgl pins. When they differ, it SHALL open or refresh a pull request from the `angle-bump` branch. That pull request SHALL pin the release's bundles and digests, taken from the release's `SHA256SUMS`, bump the patch version unless main's version is not yet on npm, and start CI on its head commit. It SHALL be based on the current `main`.
+Once a day, once any version of `@oxgl-js/oxgl` is on npm, a workflow SHALL compare the recipe repository's latest release with the bundle version oxgl pins. When they differ, it SHALL open or refresh a pull request from the `angle-bump` branch. That pull request SHALL pin the release's bundles and digests, taken from the release's `SHA256SUMS`, bump the patch version unless main's version is not yet on npm, and start CI on its head commit. It SHALL be based on the current `main`.
 
 #### Scenario: New release found
 - **WHEN** the daily run finds that oxgl-angle's latest release is `angle-8078.7`, `bundles.toml` pins `angle-8078.6`, and `version` is `0.1.3`
@@ -14,7 +14,7 @@ Once a day, once any version of `oxgl` is on npm, a workflow SHALL compare the r
 - **THEN** the bump pull request leaves the version at `0.2.0`, so the release after it merges publishes `0.2.0` with the new bundles
 
 #### Scenario: Before the first release
-- **WHEN** the daily run finds a newer bundle release but npm has no published `oxgl`
+- **WHEN** the daily run finds a newer bundle release but npm has no published `@oxgl-js/oxgl`
 - **THEN** it opens no pull request and changes nothing
 
 #### Scenario: Nothing new
