@@ -309,9 +309,9 @@ test('Allowance from the bytes served: the frame waits for content drawn after t
 });
 
 test('Large assets: the parse allowance is capped, so the runner\'s own waits do not time it out', async () => {
-  // A rate of 10 minutes per megabyte would wait far past the limit without the cap.
+  // About 10 minutes per kilobyte: the page's 0.8 KB would wait over 7 minutes without the cap.
   const started = performance.now();
-  const record = await run('solid', { timing: { allowanceMsPerMB: 600_000, allowanceCapMs: 200 }, timeoutMs: 5000 });
+  const record = await run('solid', { timing: { allowanceMsPerMB: 600_000_000, allowanceCapMs: 200 }, timeoutMs: 5000 });
   passes(record);
   assert.ok(performance.now() - started < 5000);
 });

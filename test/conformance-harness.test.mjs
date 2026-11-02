@@ -405,7 +405,8 @@ test('suite server serves files under the root, on loopback only, and refuses pa
   }
 });
 
-test('suite server counts the bytes of the files it serves, and none for a refusal, a missing file or HEAD', async () => {
+// Bounded, so a response that never closes fails the test rather than hanging it.
+test('suite server counts the bytes of the files it serves, and none for a refusal, a missing file or HEAD', { timeout: 10_000 }, async () => {
   const server = await startServer(join(FIXTURES, 'suite'));
   try {
     await get(server.origin, '/served.txt');
