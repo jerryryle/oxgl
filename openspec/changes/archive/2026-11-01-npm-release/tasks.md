@@ -34,7 +34,7 @@
 
 ## 2. CI: manual trigger, packed-package smoke test, release
 
-- [ ] 2.1 In `ci.yml`:
+- [x] 2.1 In `ci.yml`:
   - Add the `workflow_dispatch` trigger, and change the concurrency group as design D5 specifies.
   - Give `changes` the `release` output (design D3).
   - Add steps to `check` after `npm test`: run `scripts/pack.mjs` and `scripts/smoke-packed.mjs`, and when `release` is `true`, upload the platform tarball as `packages-<os>` with `retention-days: 7`, plus the `@oxgl-js/oxgl` tarball from the `ubuntu-24.04-arm` leg only (design D3).
@@ -43,7 +43,7 @@
   - A pull request run is green on all five platforms and uploads no packages, and actionlint and zizmor pass. If zizmor flags cache poisoning, the ignore carries design D3's justification.
   - `gh workflow run ci.yml --ref <branch>` reports the `ci` check on that branch's head commit.
   - A second dispatch on the same branch cancels the first.
-- [ ] 2.2 Add `scripts/release.mjs`, which takes a directory of tarballs and a `--dry-run` flag:
+- [x] 2.2 Add `scripts/release.mjs`, which takes a directory of tarballs and a `--dry-run` flag:
   1. It skips packages npm already has at the version.
   2. It publishes the platform packages before `@oxgl-js/oxgl` with `--provenance --access public`.
   3. Unless the GitHub Release exists, it creates the tag and the Release with `gh release create --generate-notes --target`.
@@ -63,11 +63,11 @@
   - With the pin already at the latest release, it prints nothing and changes nothing.
   - `bump.py angle-8078.6` on a copy pinned to `angle-8078.5` pins `angle-8078.6`, even though it isn't the latest release.
   - With the release metadata stubbed, it refuses a release whose author isn't `github-actions[bot]`, one with any asset uploaded by another account, and one whose tag commit isn't on oxgl-angle's `main`, naming the reason. The real releases `angle-8078.5` to `angle-8078.7` pass.
-- [ ] 3.2 Add `.github/workflows/angle-bump.yml`, modelled on oxgl-angle's. It runs daily at 10:17 UTC (three hours after oxgl-angle's 07:17 bump, design D4) and on `workflow_dispatch`, does nothing while npm has no published `@oxgl-js/oxgl` (design D4), runs `bump.py`, and bumps the patch version with `npm version patch --no-git-tag-version` only when npm already has the current version. It commits with the subject `Pin oxgl-angle <tag>`, force-pushes `angle-bump`, opens or edits the pull request, and runs `gh workflow run ci.yml --ref angle-bump`. It also handles closing stale bumps, leaving a branch alone when it carries a fix, and the `skip-bump` label. Document the flow in `angle/README.md`. Verify with actionlint and zizmor, and verify that its first scheduled run after merge, before the bootstrap, exits without pushing or opening anything. End-to-end verification is task 5.2.
+- [x] 3.2 Add `.github/workflows/angle-bump.yml`, modelled on oxgl-angle's. It runs daily at 10:17 UTC (three hours after oxgl-angle's 07:17 bump, design D4) and on `workflow_dispatch`, does nothing while npm has no published `@oxgl-js/oxgl` (design D4), runs `bump.py`, and bumps the patch version with `npm version patch --no-git-tag-version` only when npm already has the current version. It commits with the subject `Pin oxgl-angle <tag>`, force-pushes `angle-bump`, opens or edits the pull request, and runs `gh workflow run ci.yml --ref angle-bump`. It also handles closing stale bumps, leaving a branch alone when it carries a fix, and the `skip-bump` label. Document the flow in `angle/README.md`. Verify with actionlint and zizmor, and verify that its first scheduled run after merge, before the bootstrap, exits without pushing or opening anything. End-to-end verification is task 5.2.
 
 ## 4. Documentation
 
-- [ ] 4.1 README:
+- [x] 4.1 README:
   - Add an install section (`npm install @oxgl-js/oxgl`) and the requirements: glibc ≥ 2.34 on Linux (the release spec's baseline, design D6), no musl, Node ≥ 22.22.2, and the five supported platforms.
   - Add badges for the `ci` workflow status, the npm version and the license.
   - Point to `CONTRIBUTING.md` for building from source.
@@ -82,7 +82,7 @@
 ## 5. Rollout (needs the maintainer)
 
 - [x] 5.0 Before merging, the maintainer turns on "Allow GitHub Actions to create and approve pull requests" for jerryryle/oxgl (design, Migration Plan step 1). Verify that `gh api repos/jerryryle/oxgl/actions/permissions/workflow` reports `can_approve_pull_request_reviews: true`.
-- [ ] 5.1 After the change merges, follow the design's migration plan:
+- [x] 5.1 After the change merges, follow the design's migration plan: *(Done: `@oxgl-js/oxgl@0.1.1` lists the five platform packages at `0.1.1`, and `v0.1.1` and its GitHub Release exist.)*
   1. The maintainer bootstrap-publishes `0.1.1` from the `main` run's artifacts.
   2. The maintainer adds the trusted publishers (`jerryryle/oxgl`, `ci.yml`, environment `npm`) and sets "Require 2FA and disallow tokens".
   3. Rerun the `release` job.
@@ -92,6 +92,8 @@
   - The bump pull request changes only `bundles.toml` and the version (to `0.1.2`).
   - CI passes on it, and `merge-bump` merges it.
   - The `main` run publishes `0.1.2` of all six packages with provenance visible on npmjs.com, and creates `v0.1.2`.
+
+  *(Not verified at archive, 2026-11-01: oxgl-angle's latest release is still `angle-8078.7`, so the first real bump has not run. Archived with this task open at the maintainer's request.)*
 
 ## 6. Rename the main package to `@oxgl-js/oxgl` (design D7)
 

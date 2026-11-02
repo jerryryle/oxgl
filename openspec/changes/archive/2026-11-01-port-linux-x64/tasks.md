@@ -20,4 +20,4 @@
 
 ## 5. Wrap-up
 
-- [ ] 5.1 Record the results in linux-arm64-focus task 4.5, the platform's restore, and verify with `npx openspec validate port-linux-x64 --strict`.
+- [x] 5.1 Record the results in linux-arm64-focus task 4.5, the platform's restore, and verify with `npx openspec validate port-linux-x64 --strict`.

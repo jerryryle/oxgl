@@ -124,6 +124,10 @@ Each page run SHALL have exactly one outcome, taken from the first rule that app
 - **WHEN** the runner kills a page's process at the time limit
 - **THEN** the page's outcome is `TIMEOUT`, not `CRASH`
 
+#### Scenario: Node abort on Windows
+- **WHEN** a page's process calls `process.abort()` on Windows, where Node exits with code 134 instead of raising a signal
+- **THEN** the page's outcome is `CRASH`, not a harness error
+
 ### Requirement: Escaped script errors
 A page SHALL end early on errors when its expectation is `FAIL` or when the run asks for every page to end early on errors: it ends at the first escaped script error. Every other page SHALL treat an escaped script error as the official harness (`webgl-test-harness.js`) does: the error is recorded and the page keeps running until it completes or reaches the time limit. The first escaped error's message SHALL be recorded for every page that has one.
 
@@ -146,7 +150,7 @@ Each page SHALL run in its own process with fresh global state. A crash, hang or
 - **THEN** that page's outcome is `CRASH`, and every other page runs and is judged normally
 
 ### Requirement: Checked-in expectations
-The repository SHALL contain an expectations file listing every page, per suite, whose expected outcome is not `PASS`. Each entry SHALL give the suite, the page path relative to `sdk/tests`, one of `FAIL`, `TIMEOUT`, `CRASH` or `SKIP`, and a non-empty reason. A page absent from the file is expected to `PASS`. A `SKIP` page SHALL NOT be run unless the developer asks for skipped pages to be included. When included, its outcome SHALL be reported but not judged.
+The repository SHALL contain an expectations file listing every page, per suite, whose expected outcome is not `PASS`. Each entry SHALL give the suite, the page path relative to `sdk/tests`, one of `FAIL`, `TIMEOUT`, `CRASH` or `SKIP`, optionally the platforms it applies to, and a non-empty reason. A page without an entry that applies is expected to `PASS`. A `SKIP` page SHALL NOT be run unless the developer includes skipped pages; then its outcome SHALL be reported but not judged.
 
 #### Scenario: Entry without a reason
 - **WHEN** the expectations file contains an entry with no reason
@@ -159,6 +163,47 @@ The repository SHALL contain an expectations file listing every page, per suite,
 #### Scenario: Skipped pages included
 - **WHEN** the developer includes skipped pages and a `SKIP` page times out again or now passes
 - **THEN** the report shows its outcome, and the run's success is unaffected by it
+
+### Requirement: Platform-limited expectations
+An entry's platforms SHALL be among `linux-x64`, `linux-arm64`, `macos-arm64`, `windows-x64` and `windows-arm64`. An entry without platforms SHALL apply on every platform and SHALL be the page's only entry in its suite. An entry with platforms SHALL apply only on those, and elsewhere the page SHALL be judged as if it had no entry. A page MAY have several entries in a suite when each lists platforms and no platform is in two of them.
+
+#### Scenario: Entry limited to other platforms
+- **WHEN** a page's entry is `FAIL` for `linux-x64` and `windows-x64`, and the page passes on Linux arm64
+- **THEN** the page has its expected outcome there, and the entry is neither reported stale nor changed by an update run
+
+#### Scenario: Entry limited to this platform
+- **WHEN** a page's entry is `FAIL` for `linux-x64` and `windows-x64`, and the page fails on Linux x64
+- **THEN** the page has its expected outcome
+
+#### Scenario: Unknown platform
+- **WHEN** an entry names a platform that is not one of the five
+- **THEN** the conformance command fails before running any page and names the entry
+
+#### Scenario: Different outcomes on different platforms
+- **WHEN** a page has a `FAIL` entry for `linux-x64` and a `TIMEOUT` entry for `macos-arm64`
+- **THEN** a run on each of those platforms expects that platform's outcome, and a run elsewhere expects `PASS`
+
+#### Scenario: Overlapping entries
+- **WHEN** a page has two entries in one suite whose platform lists share a platform, or an entry without platforms and another entry
+- **THEN** the conformance command fails before running any page and names the entries
+
+### Requirement: Expectations update run
+An update run SHALL rewrite the expectations file from its outcomes on its own platform. It SHALL treat an entry without platforms as listing all five, and SHALL write an entry that lists all five without platforms. It SHALL leave `SKIP` entries, and entries that do not apply on its platform, unchanged. For a page whose entry with platforms applies, it SHALL remove the run's platform from that entry when the page passes or has a different outcome, removing the entry when no platform remains.
+
+#### Scenario: Update on one platform keeps an entry for the others
+- **WHEN** an update run on macOS arm64 finds that a page passes whose entry is `FAIL` without platforms
+- **THEN** the entry is rewritten as `FAIL` for `linux-x64`, `linux-arm64`, `windows-x64` and `windows-arm64`
+
+#### Scenario: Update after a platform starts passing
+- **WHEN** an update run on Windows x64 finds that a page passes whose entry is `FAIL` for `linux-x64` and `windows-x64`
+- **THEN** the entry is rewritten as `FAIL` for `linux-x64` only
+
+### Requirement: Expectations update adds outcomes
+When an update run's page has a non-`PASS` outcome and no entry applies, the run SHALL add its platform to the page's entry with that outcome if one exists, otherwise add an entry for its platform alone if the page has entries with platforms, and otherwise add an entry without platforms.
+
+#### Scenario: Update after a platform starts failing
+- **WHEN** an update run on macOS arm64 finds that a page fails whose only entry is `FAIL` for `linux-x64` and `windows-x64`
+- **THEN** the entry is rewritten as `FAIL` for `linux-x64`, `windows-x64` and `macos-arm64`
 
 ### Requirement: Runs are judged against expectations
 A run SHALL succeed only when every non-`SKIP` page it ran had its expected outcome. It SHALL fail and name each page that regressed (expected `PASS`, got another outcome), passed unexpectedly, or had a different non-`PASS` outcome than expected. A run of whole suites SHALL also fail when an entry for one of those suites names a page that the suite does not contain.
@@ -180,11 +225,15 @@ A run SHALL succeed only when every non-`SKIP` page it ran had its expected outc
 - **THEN** entries for `webgl2` are neither judged nor reported stale
 
 ### Requirement: Results report
-Every run SHALL write a machine-readable report recording, per suite and page, the outcome, the counts of passing and failing results, the duration, and the first failure message or error. The report SHALL also record the suite commit, the requested oxgl backend, the per-page time limit, the number of pages run in parallel, platform and timestamp.
+Every run SHALL write a machine-readable report recording, per suite and page, the outcome, the counts of passing and failing results, the duration, and the first failure message or error. A page with an expectations entry that applies on the run's platform SHALL also record that entry's reason. The report SHALL also record the suite commit, the requested oxgl backend, the per-page time limit, the number of pages run in parallel, platform and timestamp.
 
 #### Scenario: Report after a failed run
 - **WHEN** a run fails because of a regression
 - **THEN** the report is still written and contains the regressed page's failure message
+
+#### Scenario: Reason recorded
+- **WHEN** a page has the entry `webgl1 conformance/glsl/misc/shader-with-double-underscore.html FAIL # ANGLE: rejects identifiers containing __ in WebGL shaders (TParseContext::checkIsNotReserved), which the test expects to compile; see angle/README.md` (it applies on every platform)
+- **THEN** that page's report entry records the outcome, the expected `FAIL` and that reason, and a page without an applicable entry records no reason
 
 ### Requirement: Conformance command
 The root `package.json` SHALL expose `npm run conformance`, which runs both suites against the built package and exits non-zero when the run fails. It SHALL accept options to select one suite, to restrict the run to pages whose path contains a given substring, to include `SKIP` pages, to make every page end early on errors (Page outcome), and to rewrite the expectations file from the run's outcomes. A filtered run SHALL judge only the pages it ran.
@@ -195,7 +244,7 @@ The root `package.json` SHALL expose `npm run conformance`, which runs both suit
 
 #### Scenario: Updating expectations
 - **WHEN** a developer runs the command with the update option
-- **THEN** the run is judged against the expectations it writes, the expectations entries for the pages that ran are replaced with their outcomes, existing reasons are kept for entries whose outcome is unchanged, entries for pages that now pass are removed, on a run of whole suites entries for pages those suites no longer contain are removed, and new or changed entries take the page's first escaped error as their reason, or its first failure message when it has none (for `TIMEOUT` and `CRASH`, `no new result within the time limit` / `crashed`, followed by the first escaped error's message when there is one), reduced to its first line and at most 200 characters; the command then exits zero unless the expectations file could not be parsed or a page had a harness error
+- **THEN** the run is judged against the expectations it writes, the entries for the pages that ran are rewritten from their outcomes on the run's platform as Checked-in expectations requires, existing reasons are kept for entries whose outcome is unchanged, on a run of whole suites entries for pages those suites no longer contain are removed, and new or changed entries take the page's first escaped error as their reason, or its first failure message when it has none (for `TIMEOUT` and `CRASH`, `no new result within the time limit` / `crashed`, followed by the first escaped error's message when there is one), reduced to its first line and at most 200 characters; the command then exits zero unless the expectations file could not be parsed or a page had a harness error
 
 ### Requirement: Pages run in parallel
 The conformance command SHALL accept an option setting how many pages run at once, defaulting to the number of CPUs available to the process, but no more than one page per GiB of memory available to it (at least one).
@@ -414,3 +463,18 @@ The runner SHALL refuse to run pages when `ffmpeg` or `ffprobe` cannot be run, r
 #### Scenario: ffmpeg missing
 - **WHEN** `npm run conformance` runs and `ffprobe -version` fails
 - **THEN** the run stops before any page with an error naming ffmpeg, and no page outcome is recorded
+
+### Requirement: Animation frames wait for queued GPU work
+At the start of each animation frame, before compositing and before that frame's callbacks, the runner SHALL wait until every live WebGL context created in that page or worker has finished the work queued on it, whether or not its canvas is in the document, so a page can queue at most about one frame of GPU work, as in a browser.
+
+#### Scenario: Previous frame's work is done
+- **WHEN** a WebGL 2 page draws in an animation-frame callback, inserts a fence with `fenceSync`, and checks the fence's `SYNC_STATUS` in its next animation-frame callback
+- **THEN** the status is `SIGNALED`
+
+#### Scenario: Draw loop on an off-screen canvas
+- **WHEN** a page draws hundreds of times per animation frame for a few seconds on a canvas outside the document, then finishes
+- **THEN** it completes within about a frame of its last callback instead of draining a backlog (cf. Khronos `conformance/rendering/texture-switch-performance.html`)
+
+#### Scenario: Animation frames in a worker
+- **WHEN** a worker draws on an `OffscreenCanvas` context in an animation-frame callback
+- **THEN** its next animation-frame callback starts only after that work has finished
