@@ -2,12 +2,14 @@
 // package before the main package, @oxgl-js/oxgl, skipping any version npm
 // already has, so a rerun completes a release that failed partway. Then tags
 // the commit and creates the GitHub Release, unless it exists. With --dry-run
-// it reports what it would do and changes nothing.
+// it reports what it would do and changes nothing, though it still hands each
+// unpublished tarball to `npm publish --dry-run`.
 //
 //     node scripts/release.mjs <dir> [--dry-run]
 import { execFileSync } from 'node:child_process';
 import { readdirSync, readFileSync } from 'node:fs';
-import { join } from 'node:path';
+import { resolve } from 'node:path';
+import { npm } from './npm.mjs';
 
 const args = process.argv.slice(2);
 const dryRun = args.includes('--dry-run');
@@ -21,26 +23,29 @@ function run(command, commandArgs, options = {}) {
   return execFileSync(command, commandArgs, { encoding: 'utf8', stdio: ['ignore', 'pipe', 'inherit'], ...options });
 }
 
-/** Whether `command` exits zero, with its output discarded. */
-function succeeds(command, commandArgs) {
+/** Whether `start(options)` exits zero, with its output discarded. */
+function succeeds(start) {
   try {
-    execFileSync(command, commandArgs, { stdio: 'ignore' });
+    start({ stdio: 'ignore' });
     return true;
   } catch {
     return false;
   }
 }
 
-/** Reads a tarball's manifest. */
-function manifest(tarball) {
-  return JSON.parse(run('tar', ['-xzOf', tarball, 'package/package.json']));
+/** Reads the manifest of tarball `file` in `dir`. */
+function manifest(file) {
+  // From inside `dir`: GNU tar, Git Bash's on Windows, reads C:\... as host:path.
+  return JSON.parse(run('tar', ['-xzOf', file, 'package/package.json'], { cwd: dir }));
 }
 
 const packages = readdirSync(dir)
   .filter((file) => file.endsWith('.tgz'))
   .map((file) => {
-    const tarball = join(dir, file);
-    return { tarball, ...manifest(tarball) };
+    // Absolute: npm reads a relative path without ./, like packages/x.tgz, as
+    // a GitHub owner/repo shorthand.
+    const tarball = resolve(dir, file);
+    return { tarball, ...manifest(file) };
   });
 // Told apart by manifest name, not file name: the main package packs to
 // oxgl-js-oxgl-<version>.tgz, which looks like a platform tarball. Its name is
@@ -66,17 +71,17 @@ if (platforms.length !== expected.length) {
 }
 
 for (const pkg of [...platforms, main]) {
-  if (succeeds('npm', ['view', `${pkg.name}@${version}`, 'version'])) {
+  if (succeeds((options) => npm(['view', `${pkg.name}@${version}`, 'version'], options))) {
     console.log(`release: ${pkg.name}@${version} is already on npm`);
-  } else if (dryRun) {
-    console.log(`release: would publish ${pkg.name}@${version} from ${pkg.tarball}`);
   } else {
-    run('npm', ['publish', pkg.tarball, '--provenance', '--access', 'public'], { stdio: 'inherit' });
+    // Provenance needs CI's OIDC token, so a dry run leaves it out.
+    console.log(`release: ${dryRun ? 'would publish' : 'publishing'} ${pkg.name}@${version} from ${pkg.tarball}`);
+    npm(['publish', pkg.tarball, '--access', 'public', ...(dryRun ? ['--dry-run'] : ['--provenance'])], { stdio: 'inherit' });
   }
 }
 
 const tag = `v${version}`;
-if (succeeds('gh', ['release', 'view', tag])) {
+if (succeeds((options) => execFileSync('gh', ['release', 'view', tag], options))) {
   console.log(`release: GitHub Release ${tag} exists`);
 } else if (dryRun) {
   console.log(`release: would create GitHub Release ${tag} on ${process.env.GITHUB_SHA ?? 'HEAD'}`);
