@@ -53,7 +53,7 @@
 
 ## 3. CI
 
-- [ ] 3.1 Add the `results` and `pages` jobs to `.github/workflows/ci.yml` as design D5 specifies, with `actions/upload-pages-artifact` and `actions/deploy-pages` pinned to the commit SHAs of their latest releases. Update `CONTRIBUTING.md`'s job table, and add the local build steps (design D6). Verify:
+- [x] 3.1 Add the `results` and `pages` jobs to `.github/workflows/ci.yml` as design D5 specifies, with `actions/upload-pages-artifact` and `actions/deploy-pages` pinned to the commit SHAs of their latest releases. Update `CONTRIBUTING.md`'s job table, and add the local build steps (design D6). Verify:
   - actionlint and zizmor pass.
   - A pull request run uploads a `results-page` artifact whose page opens and shows that run's results.
   - The `pages` job is skipped on the pull request.
@@ -65,7 +65,7 @@
   - *Download pattern: checked against `download-artifact` v8.0.2's source. It filters with `Minimatch`, and `{conformance-results-*,threejs-results}` matches exactly the report artifacts. A pattern with no match downloads nothing, without failing.*
   - *Local build: the documented steps build the page from run 41349671748.*
   - *Still to verify: the pull request run, and the skip-only pull request.*
-- [ ] 3.2 Add page-only runs (design D7):
+- [x] 3.2 Add page-only runs (design D7):
   - The `changes` job's `page` output, with `heavy=false` for page-only changes.
   - `npm ci`, ESLint on the page files and `node --test test/results-page.test.mjs` in `repo-checks`.
   - In the `results` job: finding the latest completed `main` run (push or manual, from this repository) with unexpired reports, downloading them with `run-id`, and passing `--commit` and `--page-commit` to the builder.
@@ -86,11 +86,11 @@
 
 ## 4. README
 
-- [ ] 4.1 Link the published page (`https://jerryryle.github.io/oxgl/`) from the README's conformance description. Verify that the link renders on the pull request's README preview.
+- [x] 4.1 Link the published page (`https://jerryryle.github.io/oxgl/`) from the README's conformance description. Verify that the link renders on the pull request's README preview.
 
 ## 5. Rollout (needs the maintainer)
 
-- [ ] 5.1 The maintainer enables Pages: Settings → Pages → Source: GitHub Actions. After the merge, verify that the `main` run's `pages` job deploys, and that the README link opens the page for that commit.
+- [x] 5.1 The maintainer enables Pages: Settings → Pages → Source: GitHub Actions. After the merge, verify that the `main` run's `pages` job deploys, and that the README link opens the page for that commit.
 
 ## Workflow follow-up
 
