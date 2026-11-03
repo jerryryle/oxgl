@@ -7,7 +7,7 @@ Defines how oxgl obtains, verifies, and ships the ANGLE and SwiftShader binaries
 ## Requirements
 
 ### Requirement: ANGLE revision is pinned in the repository
-The ANGLE build recipe SHALL live in its own repository, `jerryryle/oxgl-angle` (the recipe repository), which SHALL record the pinned ANGLE revision (commit and Chromium branch), the bundle version and each platform's build configuration. oxgl's bundle manifest SHALL record the bundle version it uses and each platform's bundle URL and SHA-256 digest, every URL in that version's recipe-repository release. Changing either SHALL be a reviewable change to tracked files.
+The ANGLE build recipe SHALL live in its own repository, `oxgl-js/oxgl-angle` (the recipe repository), which SHALL record the pinned ANGLE revision (commit and Chromium branch), the bundle version and each platform's build configuration. oxgl's bundle manifest SHALL record the bundle version it uses and each platform's bundle URL and SHA-256 digest, every URL in that version's recipe-repository release. Changing either SHALL be a reviewable change to tracked files.
 
 #### Scenario: Pin is inspectable
 - **WHEN** a reviewer reads the recipe repository's pin and oxgl's bundle manifest

@@ -122,7 +122,7 @@ The page SHALL say what oxgl is and what the page shows, and SHALL link to the o
 
 #### Scenario: A reader arrives from a link
 - **WHEN** someone opens the page without knowing oxgl
-- **THEN** its opening text says what oxgl is and what the table shows, and links to `https://github.com/jerryryle/oxgl`
+- **THEN** its opening text says what oxgl is and what the table shows, and links to `https://github.com/oxgl-js/oxgl`
 
 #### Scenario: Republished from earlier results
 - **WHEN** a page-only change at commit `c0ffee1` rebuilds the page from the reports of a run on commit `b31fde2`

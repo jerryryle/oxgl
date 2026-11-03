@@ -66,7 +66,7 @@ The release SHALL authenticate to npm through trusted publishing (OIDC), from a 
 
 #### Scenario: Provenance visible
 - **WHEN** a released version is viewed on npmjs.com
-- **THEN** its provenance names `jerryryle/oxgl`, the CI workflow and the commit the version was built from
+- **THEN** its provenance names `oxgl-js/oxgl`, the CI workflow and the commit the version was built from
 
 #### Scenario: No token in the repository
 - **WHEN** the repository's and the `npm` environment's secrets are listed
