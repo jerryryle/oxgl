@@ -6,7 +6,7 @@ import { loadNative } from '../dist/load-native.js';
 
 test('ESM import loads the native addon', async () => {
   const oxgl = await import('@oxgl-js/oxgl');
-  assert.equal(oxgl.nativeAbiVersion, 13);
+  assert.equal(oxgl.nativeAbiVersion, 14);
 });
 
 test('CommonJS require returns the same exports as import', async () => {

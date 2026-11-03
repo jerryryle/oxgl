@@ -95,7 +95,7 @@ The implementation SHALL NOT access the destination's memory after `readPixels` 
 - **THEN** `INVALID_OPERATION` is generated
 
 ### Requirement: Drawing buffer as a PNG
-The package SHALL export `encodePNG(gl)`, returning a `Promise` of a Node `Buffer` holding a PNG of `gl`'s drawing buffer at its current size: 8-bit RGBA, top row first, unpremultiplied as a canvas's pixels are read (WebGL 1.0 §5.14.8), as `toDataURL('image/png')` serializes a canvas (HTML §4.12.5, "Serializing bitmaps to a file"). It SHALL read the drawing buffer whatever framebuffer is bound, resolving an antialiased one.
+The package SHALL export `encodePNG(gl)`, returning a `Promise` of a Node `Buffer` holding a PNG of `gl`'s drawing buffer at its current size: 8-bit RGBA, top row first, unpremultiplied as a canvas's pixels are read (WebGL 1.0 §5.14.8), as `toDataURL('image/png')` serializes a canvas (HTML §4.12.5, "Serializing bitmaps to a file"). It SHALL read the drawing buffer's color whatever framebuffer is bound and whatever read buffer the page selected, resolving an antialiased one.
 
 #### Scenario: Rows top first
 - **WHEN** a 1×2 context has its top row cleared red and its bottom row green (with a scissor test) and the awaited `encodePNG(gl)` is decoded
@@ -120,6 +120,10 @@ The package SHALL export `encodePNG(gl)`, returning a `Promise` of a Node `Buffe
 #### Scenario: After a resize
 - **WHEN** a 4×4 context is resized to 8×2 and the awaited `encodePNG(gl)` is decoded
 - **THEN** the image is 8×2
+
+#### Scenario: Read buffer NONE
+- **WHEN** a WebGL 2 context, created with `antialias: false` and again with `antialias: true`, is cleared to red, calls `readBuffer(NONE)` with the drawing buffer bound, and the awaited `encodePNG(gl)` is decoded
+- **THEN** every pixel is red, `getParameter(READ_BUFFER)` is still `NONE`, `readPixels` from the drawing buffer still generates `INVALID_OPERATION` (cf. Khronos `conformance2/renderbuffers/readbuffer.html`), and after `readBuffer(BACK)` `readPixels` returns red with `NO_ERROR`
 
 ### Requirement: PNG result typed without Node types
 The package's TypeScript declarations SHALL type `encodePNG`'s result as `Promise<Uint8Array>`, so that a project with the DOM library's globals and no Node type definitions can use them.

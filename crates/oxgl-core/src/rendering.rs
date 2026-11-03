@@ -13,7 +13,7 @@ use oxgl_sys::{
     UniformVector, ViewKind,
 };
 
-use crate::context::{Context, Object, ObjectKey, check_reset, current};
+use crate::context::{Context, Object, ObjectKey, accepted, check_reset, current};
 use crate::parameters::Parameter;
 
 /// Which class of target a buffer was first bound to (WebGL 1.0 §6.1,
@@ -420,49 +420,31 @@ impl Context {
         if self.errors.is_lost() {
             return false;
         }
-        match self.objects.get(key) {
+        let (name, is): (u32, fn(&oxgl_sys::Current<'_>, u32) -> bool) = match self.objects.get(key)
+        {
             None
             | Some(Object::Buffer {
                 kind: BufferKind::Unbound,
                 ..
-            }) => false,
+            }) => return false,
             // Likewise a texture, once bound; GL tracks that.
-            Some(Object::Texture { name }) => self
-                .buffer
-                .context()
-                .make_current()
-                .is_ok_and(|current| current.is_texture(*name) != 0),
-            Some(Object::Framebuffer { name }) => self
-                .buffer
-                .context()
-                .make_current()
-                .is_ok_and(|current| current.is_framebuffer(*name) != 0),
-            Some(Object::Renderbuffer { name, .. }) => self
-                .buffer
-                .context()
-                .make_current()
-                .is_ok_and(|current| current.is_renderbuffer(*name) != 0),
-            Some(Object::VertexArray { name }) => {
-                self.buffer.context().make_current().is_ok_and(|current| {
-                    if self.webgl2 {
-                        current.is_vertex_array(*name) != 0
-                    } else {
-                        current.is_vertex_array_oes(*name) != 0
-                    }
-                })
+            Some(Object::Texture { name }) => (*name, |c, n| c.is_texture(n) != 0),
+            Some(Object::Framebuffer { name }) => (*name, |c, n| c.is_framebuffer(n) != 0),
+            Some(Object::Renderbuffer { name, .. }) => (*name, |c, n| c.is_renderbuffer(n) != 0),
+            Some(Object::VertexArray { name }) if self.webgl2 => {
+                (*name, |c, n| c.is_vertex_array(n) != 0)
             }
-            Some(Object::TransformFeedback { name }) => self
-                .buffer
-                .context()
-                .make_current()
-                .is_ok_and(|current| current.is_transform_feedback(*name) != 0),
-            Some(Object::Query { name }) => self
-                .buffer
-                .context()
-                .make_current()
-                .is_ok_and(|current| current.is_query(*name) != 0),
-            Some(_) => true,
-        }
+            Some(Object::VertexArray { name }) => (*name, |c, n| c.is_vertex_array_oes(n) != 0),
+            Some(Object::TransformFeedback { name }) => {
+                (*name, |c, n| c.is_transform_feedback(n) != 0)
+            }
+            Some(Object::Query { name }) => (*name, |c, n| c.is_query(n) != 0),
+            Some(_) => return true,
+        };
+        self.buffer
+            .context()
+            .make_current()
+            .is_ok_and(|current| is(&current, name))
     }
 
     /// `bindBuffer` (WebGL 1.0 §5.14.5). Returns whether the binding changed
@@ -547,10 +529,6 @@ impl Context {
             self.errors.synthesize(GL_INVALID_VALUE);
             return;
         };
-        if offset < 0 {
-            self.errors.synthesize(GL_INVALID_VALUE);
-            return;
-        }
         source.with_bytes(bytes, &mut |data| {
             current.buffer_sub_data(target, offset, data);
         });
@@ -709,15 +687,21 @@ impl Context {
         });
     }
 
-    /// `linkProgram`.
-    pub fn link_program(&mut self, program: ObjectKey) {
+    /// `linkProgram`; returns whether the GL attempted the link. A link it
+    /// rejects (one of a program active in transform feedback) leaves the
+    /// program's uniform locations valid (WebGL 1.0 §5.14.10).
+    pub fn link_program(&mut self, program: ObjectKey) -> bool {
         let Some(name) = self.program_or_error(program) else {
-            return;
+            return false;
         };
-        if let Some(current) = current(&self.buffer, &mut self.errors) {
-            current.link_program(name);
+        let Some(current) = current(&self.buffer, &mut self.errors) else {
+            return false;
+        };
+        let linked = accepted(&current, &mut self.errors, || current.link_program(name));
+        if linked {
+            self.uniform_types.remove(&program);
         }
-        self.uniform_types.remove(&program);
+        linked
     }
 
     /// `validateProgram`.

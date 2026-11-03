@@ -9,7 +9,7 @@
 )]
 use oxgl_sys::bindings::*;
 
-use crate::context::{Context, Object, ObjectKey, current};
+use crate::context::{Context, Object, ObjectKey, accepted, current};
 use crate::parameters::Parameter;
 use crate::rendering::{BufferKind, target_allowed};
 
@@ -95,7 +95,8 @@ impl Context {
     }
 
     /// `bindBufferBase` (`range` `None`) or `bindBufferRange`; returns
-    /// whether the indexed binding now holds the buffer.
+    /// whether the GL accepted it, binding the buffer to the index and the
+    /// target.
     pub fn bind_buffer_indexed(
         &mut self,
         target: u32,
@@ -106,26 +107,19 @@ impl Context {
         if current(&self.buffer, &mut self.errors).is_none() {
             return false;
         }
-        let binding = match target {
-            GL_TRANSFORM_FEEDBACK_BUFFER => GL_TRANSFORM_FEEDBACK_BUFFER_BINDING,
-            GL_UNIFORM_BUFFER => GL_UNIFORM_BUFFER_BINDING,
-            _ => {
-                self.errors.synthesize(GL_INVALID_ENUM);
-                return false;
-            }
-        };
+        if !matches!(target, GL_TRANSFORM_FEEDBACK_BUFFER | GL_UNIFORM_BUFFER) {
+            self.errors.synthesize(GL_INVALID_ENUM);
+            return false;
+        }
         let name = match buffer {
             None => 0,
             Some(key) => {
-                if let Some(Object::Buffer { name, kind }) = self.objects.get_mut(key) {
-                    if !target_allowed(*kind, target) {
+                if let Some(&Object::Buffer { name, kind }) = self.objects.get(key) {
+                    if !target_allowed(kind, target) {
                         self.errors.synthesize(GL_INVALID_OPERATION);
                         return false;
                     }
-                    if *kind == BufferKind::Unbound {
-                        *kind = BufferKind::Other;
-                    }
-                    *name
+                    name
                 } else {
                     self.errors.synthesize(GL_INVALID_OPERATION);
                     return false;
@@ -135,11 +129,22 @@ impl Context {
         let Some(current) = current(&self.buffer, &mut self.errors) else {
             return false;
         };
-        match range {
+        // Decided from the call's own error: reading the indexed binding back
+        // would match a rejected rebind of the buffer already at the index.
+        let bound = accepted(&current, &mut self.errors, || match range {
             None => current.bind_buffer_base(target, index, name),
             Some((offset, size)) => current.bind_buffer_range(target, index, name, offset, size),
+        });
+        // A rejected bind has no effect (OpenGL ES 3.0 §2.5), the buffer's
+        // WebGL type included.
+        if bound
+            && let Some(Object::Buffer { kind, .. }) =
+                buffer.and_then(|key| self.objects.get_mut(key))
+            && *kind == BufferKind::Unbound
+        {
+            *kind = BufferKind::Other;
         }
-        current.integer64_indexed(binding, index).first() == Some(&i64::from(name))
+        bound
     }
 
     /// `getIndexedParameter` for the `*_START` and `*_SIZE` pnames (the

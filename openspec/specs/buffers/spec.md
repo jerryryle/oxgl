@@ -52,3 +52,44 @@ A buffer first bound to `ELEMENT_ARRAY_BUFFER` SHALL NOT be bindable to another 
 #### Scenario: Copy between buffers
 - **WHEN** a WebGL 2 context copies 4 bytes from a `COPY_READ_BUFFER` to a `COPY_WRITE_BUFFER` with `copyBufferSubData`
 - **THEN** `getBufferSubData` on the destination reads the copied bytes
+
+### Requirement: Detached buffer sources
+`bufferData` and `bufferSubData` SHALL treat an `ArrayBuffer` or `ArrayBufferView` whose buffer is detached as a source of zero bytes, and SHALL NOT throw for it. On WebGL 2, `srcOffset` and `length` SHALL apply to those zero bytes, so a range past them generates `INVALID_VALUE`, as for any short view (WebGL 2.0 §3.7.3).
+
+#### Scenario: Detached source
+- **WHEN** a `Float32Array`'s buffer is detached with `ArrayBuffer.prototype.transfer()`, and `bufferData(ARRAY_BUFFER, view, STATIC_DRAW)` and `bufferData(ARRAY_BUFFER, view.buffer, STATIC_DRAW)` are called
+- **THEN** neither call throws, `getBufferParameter(ARRAY_BUFFER, BUFFER_SIZE)` is `0`, and `getError()` is `NO_ERROR`
+
+#### Scenario: Detached source of bufferSubData (WebGL 2)
+- **WHEN** on a WebGL 2 context a 16-byte buffer holds data, and `bufferSubData(ARRAY_BUFFER, 0, view)` is called with a view whose buffer is detached
+- **THEN** the call does not throw, the buffer's bytes are unchanged, and `getError()` is `NO_ERROR`
+
+#### Scenario: Range on a detached source (WebGL 2)
+- **WHEN** a WebGL 2 context calls `bufferData(ARRAY_BUFFER, view, STATIC_DRAW, 1)` with a view whose buffer is detached
+- **THEN** `INVALID_VALUE` is generated
+
+### Requirement: Rejected binds leave a buffer untyped
+A never-bound buffer SHALL take its WebGL type (WebGL 2.0 §5.1) only from a bind that takes effect. A `bindBufferBase` or `bindBufferRange` call that generates an error SHALL leave the buffer untyped, so it can still be bound to any target, and `isBuffer` SHALL stay `false` for it.
+
+#### Scenario: Empty bindBufferRange
+- **WHEN** a WebGL 2 context calls `bindBufferRange(UNIFORM_BUFFER, 0, buffer, 0, 0)` with a never-bound buffer
+- **THEN** `INVALID_VALUE` is generated (OpenGL ES 3.0 §2.10.1.1), `isBuffer(buffer)` is `false`, and a following `bindBuffer(ELEMENT_ARRAY_BUFFER, buffer)` generates no error
+
+#### Scenario: Misaligned bindBufferRange
+- **WHEN** a WebGL 2 context whose `UNIFORM_BUFFER_OFFSET_ALIGNMENT` is above 1 calls `bindBufferRange(UNIFORM_BUFFER, 0, buffer, alignment / 2, 16)` with a never-bound buffer
+- **THEN** `INVALID_VALUE` is generated, `isBuffer(buffer)` is `false`, and a following `bindBuffer(ELEMENT_ARRAY_BUFFER, buffer)` generates no error
+
+#### Scenario: Out-of-range index
+- **WHEN** a WebGL 2 context calls `bindBufferBase(UNIFORM_BUFFER, MAX_UNIFORM_BUFFER_BINDINGS, buffer)` with a never-bound buffer
+- **THEN** `INVALID_VALUE` is generated, `isBuffer(buffer)` is `false`, and a following `bindBuffer(ELEMENT_ARRAY_BUFFER, buffer)` generates no error
+
+#### Scenario: Accepted bind still types the buffer
+- **WHEN** a WebGL 2 context calls `bindBufferBase(UNIFORM_BUFFER, 0, buffer)` with a never-bound buffer, then `bindBuffer(ELEMENT_ARRAY_BUFFER, buffer)`
+- **THEN** the first call generates no error, `isBuffer(buffer)` is `true`, and the second generates `INVALID_OPERATION`
+
+### Requirement: Rejected indexed binds keep the bindings
+A `bindBufferBase` or `bindBufferRange` call that generates an error SHALL leave both the indexed binding and the generic binding of its target unchanged, as `getIndexedParameter` and `getParameter` report them (OpenGL ES 3.0 §2.5). This holds when the buffer is already bound at that index.
+
+#### Scenario: Rejected rebind of the buffer at that index
+- **WHEN** a WebGL 2 context calls `bindBufferBase(UNIFORM_BUFFER, 0, x)`, then `bindBuffer(UNIFORM_BUFFER, y)`, then `bindBufferRange(UNIFORM_BUFFER, 0, x, 0, 0)`
+- **THEN** the last call generates `INVALID_VALUE`, `getParameter(UNIFORM_BUFFER_BINDING)` is still `y`, and `getIndexedParameter(UNIFORM_BUFFER_BINDING, 0)` is still `x`

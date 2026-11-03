@@ -186,6 +186,48 @@ test('location of another program, of an earlier link, null location', () => {
   gl.destroy();
 });
 
+test('link with an earlier error pending', () => {
+  const gl = createContext({ width: 1, height: 1 });
+  const p = program(gl);
+  gl.useProgram(p);
+  const location = gl.getUniformLocation(p, 'c');
+  gl.enable(0); // a GL error pending before the call
+  gl.linkProgram(p);
+  assert.equal(gl.getError(), gl.INVALID_ENUM, 'the earlier error is still reported');
+  assert.equal(gl.getError(), gl.NO_ERROR);
+  gl.uniform4f(location, 1, 1, 1, 1);
+  assert.equal(gl.getError(), gl.INVALID_OPERATION, 'the link counts, so the old location is invalid');
+  gl.destroy();
+});
+
+test('link rejected during transform feedback (WebGL 2)', () => {
+  const gl = createContext({ width: 1, height: 1, webgl2: true });
+  const vs = '#version 300 es\nuniform float k; out float v; void main() { v = k; gl_Position = vec4(0); gl_PointSize = 1.0; }';
+  const fs = '#version 300 es\nprecision mediump float; out vec4 o; void main() { o = vec4(1); }';
+  const p = gl.createProgram();
+  gl.attachShader(p, shader(gl, gl.VERTEX_SHADER, vs));
+  gl.attachShader(p, shader(gl, gl.FRAGMENT_SHADER, fs));
+  gl.transformFeedbackVaryings(p, ['v'], gl.INTERLEAVED_ATTRIBS);
+  gl.linkProgram(p);
+  assert.equal(gl.getProgramParameter(p, gl.LINK_STATUS), true, gl.getProgramInfoLog(p));
+  gl.useProgram(p);
+  const location = gl.getUniformLocation(p, 'k');
+  gl.bindTransformFeedback(gl.TRANSFORM_FEEDBACK, gl.createTransformFeedback());
+  const out = gl.createBuffer();
+  gl.bindBufferBase(gl.TRANSFORM_FEEDBACK_BUFFER, 0, out);
+  gl.bufferData(gl.TRANSFORM_FEEDBACK_BUFFER, 16, gl.STATIC_READ);
+  gl.beginTransformFeedback(gl.POINTS);
+  assert.equal(gl.getError(), gl.NO_ERROR);
+  gl.linkProgram(p);
+  assert.equal(gl.getError(), gl.INVALID_OPERATION, 'linkProgram on a program active in transform feedback');
+  gl.uniform1f(location, 3);
+  assert.equal(gl.getError(), gl.NO_ERROR, 'the location survives a rejected link');
+  assert.equal(gl.getUniform(p, location), 3);
+  gl.endTransformFeedback();
+  assert.equal(gl.getError(), gl.NO_ERROR);
+  gl.destroy();
+});
+
 test('bad array lengths', () => {
   const gl = createContext({ width: 1, height: 1 });
   const p = program(gl, undefined, 'precision mediump float; uniform vec3 v; void main() { gl_FragColor = vec4(v, 1.0); }');

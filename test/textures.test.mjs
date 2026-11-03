@@ -246,6 +246,18 @@ test('canvas of another context', () => {
   gl.destroy();
 });
 
+test('canvas whose read buffer is NONE', () => {
+  const { gl } = textured();
+  const other = createContext({ width: 2, height: 2, webgl2: true });
+  other.clearColor(0, 0, 1, 1);
+  other.clear(other.COLOR_BUFFER_BIT);
+  other.readBuffer(other.NONE);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, other.canvas);
+  assert.deepEqual(draw(gl), [BLUE, BLUE, BLUE, BLUE]);
+  other.destroy();
+  gl.destroy();
+});
+
 test('unsupported source', () => {
   const gl = createContext({ width: 1, height: 1 });
   gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());

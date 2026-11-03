@@ -10,7 +10,7 @@
 use oxgl_sys::bindings::*;
 use oxgl_sys::{ClearValues, Current, ReadPixels};
 
-use crate::context::{Context, Object, ObjectKey, current};
+use crate::context::{Context, Object, ObjectKey, accepted, current};
 use crate::drawing_buffer::integers;
 use crate::parameters::Parameter;
 
@@ -300,11 +300,15 @@ impl Context {
         } else {
             format
         };
-        match samples {
+        let stored = accepted(&current, &mut self.errors, || match samples {
             None => current.renderbuffer_storage(target, internal, width, height),
             Some(samples) => {
                 current.renderbuffer_storage_multisample(target, samples, internal, width, height);
             }
+        });
+        // A rejected call keeps the storage, and so the format reported.
+        if !stored {
+            return;
         }
         if let Some(Object::Renderbuffer { depth_stencil, .. }) = self
             .bound_renderbuffer

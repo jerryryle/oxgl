@@ -109,6 +109,60 @@ test('uniform block drives a color, and introspection', () => {
   gl.destroy();
 });
 
+/** Asserts that `bind` rejects a never-bound buffer and leaves it untyped. */
+function rejectedBindLeavesUntyped(bind) {
+  const gl = context();
+  const buffer = gl.createBuffer();
+  bind(gl, buffer);
+  assert.equal(gl.getError(), gl.INVALID_VALUE);
+  assert.equal(gl.isBuffer(buffer), false);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffer);
+  assert.equal(gl.getError(), gl.NO_ERROR, 'the buffer can still become an element buffer');
+  gl.destroy();
+}
+
+test('empty bindBufferRange', () => {
+  rejectedBindLeavesUntyped((gl, buffer) => gl.bindBufferRange(gl.UNIFORM_BUFFER, 0, buffer, 0, 0));
+});
+
+test('misaligned bindBufferRange', (t) => {
+  const gl = context();
+  const alignment = gl.getParameter(gl.UNIFORM_BUFFER_OFFSET_ALIGNMENT);
+  gl.destroy();
+  if (alignment === 1) {
+    t.skip('every offset is aligned');
+    return;
+  }
+  rejectedBindLeavesUntyped((gl, buffer) => gl.bindBufferRange(gl.UNIFORM_BUFFER, 0, buffer, alignment / 2, 16));
+});
+
+test('out-of-range index', () => {
+  rejectedBindLeavesUntyped((gl, buffer) => gl.bindBufferBase(gl.UNIFORM_BUFFER, gl.getParameter(gl.MAX_UNIFORM_BUFFER_BINDINGS), buffer));
+});
+
+test('rejected rebind of the buffer at that index', () => {
+  const gl = context();
+  const [x, y] = [gl.createBuffer(), gl.createBuffer()];
+  gl.bindBufferBase(gl.UNIFORM_BUFFER, 0, x);
+  gl.bindBuffer(gl.UNIFORM_BUFFER, y);
+  gl.bindBufferRange(gl.UNIFORM_BUFFER, 0, x, 0, 0);
+  assert.equal(gl.getError(), gl.INVALID_VALUE);
+  assert.equal(gl.getParameter(gl.UNIFORM_BUFFER_BINDING), y, 'the generic binding GL kept');
+  assert.equal(gl.getIndexedParameter(gl.UNIFORM_BUFFER_BINDING, 0), x);
+  gl.destroy();
+});
+
+test('accepted bind still types the buffer', () => {
+  const gl = context();
+  const buffer = gl.createBuffer();
+  gl.bindBufferBase(gl.UNIFORM_BUFFER, 0, buffer);
+  assert.equal(gl.getError(), gl.NO_ERROR);
+  assert.equal(gl.isBuffer(buffer), true);
+  gl.bindBuffer(gl.ELEMENT_ARRAY_BUFFER, buffer);
+  assert.equal(gl.getError(), gl.INVALID_OPERATION);
+  gl.destroy();
+});
+
 test('capture vertex outputs with transform feedback', () => {
   const gl = context();
   const vs = '#version 300 es\nin float x; out float v; void main() { v = x * 2.0; gl_Position = vec4(0); gl_PointSize = 1.0; }';
