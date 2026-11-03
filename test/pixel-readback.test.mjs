@@ -10,7 +10,7 @@ import { Worker } from 'node:worker_threads';
 import { createContext, encodePNG } from '@oxgl-js/oxgl';
 
 import { decodePng } from '../conformance/png.mjs';
-import { allPixels } from './helpers.mjs';
+import { allPixels, readAll } from './helpers.mjs';
 
 function context(t, options = {}) {
   const gl = createContext({ width: 4, height: 4, ...options });
@@ -313,6 +313,23 @@ test('encodePNG reads the drawing buffer while a framebuffer object is bound', a
   gl.clearColor(0, 1, 0, 1);
   gl.clear(gl.COLOR_BUFFER_BIT);
   assert.ok(allPixels((await encoded(encodePNG(gl))).data, [255, 0, 0, 255]));
+});
+
+test('encodePNG reads the drawing buffer after readBuffer(NONE)', async (t) => {
+  for (const antialias of [false, true]) {
+    const gl = context(t, { webgl2: true, attributes: { antialias } });
+    gl.clearColor(1, 0, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.readBuffer(gl.NONE);
+    assert.ok(allPixels((await encoded(encodePNG(gl))).data, [255, 0, 0, 255]), `antialias ${String(antialias)}`);
+    assert.equal(gl.getParameter(gl.READ_BUFFER), gl.NONE);
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, new Uint8Array(4));
+    assert.equal(gl.getError(), gl.INVALID_OPERATION);
+    // The page's read buffer was restored where reads of the drawing buffer go.
+    gl.readBuffer(gl.BACK);
+    assert.ok(allPixels(readAll(gl), [255, 0, 0, 255]), `antialias ${String(antialias)} after readBuffer(BACK)`);
+    assert.equal(gl.getError(), gl.NO_ERROR);
+  }
 });
 
 test('encodePNG after a resize has the new size', async (t) => {

@@ -59,6 +59,48 @@ test('data round trip (WebGL 2)', () => {
   gl.destroy();
 });
 
+/** A `Float32Array` of `length` elements whose buffer has been detached. */
+function detached(length = 4) {
+  const view = new Float32Array(length);
+  view.buffer.transfer();
+  return view;
+}
+
+test('detached source', () => {
+  for (const webgl2 of [false, true]) {
+    const gl = createContext({ width: 1, height: 1, webgl2 });
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+    const view = detached();
+    for (const source of [view, view.buffer]) {
+      gl.bufferData(gl.ARRAY_BUFFER, 16, gl.STATIC_DRAW);
+      gl.bufferData(gl.ARRAY_BUFFER, source, gl.STATIC_DRAW);
+      assert.equal(gl.getBufferParameter(gl.ARRAY_BUFFER, gl.BUFFER_SIZE), 0);
+    }
+    assert.equal(gl.getError(), gl.NO_ERROR);
+    gl.destroy();
+  }
+});
+
+test('detached source of bufferSubData (WebGL 2)', () => {
+  const gl = createContext({ width: 1, height: 1, webgl2: true });
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+  gl.bufferData(gl.ARRAY_BUFFER, new Float32Array([1, 2, 3, 4]), gl.STATIC_DRAW);
+  gl.bufferSubData(gl.ARRAY_BUFFER, 0, detached());
+  const out = new Float32Array(4);
+  gl.getBufferSubData(gl.ARRAY_BUFFER, 0, out);
+  assert.deepEqual([...out], [1, 2, 3, 4]);
+  assert.equal(gl.getError(), gl.NO_ERROR);
+  gl.destroy();
+});
+
+test('range on a detached source (WebGL 2)', () => {
+  const gl = createContext({ width: 1, height: 1, webgl2: true });
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+  gl.bufferData(gl.ARRAY_BUFFER, detached(), gl.STATIC_DRAW, 1);
+  assert.equal(gl.getError(), gl.INVALID_VALUE);
+  gl.destroy();
+});
+
 test('size form is zero-filled', () => {
   const gl = createContext({ width: 1, height: 1, webgl2: true });
   gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());

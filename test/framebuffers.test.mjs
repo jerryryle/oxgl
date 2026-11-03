@@ -70,6 +70,36 @@ test('renderbuffer storage and parameters', () => {
   gl.destroy();
 });
 
+test('rejected storage keeps the reported format', () => {
+  for (const webgl2 of [false, true]) {
+    const gl = createContext({ width: 1, height: 1, webgl2 });
+    gl.bindRenderbuffer(gl.RENDERBUFFER, gl.createRenderbuffer());
+    const format = () => gl.getRenderbufferParameter(gl.RENDERBUFFER, gl.RENDERBUFFER_INTERNAL_FORMAT);
+    gl.renderbufferStorage(gl.RENDERBUFFER, gl.RGBA4, 3, 5);
+    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_STENCIL, -1, 1);
+    assert.equal(gl.getError(), gl.INVALID_VALUE);
+    assert.equal(format(), gl.RGBA4, 'a rejected DEPTH_STENCIL call');
+    gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_STENCIL, 3, 5);
+    gl.renderbufferStorage(gl.RENDERBUFFER, gl.RGBA4, -1, 1);
+    assert.equal(gl.getError(), gl.INVALID_VALUE);
+    assert.equal(format(), gl.DEPTH_STENCIL, 'a rejected call after DEPTH_STENCIL');
+    gl.destroy();
+  }
+});
+
+test('storage with an earlier error pending', () => {
+  // WebGL 2: on WebGL 1 ANGLE itself reports the storage as DEPTH_STENCIL.
+  const gl = createContext({ width: 1, height: 1, webgl2: true });
+  gl.bindRenderbuffer(gl.RENDERBUFFER, gl.createRenderbuffer());
+  gl.renderbufferStorage(gl.RENDERBUFFER, gl.RGBA4, 3, 5);
+  gl.enable(0); // a GL error pending before the call
+  gl.renderbufferStorage(gl.RENDERBUFFER, gl.DEPTH_STENCIL, 3, 5);
+  assert.equal(gl.getError(), gl.INVALID_ENUM, 'the earlier error is still reported');
+  assert.equal(gl.getError(), gl.NO_ERROR);
+  assert.equal(gl.getRenderbufferParameter(gl.RENDERBUFFER, gl.RENDERBUFFER_INTERNAL_FORMAT), gl.DEPTH_STENCIL, 'the call counts as accepted');
+  gl.destroy();
+});
+
 test('unbind, and deleting the bound framebuffer', () => {
   const gl = createContext({ width: 1, height: 1 });
   const framebuffer = gl.createFramebuffer();

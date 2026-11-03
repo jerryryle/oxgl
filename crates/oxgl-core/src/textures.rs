@@ -849,7 +849,7 @@ impl Context {
             current.bind_buffer(GL_PIXEL_PACK_BUFFER, 0);
         }
         current.bind_framebuffer(GL_READ_FRAMEBUFFER, self.buffer.framebuffer());
-        let resolved = self.buffer.begin_read(&current);
+        let resolved = self.buffer.begin_color_read(&current);
         // A half-float buffer can only be read as floats (OpenGL ES 3.0
         // §4.3.2); clamp and round them to 8 bits, unpremultiplied first so
         // low alphas keep their precision. Other formats read as bytes: an
@@ -889,9 +889,7 @@ impl Context {
             }
             y += n;
         }
-        if resolved {
-            self.buffer.end_read(&current);
-        }
+        self.buffer.end_color_read(&current, resolved);
         current.bind_framebuffer(GL_READ_FRAMEBUFFER, read);
         for (&pname, &value) in pack.iter().zip(&saved) {
             current.pixel_store(pname, value);

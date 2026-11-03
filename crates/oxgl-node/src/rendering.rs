@@ -360,13 +360,11 @@ pub fn attach_shader(
     })
 }
 
-/// `linkProgram`.
+/// `linkProgram`; whether the GL attempted the link.
 #[napi]
-pub fn link_program(env: Env, index: u32, version: u32, oi: u32, ov: u32) -> napi::Result<()> {
-    with_context(env, index, version, |c| {
-        if let Some(p) = object(oi, ov) {
-            c.link_program(p);
-        }
+pub fn link_program(env: Env, index: u32, version: u32, oi: u32, ov: u32) -> napi::Result<bool> {
+    query(env, index, version, false, |c| {
+        object(oi, ov).is_some_and(|p| c.link_program(p))
     })
 }
 

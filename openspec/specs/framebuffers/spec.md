@@ -99,3 +99,14 @@ On WebGL 1, `DEPTH_STENCIL_ATTACHMENT` SHALL be an attachment point of its own (
 #### Scenario: WebGL 1 combined point
 - **WHEN** a `DEPTH_STENCIL` renderbuffer is attached at `DEPTH_STENCIL_ATTACHMENT` on WebGL 1
 - **THEN** `getFramebufferAttachmentParameter(FRAMEBUFFER, DEPTH_STENCIL_ATTACHMENT, FRAMEBUFFER_ATTACHMENT_OBJECT_NAME)` returns it (cf. Khronos `conformance/misc/expando-loss.html`)
+
+### Requirement: DEPTH_STENCIL alias follows accepted storage
+`getRenderbufferParameter(RENDERBUFFER, RENDERBUFFER_INTERNAL_FORMAT)` SHALL report `DEPTH_STENCIL` exactly when the renderbuffer's storage comes from a successful `renderbufferStorage` call that named `DEPTH_STENCIL`. A `renderbufferStorage` call that generates an error SHALL leave the reported format unchanged.
+
+#### Scenario: Rejected DEPTH_STENCIL storage
+- **WHEN** a renderbuffer allocated as `RGBA4` is given `renderbufferStorage(RENDERBUFFER, DEPTH_STENCIL, -1, 1)`
+- **THEN** `INVALID_VALUE` is generated and `RENDERBUFFER_INTERNAL_FORMAT` is still `RGBA4`
+
+#### Scenario: Rejected storage after DEPTH_STENCIL
+- **WHEN** a renderbuffer allocated as `DEPTH_STENCIL` is given `renderbufferStorage(RENDERBUFFER, RGBA4, -1, 1)`
+- **THEN** `INVALID_VALUE` is generated and `RENDERBUFFER_INTERNAL_FORMAT` is still `DEPTH_STENCIL`

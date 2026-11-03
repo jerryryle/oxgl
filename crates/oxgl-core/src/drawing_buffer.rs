@@ -655,6 +655,52 @@ impl DrawingBuffer {
         if !self.reads_resolve(current) || self.read_buffer.get() == GL_NONE {
             return false;
         }
+        self.resolve(current);
+        current.bind_framebuffer(GL_READ_FRAMEBUFFER, self.names.resolve);
+        true
+    }
+
+    /// Rebinds the draw framebuffer for reading after
+    /// [`DrawingBuffer::begin_read`] returned `true`.
+    pub(crate) fn end_read(&self, current: &Current<'_>) {
+        current.bind_framebuffer(GL_READ_FRAMEBUFFER, self.names.draw);
+    }
+
+    /// [`DrawingBuffer::begin_read`] for reading the drawing buffer as a
+    /// canvas: its color whatever read buffer the page selected. The drawing
+    /// buffer must be bound for reading. A read buffer of `NONE` is set to the
+    /// color attachment and restored while the drawing buffer is still the
+    /// read framebuffer: after the resolve when multisampled, else in
+    /// [`DrawingBuffer::end_color_read`]. Restoring it later would set `NONE`
+    /// on the resolve buffer, which no page call resets.
+    pub(crate) fn begin_color_read(&self, current: &Current<'_>) -> bool {
+        let none = self.read_buffer.get() == GL_NONE;
+        if none {
+            current.read_buffer(GL_COLOR_ATTACHMENT0);
+        }
+        if self.allocated.samples == 0 {
+            return false;
+        }
+        self.resolve(current);
+        if none {
+            current.read_buffer(GL_NONE);
+        }
+        current.bind_framebuffer(GL_READ_FRAMEBUFFER, self.names.resolve);
+        true
+    }
+
+    /// Ends [`DrawingBuffer::begin_color_read`], given what it returned.
+    pub(crate) fn end_color_read(&self, current: &Current<'_>, resolved: bool) {
+        if resolved {
+            self.end_read(current);
+        } else if self.read_buffer.get() == GL_NONE {
+            current.read_buffer(GL_NONE);
+        }
+    }
+
+    /// Blits the multisampled buffer, bound for reading, into the
+    /// single-sample one, keeping the draw framebuffer and scissor test.
+    fn resolve(&self, current: &Current<'_>) {
         let draw = integers(current, GL_DRAW_FRAMEBUFFER_BINDING).map_or(0, |[name, _]| name);
         let scissor = current.is_enabled(GL_SCISSOR_TEST);
         if scissor {
@@ -668,17 +714,9 @@ impl DrawingBuffer {
             current.blit_framebuffer_angle(0, 0, w, h, 0, 0, w, h, GL_COLOR_BUFFER_BIT, GL_NEAREST);
         }
         current.bind_framebuffer(GL_DRAW_FRAMEBUFFER, draw.unsigned_abs());
-        current.bind_framebuffer(GL_READ_FRAMEBUFFER, self.names.resolve);
         if scissor {
             current.apply(StateCall::Enable(GL_SCISSOR_TEST));
         }
-        true
-    }
-
-    /// Rebinds the draw framebuffer for reading after
-    /// [`DrawingBuffer::begin_read`] returned `true`.
-    pub(crate) fn end_read(&self, current: &Current<'_>) {
-        current.bind_framebuffer(GL_READ_FRAMEBUFFER, self.names.draw);
     }
 }
 

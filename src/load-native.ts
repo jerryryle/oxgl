@@ -93,7 +93,7 @@ export interface NativeBinding {
   getShaderParameter: (index: number, version: number, oi: number, ov: number, pname: number) => NativeParameter | null;
   getShaderInfoLog: (index: number, version: number, oi: number, ov: number) => string | null;
   attachShader: (index: number, version: number, pi: number, pv: number, si: number, sv: number, attach: boolean) => void;
-  linkProgram: (index: number, version: number, oi: number, ov: number) => void;
+  linkProgram: (index: number, version: number, oi: number, ov: number) => boolean;
   validateProgram: (index: number, version: number, oi: number, ov: number) => void;
   useProgram: (index: number, version: number, oi: number, ov: number) => boolean;
   getProgramParameter: (index: number, version: number, oi: number, ov: number, pname: number) => NativeParameter | null;
@@ -237,7 +237,7 @@ export interface NativeBinding {
 }
 
 /** Version of the JS ↔ native interface this package was built for. */
-export const NATIVE_ABI_VERSION = 13;
+export const NATIVE_ABI_VERSION = 14;
 
 /** An `Error` with `code: 'OXGL_NATIVE_MISSING'` naming the host and `detail`. */
 export function nativeMissing(

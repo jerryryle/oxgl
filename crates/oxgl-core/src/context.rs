@@ -149,6 +149,25 @@ fn pack_layout(current: &Current<'_>, webgl2: bool) -> pixels::PackLayout {
     }
 }
 
+/// Runs `call` and reports whether the GL accepted it, for calls whose
+/// effect oxgl mirrors. Errors pending before it stay pending, as
+/// synthesized flags, and its own error is synthesized too.
+pub(crate) fn accepted(
+    current: &Current<'_>,
+    errors: &mut ErrorState,
+    call: impl FnOnce(),
+) -> bool {
+    crate::drawing_buffer::drain_into(current, errors);
+    call();
+    match current.get_error() {
+        GL_NO_ERROR => true,
+        code => {
+            errors.synthesize(code);
+            false
+        }
+    }
+}
+
 /// Sets the lost flag if the GL reports a graphics reset.
 pub(crate) fn check_reset(current: &Current<'_>, errors: &mut ErrorState) {
     if current.graphics_reset_status() != GL_NO_ERROR {

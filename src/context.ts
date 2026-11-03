@@ -749,9 +749,13 @@ function byteRange(
 ): [Uint8Array, number, number] {
   const offset = ranged ? toUnsignedLongLong(srcOffset) : 0;
   const count = ranged ? toUnsignedLong(length) : 0;
-  if (!ArrayBuffer.isView(source)) return [new Uint8Array(source), 0, 0];
+  const buffer = ArrayBuffer.isView(source) ? source.buffer : source;
+  // A detached buffer holds zero bytes, and no Uint8Array can be built on it.
+  // `detached` is ES2024, past the ES2023 lib.
+  const detached = (buffer as { detached?: unknown }).detached === true;
+  if (!ArrayBuffer.isView(source)) return [detached ? new Uint8Array(0) : new Uint8Array(source), 0, 0];
   const size = (source as Partial<{ BYTES_PER_ELEMENT: number }>).BYTES_PER_ELEMENT ?? 1;
-  const bytes = new Uint8Array(source.buffer, source.byteOffset, source.byteLength);
+  const bytes = detached ? new Uint8Array(0) : new Uint8Array(source.buffer, source.byteOffset, source.byteLength);
   // An offset past the view stays past it, so native code reports INVALID_VALUE.
   return [bytes, offset * size, count * size];
 }
@@ -1771,8 +1775,8 @@ abstract class ContextBase {
     const s = this.#s;
     const p = checkObject(s, program, WebGLProgram, 'linkProgram', 1, false, GL.INVALID_VALUE) as ProgramState | null | undefined;
     if (!p) return;
-    p.linkCount += 1;
-    native.linkProgram(s.index, s.version, ...keyOf(p));
+    // A link the GL rejects outright leaves earlier locations valid.
+    if (native.linkProgram(s.index, s.version, ...keyOf(p))) p.linkCount += 1;
   }
 
   /** WebGL 1.0 §5.14.9. */
