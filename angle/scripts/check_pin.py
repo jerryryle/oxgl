@@ -17,7 +17,7 @@ from pathlib import Path
 PLATFORMS = ("linux-x64", "linux-arm64", "macos-arm64", "windows-x64", "windows-arm64")
 VERSION = r"angle-\d+\.\d+"
 # Bundles are built and released by the recipe repository.
-RELEASES = "https://github.com/jerryryle/oxgl-angle/releases/download/"
+RELEASES = "https://github.com/oxgl-js/oxgl-angle/releases/download/"
 
 
 def bundles_problems(bundles: dict) -> list[str]:

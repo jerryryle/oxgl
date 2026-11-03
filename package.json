@@ -5,11 +5,11 @@
   "license": "BSD-3-Clause",
   "repository": {
     "type": "git",
-    "url": "git+https://github.com/jerryryle/oxgl.git"
+    "url": "git+https://github.com/oxgl-js/oxgl.git"
   },
-  "homepage": "https://github.com/jerryryle/oxgl#readme",
+  "homepage": "https://github.com/oxgl-js/oxgl#readme",
   "bugs": {
-    "url": "https://github.com/jerryryle/oxgl/issues"
+    "url": "https://github.com/oxgl-js/oxgl/issues"
   },
   "type": "module",
   "main": "./dist/index.js",

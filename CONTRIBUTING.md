@@ -62,7 +62,7 @@ skip list, skips the same jobs: `repo-checks` lints and tests the builder, and
 `results` rebuilds the page from the latest `main` run's reports.
 
 ANGLE is never built here: its recipe and bundle releases live in
-[jerryryle/oxgl-angle](https://github.com/jerryryle/oxgl-angle) (see
+[oxgl-js/oxgl-angle](https://github.com/oxgl-js/oxgl-angle) (see
 `angle/README.md`). Every job uses the pinned bundle from
 `angle/bundles.toml`, cached by the manifest's hash. `oxgl-sys/build.rs`
 verifies the digest when it downloads the bundle; a restored cache entry is
@@ -118,7 +118,7 @@ These are done once, by the maintainer, in this order:
    `oxgl-js-oxgl-0.1.1.tgz`. Pick them by name: `oxgl-js-*.tgz` matches the
    main tarball too.
 4. On each of the six packages' Settings page on npmjs.com, add a trusted
-   publisher: GitHub Actions, owner `jerryryle`, repository `oxgl`, workflow
+   publisher: GitHub Actions, owner `oxgl-js`, repository `oxgl`, workflow
    `ci.yml`, environment `npm`. Then set "Require two-factor authentication and
    disallow tokens".
 5. Rerun that run's `release` job. It finds the packages published and creates
@@ -128,7 +128,7 @@ The `npm` GitHub environment, which only `main` may deploy to, already exists.
 
 ## Results page
 
-The [results page](https://jerryryle.github.io/oxgl/) is one table of every
+The [results page](https://oxgl-js.github.io/oxgl/) is one table of every
 conformance page's and three.js example's result on each platform. Its fixed
 parts are in `scripts/results-page.html`; `scripts/results-page.mjs` fills in
 the rows from the runs' reports. The `results` job builds it on every run that

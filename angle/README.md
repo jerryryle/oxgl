@@ -3,7 +3,7 @@
 oxgl renders through [ANGLE](https://chromium.googlesource.com/angle/angle),
 with SwiftShader as the software fallback. Google publishes no ANGLE binaries,
 so oxgl builds its own in a separate repository,
-[jerryryle/oxgl-angle](https://github.com/jerryryle/oxgl-angle), which holds the
+[oxgl-js/oxgl-angle](https://github.com/oxgl-js/oxgl-angle), which holds the
 build recipe and publishes the bundles as its releases. This repository only
 pins them: developers, CI and npm builds download the bundles named in
 `bundles.toml` and verify them against the digests committed there, so ANGLE
@@ -68,7 +68,7 @@ oxgl-angle keeps a copy for its own build.
 
 ANGLE changes in two steps, one in each repository:
 
-1. In [oxgl-angle](https://github.com/jerryryle/oxgl-angle), change the recipe
+1. In [oxgl-angle](https://github.com/oxgl-js/oxgl-angle), change the recipe
    with a new `bundle_version`, merge it, and release it (its
    `angle/README.md` has the steps). oxgl-angle also does this by itself for
    each new Chrome stable release, daily at 07:17 UTC.

@@ -25,7 +25,7 @@ from pathlib import Path
 # Run as a script, so this directory is on sys.path.
 from check_pin import RELEASES, VERSION, bundles_problems
 
-REPO = "jerryryle/oxgl-angle"
+REPO = "oxgl-js/oxgl-angle"
 BOT = "github-actions[bot]"
 
 

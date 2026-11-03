@@ -115,7 +115,7 @@ fn run() -> Result<()> {
         let (url, sha256) = pinned_archive(&bundles, platform.key, "").ok_or_else(|| {
             format!(
                 "no published ANGLE bundle is pinned for {}; build one with the \
-                 jerryryle/oxgl-angle recipe and set OXGL_ANGLE_DIR to the extracted bundle",
+                 oxgl-js/oxgl-angle recipe and set OXGL_ANGLE_DIR to the extracted bundle",
                 platform.key
             )
         })?;
