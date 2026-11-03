@@ -7,9 +7,8 @@
 Oxgl is headless WebGL 1 and WebGL 2 for Node.js that strives for standards
 compliance. It renders through ANGLE. By default it uses the GPU when one is
 available and the SwiftShader software renderer otherwise. It implements the
-WebGL 1 and WebGL 2 APIs, including extensions and context loss, except for a
-few drawing-buffer members the WebGL specification added recently (see Known
-issues). It is tested against the Khronos WebGL conformance suites.
+WebGL 1 and WebGL 2 APIs, including extensions and context loss, and is tested
+against the Khronos WebGL conformance suites.
 
 Three.js works with oxgl without any changes to three.js (see three.js below).
 
@@ -51,11 +50,6 @@ below.
 
 ## Known issues
 
-- **Some recent WebGL additions are missing.** Oxgl does not implement
-  `drawingBufferColorSpace`, `unpackColorSpace`, `drawingBufferFormat` or
-  `drawingBufferStorage()`, which the WebGL specification added recently. The
-  Khronos conformance suite doesn't require them, and its pages pass without
-  them.
 - **18 WebGL 2 conformance pages fail with the software backend on x64.** On
   Linux x64 and Windows x64, 18 deqp pages that render to 32-bit integer color
   buffers (`rgba32i`, `r32ui` and similar) fail their image comparisons. The
@@ -135,6 +129,30 @@ never presented, so its contents persist whatever `preserveDrawingBuffer` is.
 canvas. `gl.resize(width, height)` (not part of WebGL) does the same for any
 context, also updating a `HeadlessCanvas`. A resize clears the buffer and
 keeps all other state, including the viewport.
+
+`gl.drawingBufferStorage(format, width, height)` reallocates the drawing buffer
+in `RGBA8`, `SRGB8_ALPHA8` (WebGL 2, or WebGL 1 with `EXT_sRGB`) or `RGBA16F`
+(with `EXT_color_buffer_float` or `EXT_color_buffer_half_float`), and
+`gl.drawingBufferFormat` reports the current format. A half-float drawing
+buffer reads back as `RGBA`/`FLOAT`. Resizing afterwards keeps the format.
+
+A drawing buffer whose storage would take more than 1 GiB is allocated
+without multisampling, and then smaller, as the WebGL specification allows. For
+example, an antialiased buffer larger than about 5460×5460 loses its
+multisampling.
+
+### Color spaces
+
+`gl.unpackColorSpace` (`"srgb"`, the default, or `"display-p3"`) is the color
+space that `TexImageSource` uploads are converted into. An `ImageData`-shaped
+object's `colorSpace` property gives its own color space, and another oxgl
+context's canvas has that context's `drawingBufferColorSpace`. Every other
+source counts as sRGB. Uploads from typed arrays are not converted, and
+`pixelStorei(UNPACK_COLORSPACE_CONVERSION_WEBGL, NONE)` turns conversion off.
+
+`gl.drawingBufferColorSpace` records the color space of the drawing buffer's
+values; changing it clears the buffer. `encodePNG` marks a Display P3 buffer's
+PNG with a `cICP` chunk.
 
 ### three.js
 

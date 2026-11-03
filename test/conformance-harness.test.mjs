@@ -480,6 +480,7 @@ test('page runner: outcomes, early errors, media, canvas shim, crashes, timeouts
         'image-undecodable.html',
         'image-icc-profile.html',
         'image-bitmap-svg.html',
+        'image-bitmap-display-p3.html',
         'image-src-change.html',
         'image-upload-before-decode.html',
         'video.html',
@@ -561,6 +562,8 @@ test('page runner: outcomes, early errors, media, canvas shim, crashes, timeouts
   assert.equal(outcome('webgl1', 'image-icc-profile.html'), 'PASS', pageOf(report, 'webgl1', 'image-icc-profile.html').message);
   // An ImageBitmap from an SVG image element.
   assert.equal(outcome('webgl1', 'image-bitmap-svg.html'), 'PASS', pageOf(report, 'webgl1', 'image-bitmap-svg.html').message);
+  // An ImageBitmap converts into unpackColorSpace as other sources do.
+  assert.equal(outcome('webgl1', 'image-bitmap-display-p3.html'), 'PASS', pageOf(report, 'webgl1', 'image-bitmap-display-p3.html').message);
   // A new source on the same element uploads the new image, not a copy of the old one.
   assert.equal(outcome('webgl1', 'image-src-change.html'), 'PASS', pageOf(report, 'webgl1', 'image-src-change.html').message);
   // An upload before the decode finishes is not cached, and decode() waits for the pixels.

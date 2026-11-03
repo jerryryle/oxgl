@@ -53,6 +53,9 @@ export type ContextBackend = 'auto' | 'gpu' | 'software';
 /** `WebGLPowerPreference` (WebGL 1.0 §5.2). */
 export type WebGLPowerPreference = 'default' | 'low-power' | 'high-performance';
 
+/** A predefined color space (HTML §4.12.5.1.1), as `drawingBufferColorSpace` and `unpackColorSpace` take. */
+export type PredefinedColorSpace = 'srgb' | 'display-p3';
+
 /** `WebGLContextAttributes` (WebGL 1.0 §5.2). */
 export interface WebGLContextAttributes {
   alpha?: boolean;
@@ -158,6 +161,12 @@ export interface ContextState {
   // Zeroed by destroy(), as Chromium reports for a lost context.
   width: number;
   height: number;
+  /** `drawingBufferFormat` (WebGL 1.0 §5.14.1). */
+  format: number;
+  /** `drawingBufferColorSpace`; kept across a restore. */
+  drawingBufferColorSpace: PredefinedColorSpace;
+  /** `unpackColorSpace`; kept across a restore. */
+  unpackColorSpace: PredefinedColorSpace;
   destroyed: boolean;
   lostReported: boolean;
   canvas: object;
@@ -276,6 +285,8 @@ interface Pixels {
   data: ArrayBufferView;
   width: number;
   height: number;
+  /** The pixels' color space; sRGB when absent (WebGL 1.0 §5.14.8). */
+  colorSpace?: PredefinedColorSpace;
   /** An `ImageBitmap`'s pixels, uploaded without the flip and premultiply unpack parameters. */
   asIs?: boolean;
 }
@@ -325,9 +336,10 @@ export function canvasPixels(canvas: object): Pixels | undefined {
  * `gl`'s drawing buffer as unpremultiplied RGBA8, top row first, or `null`
  * when the context is lost or destroyed: what `encodePNG` encodes.
  */
-export function contextPixels(gl: ContextBase): { data: Uint8Array; width: number; height: number } | null {
+export function contextPixels(gl: ContextBase): { data: Uint8Array; width: number; height: number; colorSpace: PredefinedColorSpace } | null {
   const s = contextState(gl);
-  return s.destroyed ? null : native.drawingBufferPixels(s.index, s.version);
+  const pixels = s.destroyed ? null : native.drawingBufferPixels(s.index, s.version);
+  return pixels === null ? null : { ...pixels, colorSpace: s.drawingBufferColorSpace };
 }
 
 let imageDecoder: ((image: object) => Pixels | undefined) | undefined;
@@ -364,12 +376,14 @@ function imagePixels(source: unknown, method: string, position: number): Pixels 
   if (typeof source !== 'object' || source === null) throw typeError(method, position, 'TexImageSource');
   const shaped = source as Partial<Pixels> & { naturalWidth?: unknown; naturalHeight?: unknown; ownerDocument?: unknown };
   if (isPixelView(shaped.data) && typeof shaped.width === 'number' && typeof shaped.height === 'number') {
-    return { data: shaped.data, width: shaped.width, height: shaped.height };
+    const colorSpace = shaped.colorSpace === 'display-p3' ? 'display-p3' : 'srgb';
+    return { data: shaped.data, width: shaped.width, height: shaped.height, colorSpace };
   }
   const owner = canvasContexts.get(source);
   if (owner !== undefined) {
     if (owner.destroyed) return EMPTY;
-    return native.drawingBufferPixels(owner.index, owner.version) ?? EMPTY;
+    const pixels = native.drawingBufferPixels(owner.index, owner.version);
+    return pixels === null ? EMPTY : { ...pixels, colorSpace: owner.drawingBufferColorSpace };
   }
   const width = Number((shaped as { width?: unknown }).width) >>> 0;
   const height = Number((shaped as { height?: unknown }).height) >>> 0;
@@ -448,29 +462,46 @@ function upload(
     if (s.destroyed) return;
     args.width = pixels.width;
     args.height = pixels.height;
-    native.texUpload(s.index, s.version, call, args, pixels.asIs === true ? 4 : 3, pixels.data, 0, pixels.width, pixels.height);
+    native.texUpload(s.index, s.version, call, args, pixels.asIs === true ? 4 : 3, pixels.data, 0, pixels.width, pixels.height, colorSpaceCode(pixels.colorSpace), colorSpaceCode(s.unpackColorSpace));
     return;
   }
   if (data === null || data === undefined) {
     if (ranged) throw typeError(method, position, 'ArrayBufferView');
-    if (!s.destroyed) native.texUpload(s.index, s.version, call, args, 0, null, 0, 0, 0);
+    if (!s.destroyed) native.texUpload(s.index, s.version, call, args, 0, null, 0, 0, 0, 0, 0);
     return;
   }
   if (ArrayBuffer.isView(data)) {
     const size = (data as Partial<{ BYTES_PER_ELEMENT: number }>).BYTES_PER_ELEMENT ?? 1;
     const offset = ranged ? toUnsignedLongLong(srcOffset) * size : 0;
-    if (!s.destroyed) native.texUpload(s.index, s.version, call, args, 1, data, offset, 0, 0);
+    if (!s.destroyed) native.texUpload(s.index, s.version, call, args, 1, data, offset, 0, 0, 0, 0);
     return;
   }
   if (typeof data !== 'object' && typeof data !== 'function') {
     if (!s.webgl2 || ranged) throw typeError(method, position, 'ArrayBufferView');
     const offset = toLongLong(data);
-    if (!s.destroyed) native.texUpload(s.index, s.version, call, args, 2, null, offset, 0, 0);
+    if (!s.destroyed) native.texUpload(s.index, s.version, call, args, 2, null, offset, 0, 0, 0, 0);
     return;
   }
   if (!s.webgl2 || ranged) throw typeError(method, position, 'ArrayBufferView');
   const pixels = imagePixels(data, method, position);
-  if (!s.destroyed) native.texUpload(s.index, s.version, call, args, pixels.asIs === true ? 4 : 3, pixels.data, 0, pixels.width, pixels.height);
+  if (!s.destroyed) native.texUpload(s.index, s.version, call, args, pixels.asIs === true ? 4 : 3, pixels.data, 0, pixels.width, pixels.height, colorSpaceCode(pixels.colorSpace), colorSpaceCode(s.unpackColorSpace));
+}
+
+/** The native code of a color space: 0 sRGB, 1 Display P3. */
+function colorSpaceCode(colorSpace: PredefinedColorSpace | undefined): number {
+  return colorSpace === 'display-p3' ? 1 : 0;
+}
+
+/**
+ * WebIDL's conversion of a `PredefinedColorSpace` attribute assignment: the
+ * value as a string, or `undefined` when it is not one of the enumeration's
+ * values, and the assignment is ignored.
+ */
+function toColorSpace(value: unknown): PredefinedColorSpace | undefined {
+  // WebIDL's ToString: a Symbol throws, which String() would not do.
+  if (typeof value === 'symbol') throw new TypeError("Failed to set a 'PredefinedColorSpace' attribute: a Symbol cannot be converted to a string.");
+  const string = String(value);
+  return string === 'srgb' || string === 'display-p3' ? string : undefined;
 }
 
 /**
@@ -862,6 +893,9 @@ function restore(s: ContextState): void {
   );
   if (created.errorCode !== undefined) return;
   const next = initialState(gl, s.webgl2, created, creation, canvas);
+  // Attributes of the context object, not of its drawing buffer.
+  next.drawingBufferColorSpace = s.drawingBufferColorSpace;
+  next.unpackColorSpace = s.unpackColorSpace;
   // WEBGL_lose_context stays enabled, as the same object (WebGL 1.0 §5.15.2).
   const loseContext = s.extensions.get('WEBGL_lose_context');
   if (loseContext !== undefined) {
@@ -950,6 +984,9 @@ function initialState(gl: ContextBase, webgl2: boolean, created: CreatedContext,
     lostErrors: [],
     width: created.width,
     height: created.height,
+    format: creation.attributes.alpha ? GL.RGBA8 : GL.RGB8,
+    drawingBufferColorSpace: 'srgb',
+    unpackColorSpace: 'srgb',
     destroyed: false,
     lostReported: false,
     canvas,
@@ -1068,6 +1105,65 @@ abstract class ContextBase {
   /** Height of the drawing buffer in pixels (WebGL 1.0 §5.14.1). */
   get drawingBufferHeight(): number {
     return this.#s.height;
+  }
+
+  /** The drawing buffer's color format (WebGL 1.0 §5.14.1). */
+  get drawingBufferFormat(): number {
+    return this.#s.format;
+  }
+
+  /**
+   * The color space of the drawing buffer's values (WebGL 1.0 §5.14.1). A
+   * change reallocates and clears the drawing buffer; other values are
+   * ignored, as WebIDL does for enumerations.
+   */
+  get drawingBufferColorSpace(): PredefinedColorSpace {
+    return this.#s.drawingBufferColorSpace;
+  }
+
+  set drawingBufferColorSpace(value: PredefinedColorSpace) {
+    const colorSpace = toColorSpace(value);
+    const s = this.#s;
+    if (colorSpace === undefined || colorSpace === s.drawingBufferColorSpace) return;
+    s.drawingBufferColorSpace = colorSpace;
+    if (s.destroyed) return;
+    const storage = native.reallocate(s.index, s.version);
+    if (storage !== null) {
+      s.width = storage.width;
+      s.height = storage.height;
+    }
+  }
+
+  /**
+   * The color space `TexImageSource` uploads are converted into (WebGL 1.0
+   * §5.14.1, §5.14.8); other values are ignored.
+   */
+  get unpackColorSpace(): PredefinedColorSpace {
+    return this.#s.unpackColorSpace;
+  }
+
+  set unpackColorSpace(value: PredefinedColorSpace) {
+    const colorSpace = toColorSpace(value);
+    if (colorSpace !== undefined) this.#s.unpackColorSpace = colorSpace;
+  }
+
+  /**
+   * WebGL 1.0 §2.2: reallocates the drawing buffer in `sizedFormat`
+   * (`RGBA8`, or `SRGB8_ALPHA8` or `RGBA16F` when renderable) at
+   * `width`×`height`, cleared. A no-op when lost.
+   */
+  drawingBufferStorage(sizedFormat: number, width: number, height: number): void {
+    requireArguments('drawingBufferStorage', 3, arguments.length);
+    const format = toUnsignedLong(sizedFormat);
+    const w = toUnsignedLong(width);
+    const h = toUnsignedLong(height);
+    const s = this.#s;
+    if (s.destroyed) return;
+    const storage = native.drawingBufferStorage(s.index, s.version, format, w, h);
+    if (storage === null) return;
+    s.width = storage.width;
+    s.height = storage.height;
+    s.format = storage.format;
   }
 
   /** WebGL 1.0 §5.14.3. */

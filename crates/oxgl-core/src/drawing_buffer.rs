@@ -10,8 +10,8 @@ use oxgl_sys::bindings::{
     GL_MAX_DRAW_BUFFERS, GL_MAX_RENDERBUFFER_SIZE, GL_MAX_SAMPLES, GL_MAX_VIEWPORT_DIMS,
     GL_NEAREST, GL_NO_ERROR, GL_NONE, GL_RASTERIZER_DISCARD, GL_READ_FRAMEBUFFER,
     GL_READ_FRAMEBUFFER_BINDING, GL_RENDERBUFFER, GL_RENDERBUFFER_BINDING, GL_RGB8, GL_RGBA8,
-    GL_SCISSOR_TEST, GL_STENCIL_ATTACHMENT, GL_STENCIL_BACK_WRITEMASK, GL_STENCIL_BUFFER_BIT,
-    GL_STENCIL_CLEAR_VALUE, GL_STENCIL_INDEX8, GL_STENCIL_WRITEMASK,
+    GL_RGBA16F, GL_SCISSOR_TEST, GL_STENCIL_ATTACHMENT, GL_STENCIL_BACK_WRITEMASK,
+    GL_STENCIL_BUFFER_BIT, GL_STENCIL_CLEAR_VALUE, GL_STENCIL_INDEX8, GL_STENCIL_WRITEMASK,
 };
 use oxgl_sys::{ClientVersion, Current, Display, GlContext, StateCall, ValueType, Values};
 
@@ -75,10 +75,10 @@ pub struct Limits {
     pub max_samples: i32,
     /// `MAX_DRAW_BUFFERS` (WebGL 2), else 1.
     pub max_draw_buffers: i32,
-    /// Test-only: storage larger than this many bytes fails as
-    /// `OUT_OF_MEMORY` would.
-    #[cfg(test)]
-    pub byte_cap: Option<u64>,
+    /// Storage larger than this many bytes, across all renderbuffers and
+    /// samples, counts as an allocation that failed (design: "Drawing-buffer
+    /// allocations have a byte budget").
+    pub byte_cap: u64,
 }
 
 impl Limits {
@@ -97,10 +97,22 @@ impl Limits {
             max_height: renderbuffer.min(viewport_height),
             max_samples,
             max_draw_buffers,
-            #[cfg(test)]
-            byte_cap: None,
+            byte_cap: BYTE_BUDGET,
         };
         (limits.max_width > 0 && limits.max_height > 0).then_some(limits)
+    }
+}
+
+/// The drawing buffer's allocation budget: 1 GiB.
+pub const BYTE_BUDGET: u64 = 1 << 30;
+
+/// Bytes per pixel of a renderbuffer format the drawing buffer uses.
+fn bytes_per_pixel(format: u32) -> u64 {
+    match format {
+        GL_RGBA16F => 8,
+        GL_STENCIL_INDEX8 => 1,
+        // RGBA8, RGB8 (padded), SRGB8_ALPHA8 and the 24-bit depth formats.
+        _ => 4,
     }
 }
 
@@ -166,6 +178,9 @@ pub struct DrawingBuffer {
     read_buffer: std::cell::Cell<u32>,
     /// The size last asked for, before limits and fallbacks.
     size_request: (f64, f64),
+    /// The color renderbuffers' format: `RGBA8` or `RGB8` from `alpha`
+    /// until [`DrawingBuffer::storage`] changes it.
+    color_format: u32,
 }
 
 impl DrawingBuffer {
@@ -220,6 +235,11 @@ impl DrawingBuffer {
             draw_buffer: std::cell::Cell::new(GL_BACK),
             read_buffer: std::cell::Cell::new(GL_BACK),
             size_request: (request.width, request.height),
+            color_format: if request.attributes.alpha {
+                GL_RGBA8
+            } else {
+                GL_RGB8
+            },
         };
         let mut errors = ErrorState::default();
         buffer
@@ -274,6 +294,12 @@ impl DrawingBuffer {
     #[must_use]
     pub fn height(&self) -> i32 {
         self.allocated.height
+    }
+
+    /// The color format (`drawingBufferFormat`, WebGL 1.0 §5.14.1).
+    #[must_use]
+    pub fn color_format(&self) -> u32 {
+        self.color_format
     }
 
     /// Samples per pixel of the draw buffer; 0 when single-sampled.
@@ -436,6 +462,31 @@ impl DrawingBuffer {
         self.allocate(width, height, errors).is_some()
     }
 
+    /// `drawingBufferStorage` (WebGL 1.0 §2.2): reallocates in `format` at
+    /// `width`×`height` and clears, with the fallbacks of a resize. The
+    /// caller has validated the format and size. A later resize compares
+    /// against this size. `false` if not even 1×1 could be allocated.
+    pub fn storage(
+        &mut self,
+        format: u32,
+        width: i32,
+        height: i32,
+        errors: &mut ErrorState,
+    ) -> bool {
+        self.color_format = format;
+        self.size_request = (f64::from(width), f64::from(height));
+        self.allocate(f64::from(width), f64::from(height), errors)
+            .is_some()
+    }
+
+    /// Reallocates at the current size and format and clears, as changing
+    /// `drawingBufferColorSpace` does (WebGL 1.0 §5.14.1). `false` if not
+    /// even 1×1 could be allocated.
+    pub fn reallocate(&mut self, errors: &mut ErrorState) -> bool {
+        let (width, height) = self.size_request;
+        self.allocate(width, height, errors).is_some()
+    }
+
     /// Allocates storage, falling back to no multisampling, then to half the
     /// size down to 1×1, and finally without depth and stencil, and clears
     /// the result (design: "Allocation falls back instead of failing").
@@ -500,26 +551,29 @@ impl DrawingBuffer {
     fn try_allocate(&self, current: &Current<'_>, attempt: Attempt) -> bool {
         // A failed attempt may leave several flags; only this attempt's count.
         discard_errors(current);
-        #[cfg(test)]
-        if let Some(cap) = self.limits.byte_cap {
-            let pixels = u64::from(attempt.width.unsigned_abs())
-                * u64::from(attempt.height.unsigned_abs())
-                * u64::from(attempt.samples.max(1).unsigned_abs());
-            let depth_stencil = if attempt.depth || attempt.stencil {
-                4
-            } else {
-                0
-            };
-            if pixels * (4 + depth_stencil) > cap {
-                return false;
-            }
-        }
         let names = self.names;
-        let color_format = if self.requested.alpha {
-            GL_RGBA8
-        } else {
-            GL_RGB8
+        let color_format = self.color_format;
+        let depth_stencil = match (attempt.depth, attempt.stencil) {
+            (true, true) => Some((GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL_ATTACHMENT)),
+            (true, false) => Some((GL_DEPTH_COMPONENT24, GL_DEPTH_ATTACHMENT)),
+            (false, true) => Some((GL_STENCIL_INDEX8, GL_STENCIL_ATTACHMENT)),
+            (false, false) => None,
         };
+        let pixels =
+            u64::from(attempt.width.unsigned_abs()) * u64::from(attempt.height.unsigned_abs());
+        let samples = u64::from(attempt.samples.max(1).unsigned_abs());
+        let resolve = if attempt.samples > 0 {
+            bytes_per_pixel(color_format)
+        } else {
+            0
+        };
+        let per_pixel = samples
+            * (bytes_per_pixel(color_format)
+                + depth_stencil.map_or(0, |(format, _)| bytes_per_pixel(format)))
+            + resolve;
+        if pixels.saturating_mul(per_pixel) > self.limits.byte_cap {
+            return false;
+        }
         let storage = |renderbuffer: u32, samples: i32, format: u32| {
             current.bind_renderbuffer(GL_RENDERBUFFER, renderbuffer);
             if samples == 0 {
@@ -555,12 +609,6 @@ impl DrawingBuffer {
             GL_RENDERBUFFER,
             names.color,
         );
-        let depth_stencil = match (attempt.depth, attempt.stencil) {
-            (true, true) => Some((GL_DEPTH24_STENCIL8, GL_DEPTH_STENCIL_ATTACHMENT)),
-            (true, false) => Some((GL_DEPTH_COMPONENT24, GL_DEPTH_ATTACHMENT)),
-            (false, true) => Some((GL_STENCIL_INDEX8, GL_STENCIL_ATTACHMENT)),
-            (false, false) => None,
-        };
         for attachment in [GL_DEPTH_ATTACHMENT, GL_STENCIL_ATTACHMENT] {
             current.framebuffer_renderbuffer(GL_DRAW_FRAMEBUFFER, attachment, GL_RENDERBUFFER, 0);
         }
@@ -858,7 +906,7 @@ mod tests {
             for webgl2 in [false, true] {
                 // 8×8: 4 samples need 2048 bytes, single-sampled 512.
                 let limits = Limits {
-                    byte_cap: Some(1000),
+                    byte_cap: 1000,
                     ..limits(display, webgl2)
                 };
                 let buffer = DrawingBuffer::with_limits(
@@ -878,7 +926,7 @@ mod tests {
     fn cap_on_single_sampling_halves_the_size() {
         with_display(|display| {
             let limits = Limits {
-                byte_cap: Some(300),
+                byte_cap: 300,
                 ..limits(display, true)
             };
             let buffer =
@@ -887,6 +935,67 @@ mod tests {
             assert_eq!((buffer.width(), buffer.height()), (4, 4));
             assert!(!buffer.attributes().antialias);
             assert!(buffer.attributes().depth);
+        });
+    }
+
+    #[test]
+    fn storage_sets_the_format_and_resize_keeps_it() {
+        with_display(|display| {
+            let mut buffer =
+                DrawingBuffer::new(display, &request(true, Attributes::DEFAULT)).unwrap();
+            assert_eq!(buffer.color_format(), GL_RGBA8);
+            buffer
+                .context()
+                .make_current()
+                .unwrap()
+                .request_extension(c"GL_EXT_color_buffer_float");
+            let mut errors = ErrorState::default();
+            assert!(buffer.storage(GL_RGBA16F, 8, 4, &mut errors));
+            assert_eq!(
+                (buffer.color_format(), buffer.width(), buffer.height()),
+                (GL_RGBA16F, 8, 4)
+            );
+            assert!(buffer.resize(2.0, 2.0, &mut errors));
+            assert_eq!(
+                (buffer.color_format(), buffer.width(), buffer.height()),
+                (GL_RGBA16F, 2, 2)
+            );
+        });
+    }
+
+    #[test]
+    fn resize_to_the_earlier_size_after_storage_reallocates() {
+        with_display(|display| {
+            let mut buffer =
+                DrawingBuffer::new(display, &request(true, Attributes::DEFAULT)).unwrap();
+            let mut errors = ErrorState::default();
+            assert!(buffer.storage(GL_RGBA8, 32, 32, &mut errors));
+            assert!(buffer.resize(8.0, 8.0, &mut errors));
+            assert_eq!((buffer.width(), buffer.height()), (8, 8));
+        });
+    }
+
+    #[test]
+    fn budget_counts_the_color_format() {
+        with_display(|display| {
+            // 8×8 with 4 samples and depth: 2304 bytes in RGBA8, 3584 in
+            // RGBA16F; single-sampled RGBA16F takes 768.
+            let limits = Limits {
+                byte_cap: 3000,
+                ..limits(display, true)
+            };
+            let mut buffer =
+                DrawingBuffer::with_limits(display, &request(true, Attributes::DEFAULT), limits)
+                    .unwrap();
+            assert!(buffer.attributes().antialias);
+            buffer
+                .context()
+                .make_current()
+                .unwrap()
+                .request_extension(c"GL_EXT_color_buffer_float");
+            assert!(buffer.storage(GL_RGBA16F, 8, 8, &mut ErrorState::default()));
+            assert_eq!((buffer.width(), buffer.height()), (8, 8));
+            assert!(!buffer.attributes().antialias);
         });
     }
 

@@ -4,3 +4,5 @@ import { createContext, encodePNG } from '../../../dist/index.js';
 
 const gl = createContext({ width: 1, height: 1 });
 export const png: Promise<Uint8Array> = encodePNG(gl);
+gl.drawingBufferColorSpace = 'display-p3';
+gl.drawingBufferStorage(0x8058, 1, 1);

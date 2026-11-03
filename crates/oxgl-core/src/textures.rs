@@ -13,6 +13,7 @@ use oxgl_sys::{
 };
 
 use crate::codec::{self, Codec, HALF_FLOAT_OES, Unpack};
+use crate::color::{self, ColorSpace};
 use crate::context::{Context, Object, ObjectKey, current};
 use crate::drawing_buffer::integers;
 use crate::parameters::Parameter;
@@ -39,18 +40,25 @@ pub enum TexSource<'a> {
     UnpackBuffer(i64),
     /// RGBA8 pixels of a `TexImageSource`, top row first; RGBA16 from a
     /// `Uint16Array` (a decoded 16-bit image).
-    Rgba8 {
-        /// `width × height × 4` samples.
-        source: &'a dyn ByteSource,
-        /// Source width.
-        width: usize,
-        /// Source height.
-        height: usize,
-        /// An `ImageBitmap`'s pixels, which `UNPACK_FLIP_Y_WEBGL` and
-        /// `UNPACK_PREMULTIPLY_ALPHA_WEBGL` do not change (WebGL 1.0
-        /// §5.14.8).
-        as_is: bool,
-    },
+    Rgba8(SourceImage<'a>),
+}
+
+/// The pixels of a `TexImageSource` upload.
+#[derive(Clone, Copy)]
+pub struct SourceImage<'a> {
+    /// `width × height × 4` samples.
+    pub source: &'a dyn ByteSource,
+    /// Source width.
+    pub width: usize,
+    /// Source height.
+    pub height: usize,
+    /// The source's color space and `unpackColorSpace` (WebGL 1.0 §5.14.8);
+    /// converted between when they differ, unless
+    /// `UNPACK_COLORSPACE_CONVERSION_WEBGL` is `NONE`.
+    pub color_spaces: (ColorSpace, ColorSpace),
+    /// An `ImageBitmap`'s pixels, which `UNPACK_FLIP_Y_WEBGL` and
+    /// `UNPACK_PREMULTIPLY_ALPHA_WEBGL` do not change (WebGL 1.0 §5.14.8).
+    pub as_is: bool,
 }
 
 impl std::fmt::Debug for TexSource<'_> {
@@ -59,7 +67,7 @@ impl std::fmt::Debug for TexSource<'_> {
             Self::None => f.write_str("None"),
             Self::View { kind, offset, .. } => write!(f, "View({kind:?} @ {offset})"),
             Self::UnpackBuffer(offset) => write!(f, "UnpackBuffer({offset})"),
-            Self::Rgba8 { width, height, .. } => write!(f, "Rgba8({width}×{height})"),
+            Self::Rgba8(image) => write!(f, "Rgba8({}×{})", image.width, image.height),
         }
     }
 }
@@ -212,13 +220,26 @@ fn repacked_view(
 /// slices) of the RGBA8 source, encoded for the format and type, with the
 /// WebGL 2 sub-rectangle unpack parameters applied (WebGL 2.0 §5.35).
 fn rgba8_pixels(
-    source: &dyn ByteSource,
-    (width, height): (usize, usize),
+    image: &SourceImage<'_>,
     args: TexImage,
     is_3d: bool,
     saved: UnpackParams,
-    unpack: crate::state::UnpackState,
+    mut unpack: crate::state::UnpackState,
 ) -> Result<Vec<u8>, Option<u32>> {
+    let SourceImage {
+        source,
+        width,
+        height,
+        color_spaces: (from, to),
+        as_is,
+    } = *image;
+    if as_is {
+        unpack.flip_y = false;
+        unpack.premultiply_alpha = false;
+    }
+    let convert = (from != to
+        && unpack.colorspace_conversion == crate::state::BROWSER_DEFAULT_WEBGL)
+        .then_some((from, to));
     let codec = Codec::new(args.format, args.ty).ok_or(None)?;
     // WebGL 2's table of formats from DOM sources has integer formats only
     // with UNSIGNED_BYTE (WebGL 2.0 §3.7.6): no RGB10_A2UI.
@@ -248,6 +269,22 @@ fn rgba8_pixels(
     let mut data = Vec::new();
     let mut fits = true;
     source.with_bytes(0..source.byte_len(), &mut |bytes| {
+        // Color space first, before flip, premultiply and the format
+        // (WebGL 1.0 §5.14.8), on a copy: the source is the caller's.
+        let converted;
+        let bytes = match convert {
+            Some((from, to)) => {
+                let mut copy = bytes.to_vec();
+                if wide {
+                    color::convert_rgba16(&mut copy, from, to);
+                } else {
+                    color::convert_rgba8(&mut copy, from, to);
+                }
+                converted = copy;
+                &converted[..]
+            }
+            None => bytes,
+        };
         for slice in 0..d {
             let y = skip_y + (skip_images + slice) * image_height;
             let rect = (skip_x, y, w, h);
@@ -526,19 +563,9 @@ impl Context {
                     Err(Some(code)) => self.errors.synthesize(code),
                 }
             }
-            TexSource::Rgba8 {
-                source,
-                width,
-                height,
-                as_is,
-            } => {
+            TexSource::Rgba8(image) => {
                 let saved = UnpackParams::read(&current, webgl2);
-                let mut unpack = self.unpack;
-                if as_is {
-                    unpack.flip_y = false;
-                    unpack.premultiply_alpha = false;
-                }
-                match rgba8_pixels(source, (width, height), args, is_3d, saved, unpack) {
+                match rgba8_pixels(&image, args, is_3d, saved, self.unpack) {
                     Ok(data) => with_neutral_unpack(&current, saved, webgl2, || {
                         current.tex_upload(call, args, UploadData::Client(Some(&data)));
                     }),
@@ -823,15 +850,45 @@ impl Context {
         }
         current.bind_framebuffer(GL_READ_FRAMEBUFFER, self.buffer.framebuffer());
         let resolved = self.buffer.begin_read(&current);
+        // A half-float buffer can only be read as floats (OpenGL ES 3.0
+        // §4.3.2); clamp and round them to 8 bits, unpremultiplied first so
+        // low alphas keep their precision. Other formats read as bytes: an
+        // SRGB8_ALPHA8 buffer's stored, encoded values.
+        let float = self.buffer.color_format() == GL_RGBA16F;
+        let attributes = self.buffer.attributes();
+        let unpremultiply = attributes.premultiplied_alpha && attributes.alpha;
         let args = oxgl_sys::ReadPixels {
             x: 0,
             y: 0,
             width,
             height,
             format: GL_RGBA,
-            ty: GL_UNSIGNED_BYTE,
+            ty: if float { GL_FLOAT } else { GL_UNSIGNED_BYTE },
         };
-        current.read_pixels(args, &mut pixels);
+        // In bands of rows, so neither the float staging nor the GL's own
+        // staging for a read holds the whole buffer.
+        let row = w * 4;
+        let per_row = if float { row * 4 } else { row };
+        let band = (READ_BAND_BYTES / per_row.max(1)).max(1);
+        let mut floats = vec![0u8; if float { band.min(h) * row * 4 } else { 0 }];
+        let mut y = 0;
+        for rows in pixels.chunks_mut((band * row).max(1)) {
+            // At most `height` rows, an i32.
+            let n = i32::try_from(rows.len() / row.max(1)).unwrap_or(0);
+            let args = oxgl_sys::ReadPixels {
+                y,
+                height: n,
+                ..args
+            };
+            if float {
+                let staged = floats.get_mut(..rows.len() * 4).unwrap_or_default();
+                current.read_pixels(args, staged);
+                floats_to_rgba8(staged, rows, unpremultiply);
+            } else {
+                current.read_pixels(args, rows);
+            }
+            y += n;
+        }
         if resolved {
             self.buffer.end_read(&current);
         }
@@ -845,28 +902,68 @@ impl Context {
         crate::drawing_buffer::discard_errors(&current);
         // A premultiplied drawing buffer becomes unpremultiplied RGBA8, as a
         // canvas's pixels are read for upload (WebGL 1.0 §5.14.8).
-        let attributes = self.buffer.attributes();
-        if attributes.premultiplied_alpha && attributes.alpha {
-            for pixel in pixels.chunks_mut(4) {
-                if let [r, g, b, a] = pixel
-                    && *a != 0
-                    && *a != 255
-                {
-                    let scale = 255.0 / f32::from(*a);
-                    #[allow(
-                        clippy::cast_possible_truncation,
-                        clippy::cast_sign_loss,
-                        reason = "clamped to 0..=255"
-                    )]
-                    let un = |c: u8| (f32::from(c) * scale).round().min(255.0) as u8;
-                    (*r, *g, *b) = (un(*r), un(*g), un(*b));
-                }
-            }
+        if unpremultiply && !float {
+            unpremultiply_rgba8(&mut pixels);
         }
-        // GL rows are bottom first; a canvas is top first.
-        let row = w * 4;
-        let flipped: Vec<u8> = pixels.chunks(row.max(1)).rev().flatten().copied().collect();
-        Some((flipped, w, h))
+        // GL rows are bottom first; a canvas is top first. Swapped in place.
+        let mut rows: Vec<&mut [u8]> = pixels.chunks_mut((w * 4).max(1)).collect();
+        let (top, bottom) = rows.split_at_mut(h / 2);
+        for (upper, lower) in top.iter_mut().zip(bottom.iter_mut().rev()) {
+            upper.swap_with_slice(lower);
+        }
+        Some((pixels, w, h))
+    }
+}
+
+/// Bytes a drawing-buffer readback reads at a time, as floats for a
+/// half-float buffer and as bytes otherwise.
+const READ_BAND_BYTES: usize = 16 << 20;
+
+/// Unpremultiplies RGBA8 `pixels` in place. An sRGB buffer's encoded values
+/// are divided as they are, as Khronos `drawingbuffer-storage-test.html`
+/// ("Drawing transparent `SRGB8_ALPHA8` to canvas") expects.
+fn unpremultiply_rgba8(pixels: &mut [u8]) {
+    for [r, g, b, a] in pixels.as_chunks_mut::<4>().0 {
+        if *a == 0 || *a == 255 {
+            continue;
+        }
+        let scale = 255.0 / f32::from(*a);
+        #[allow(
+            clippy::cast_possible_truncation,
+            clippy::cast_sign_loss,
+            reason = "clamped to 0..=255"
+        )]
+        let un = |c: u8| (f32::from(c) * scale).round().min(255.0) as u8;
+        (*r, *g, *b) = (un(*r), un(*g), un(*b));
+    }
+}
+
+/// RGBA `FLOAT` texels, as native-endian bytes, into RGBA8 `pixels`:
+/// clamped and rounded, and unpremultiplied first when `unpremultiply`.
+fn floats_to_rgba8(floats: &[u8], pixels: &mut [u8], unpremultiply: bool) {
+    #[allow(
+        clippy::cast_possible_truncation,
+        clippy::cast_sign_loss,
+        reason = "clamped to 0..=255"
+    )]
+    let byte = |value: f32| (value.clamp(0.0, 1.0) * 255.0).round() as u8;
+    let texels = floats.as_chunks::<16>().0;
+    for (pixel, texel) in pixels.as_chunks_mut::<4>().0.iter_mut().zip(texels) {
+        let &[red, green, blue, alpha] = texel.as_chunks::<4>().0 else {
+            continue;
+        };
+        let [red, green, blue, alpha] = [red, green, blue, alpha].map(f32::from_ne_bytes);
+        let scale = if unpremultiply && alpha > 0.0 && alpha < 1.0 {
+            1.0 / alpha
+        } else {
+            1.0
+        };
+        *pixel = [
+            byte(red * scale),
+            byte(green * scale),
+            byte(blue * scale),
+            byte(alpha),
+        ];
     }
 }
 

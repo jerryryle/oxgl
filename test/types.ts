@@ -4,6 +4,7 @@ import {
   createContext,
   encodePNG,
   type ContextOptions,
+  type PredefinedColorSpace,
   HeadlessCanvas,
   type WebGLContextAttributes,
   WebGL2RenderingContext,
@@ -45,6 +46,13 @@ expectType<Equal<typeof gl1Explicit, WebGLRenderingContext>>();
 expectType<Equal<typeof gl2, WebGL2RenderingContext>>();
 expectType<Equal<typeof either, WebGLRenderingContext | WebGL2RenderingContext>>();
 expectType<Equal<ReturnType<typeof encodePNG>, Promise<Uint8Array>>>();
+expectType<Equal<PredefinedColorSpace, 'srgb' | 'display-p3'>>();
+expectType<Equal<typeof gl2.drawingBufferColorSpace, PredefinedColorSpace>>();
+expectType<Equal<typeof gl1.unpackColorSpace, PredefinedColorSpace>>();
+expectType<Equal<typeof gl1.drawingBufferFormat, number>>();
+gl2.drawingBufferStorage(gl2.RGBA8, 16, 16);
+gl1.drawingBufferColorSpace = 'display-p3';
+gl1.unpackColorSpace = 'srgb';
 
 expectType<Equal<typeof gl1.COLOR_BUFFER_BIT, 0x00004000>>();
 expectType<Equal<typeof WebGL2RenderingContext.CONTEXT_LOST_WEBGL, 0x9242>>();
@@ -78,6 +86,10 @@ gl1.destroy();
 
 // @ts-expect-error -- drawing buffer attributes are read-only
 gl1.drawingBufferWidth = 5;
+// @ts-expect-error -- drawingBufferFormat is read-only
+gl1.drawingBufferFormat = 0x8058;
+// @ts-expect-error -- not a predefined color space
+gl1.unpackColorSpace = 'rec2020';
 // @ts-expect-error -- unknown backend
 createContext({ width: 1, height: 1, backend: 'metal' });
 // @ts-expect-error -- height is required

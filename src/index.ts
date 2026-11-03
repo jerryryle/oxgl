@@ -11,6 +11,7 @@ export {
   type ContextOptions,
   type WebGLContextAttributes,
   type WebGLPowerPreference,
+  type PredefinedColorSpace,
 } from './context.js';
 
 export {

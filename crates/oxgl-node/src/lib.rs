@@ -529,6 +529,61 @@ pub struct Size {
     pub height: i32,
 }
 
+/// The drawing buffer's size and color format after `drawingBufferStorage`
+/// or a reallocation.
+#[napi(object)]
+pub struct Storage {
+    /// Actual width.
+    pub width: i32,
+    /// Actual height.
+    pub height: i32,
+    /// `drawingBufferFormat`.
+    pub format: u32,
+}
+
+/// The current size and format; `None` when lost or destroyed.
+fn storage_of(context: &oxgl_core::Context) -> Option<Storage> {
+    (!context.is_lost()).then(|| {
+        let buffer = context.drawing_buffer();
+        Storage {
+            width: buffer.width(),
+            height: buffer.height(),
+            format: buffer.color_format(),
+        }
+    })
+}
+
+/// `drawingBufferStorage` (WebGL 1.0 §2.2); returns the drawing buffer's
+/// resulting size and format, unchanged after an error, or `null` when lost.
+#[napi]
+pub fn drawing_buffer_storage(
+    env: Env,
+    index: u32,
+    version: u32,
+    format: u32,
+    width: u32,
+    height: u32,
+) -> napi::Result<Option<Storage>> {
+    let mut result = None;
+    with_context(env, index, version, |context| {
+        context.drawing_buffer_storage(format, width, height);
+        result = storage_of(context);
+    })?;
+    Ok(result)
+}
+
+/// Reallocates and clears the drawing buffer at its size and format, as a
+/// change of `drawingBufferColorSpace` does; `null` when lost.
+#[napi]
+pub fn reallocate(env: Env, index: u32, version: u32) -> napi::Result<Option<Storage>> {
+    let mut result = None;
+    with_context(env, index, version, |context| {
+        context.reallocate();
+        result = storage_of(context);
+    })?;
+    Ok(result)
+}
+
 /// Non-standard `resize`: reallocates the drawing buffer and returns its
 /// actual size (`0×0` when the context is lost or destroyed).
 #[napi]
