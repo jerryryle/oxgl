@@ -105,15 +105,13 @@ test('the page: rows, columns, marks, counts and missing reports', () => {
   assert.doesNotMatch(html, /<!-- results:/);
 });
 
-test('a page republished from earlier results names both commits', () => {
+test('a page built for a release names the version and links its GitHub Release', () => {
   const reports = allPlatforms('webgl1', ['a.html']);
-  const link = (sha) => `<a href="https://github.com/oxgl-js/oxgl/commit/${sha}"><code>${sha.slice(0, 7)}</code></a>`;
-  const republished = buildPage(reports, { commit: 'b31fde2aaaa', pageCommit: 'c0ffee1bbbb' });
-  assert.ok(republished.includes(`Results from oxgl commit ${link('b31fde2aaaa')}`));
-  assert.ok(republished.includes(` · page built at ${link('c0ffee1bbbb')}.</p>`));
-  // The same commit, or none, isn't named twice.
-  assert.doesNotMatch(buildPage(reports, { commit: 'b31fde2aaaa', pageCommit: 'b31fde2aaaa' }), /page built at/);
-  assert.doesNotMatch(buildPage(reports, { commit: 'b31fde2aaaa' }), /page built at/);
+  const link = '<a href="https://github.com/oxgl-js/oxgl/commit/b31fde2aaaa"><code>b31fde2</code></a>';
+  const released = buildPage(reports, { commit: 'b31fde2aaaa', version: '0.2.3' });
+  assert.ok(released.includes(`<p class="meta">oxgl <a href="https://github.com/oxgl-js/oxgl/releases/tag/v0.2.3">0.2.3</a> · Results from oxgl commit ${link}`));
+  // A preview, from a run that releases nothing, names no version.
+  assert.doesNotMatch(buildPage(reports, { commit: 'b31fde2aaaa' }), /releases\/tag/);
 });
 
 test('a suite with no report at all says so, without a table', () => {
@@ -152,9 +150,9 @@ test('the command reads reports from artifact directories and writes the page', 
     writeFileSync(join(dir, 'artifacts', 'unrelated.json'), '{}');
     assert.equal(readReports(join(dir, 'artifacts')).length, 6);
     const out = join(dir, 'site', 'index.html');
-    main(['--commit', 'abc1234', '--page-commit', 'def5678', join(dir, 'artifacts'), out]);
+    main(['--commit', 'abc1234', '--version', '0.2.3', join(dir, 'artifacts'), out]);
     assert.match(readFileSync(out, 'utf8'), /<h2>WebGL 1 conformance<\/h2>/);
-    assert.match(readFileSync(out, 'utf8'), /page built at <a href="[^"]*def5678"><code>def5678<\/code><\/a>/);
+    assert.match(readFileSync(out, 'utf8'), /oxgl <a href="[^"]*\/releases\/tag\/v0\.2\.3">0\.2\.3<\/a>/);
     assert.throws(() => main([join(dir, 'artifacts'), out]), /usage: .*--commit/);
     writeFileSync(join(dir, 'artifacts', 'linux-x64-webgl1', 'conformance-results.json'), '{"platform": "linux-x64", "suit');
     assert.throws(() => readReports(join(dir, 'artifacts')), /linux-x64-webgl1[/\\]conformance-results\.json is not a readable report/);

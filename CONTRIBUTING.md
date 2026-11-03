@@ -6,26 +6,43 @@ prerequisites and everyday commands.
 
 ## Continuous integration
 
-`.github/workflows/ci.yml` runs on every pull request to `main`, every push
-to `main`, and when started by hand (`workflow_dispatch`, which the ANGLE bump
-uses; see Releases below). A newer run for the same pull request or branch
-cancels the earlier one; runs on `main` are never cancelled.
+Changes reach `main` through the merge queue. `.github/workflows/ci.yml`
+chooses its jobs by event, never by which files changed:
+
+- **Pull request:** the quick checks (`workflow-lint`, `repo-checks`, `build`,
+  `check`, `node-test`) on every platform. With the `full-ci` label, the
+  pull request's runs from its next push on run the full checks too. To run
+  them on its current commit, start `ci` by hand on its branch (Actions → ci →
+  Run workflow). Adding or removing a label starts no run.
+- **Merge group** (the queue, after "Merge when ready"): the full checks, the
+  quick ones plus `asan`, `conformance`, `threejs` and `results`, on the
+  commit that will land. Documentation changes run them too.
+- **Push to `main`:** builds and tests nothing. `release` publishes what the
+  merge group run for that commit built, and `caches` warms caches (see
+  below).
+- **Manual run** (`workflow_dispatch`): the full checks on any branch; on
+  `main` it also releases, which is how a change merged past the queue
+  releases.
+
+A newer run for the same pull request, or a manual run on the same branch
+other than `main`, cancels the earlier one; merge group runs and runs on
+`main` are never cancelled.
 
 | Job | Runs on | Checks |
 |---|---|---|
 | `workflow-lint` | Linux | actionlint, and zizmor with `.github/zizmor.yml` (every action pinned to a commit SHA, minimal permissions, no template injection) |
-| `build` | Linux x64 and arm64, macOS arm64, Windows x64 and arm64 | native + TS build, then the packed packages installed into an empty project and rendered with (`scripts/pack.mjs`, `scripts/smoke-packed.mjs`) and, on Linux, that no library in the package needs glibc newer than 2.34 (`scripts/check-glibc.sh`); the platform tarball is uploaded as `packages-<runner>`, and Linux arm64 also uploads the `@oxgl-js/oxgl` tarball as `package-main`, each kept 7 days in a run that releases and 3 days otherwise |
+| `build` | Linux x64 and arm64, macOS arm64, Windows x64 and arm64 | native + TS build, then the packed packages installed into an empty project and rendered with (`scripts/pack.mjs`, `scripts/smoke-packed.mjs`) and, on Linux, that no library in the package needs glibc newer than 2.34 (`scripts/check-glibc.sh`); the platform tarball is uploaded as `packages-<runner>`, and Linux arm64 also uploads the `@oxgl-js/oxgl` tarball as `package-main`, each kept 7 days in a run whose version isn't on npm and 3 days otherwise |
 | `check` | Linux x64 and arm64, macOS arm64, Windows x64 and arm64 | rustfmt, clippy (pedantic, warnings as errors), Rust tests, ESLint and tsc |
-| `repo-checks` | Linux | the ANGLE pin check and the bump script's tests, ESLint and the tests of the results page builder, dependency licenses and `THIRD_PARTY_NOTICES` |
+| `repo-checks` | Linux | the ANGLE pin check and the bump script's tests, dependency licenses and `THIRD_PARTY_NOTICES` |
 | `node-test` | Linux x64 and arm64, macOS arm64, Windows x64 and arm64 | Node tests with `OXGL_BACKEND=software` on Node 24, and on Linux arm64 also on Node 22.22.2 (the `engines` floor) and Node 26 |
-| `asan` | Linux arm64 and x64 | Rust tests under AddressSanitizer and LeakSanitizer |
-| `conformance` | Linux x64 and arm64, macOS arm64, Windows x64 and arm64 | both Khronos conformance suites with `OXGL_BACKEND=software`, judged against the `conformance/expectations.txt` entries that apply on each platform; each report is uploaded as `conformance-results-<runner>-<suite>` (see Conformance tests below) |
-| `threejs` | Linux x64 and arm64, macOS arm64, Windows x64 and arm64 | three.js's own WebGL examples with `OXGL_BACKEND=software`, each frame judged against its reference screenshot and the `threejs/expectations.txt` entries that apply on each platform; the report and failing examples' images are uploaded as `threejs-results-<runner>` (see three.js examples below) |
-| `ci` | Linux | succeeds only when every job above succeeded |
-| `release` | Linux | after `ci`, on `main` only, when npm doesn't have `package.json`'s version yet: publishes the run's tarballs (see Releases below) |
-| `results` | Linux | after `conformance` and `threejs`, even when they fail: builds the results page from their reports (or, for a page-only change, from the latest `main` run's) and uploads it as `results-page`; not part of `ci` (see Results page below) |
-| `pages` | Linux | on `main` only: publishes the page `results` built to GitHub Pages |
-| `merge-bump` | Linux | after `ci`, on a manual run of the `angle-bump` branch: merges the bump pull request if it is exactly the bot's change, and starts the run on `main` |
+| `asan` | Linux arm64 and x64 | full checks: Rust tests under AddressSanitizer and LeakSanitizer |
+| `conformance` | Linux x64 and arm64, macOS arm64, Windows x64 and arm64 | full checks: both Khronos conformance suites with `OXGL_BACKEND=software`, judged against the `conformance/expectations.txt` entries that apply on each platform; each report is uploaded as `conformance-results-<runner>-<suite>` (see Conformance tests below) |
+| `threejs` | Linux x64 and arm64, macOS arm64, Windows x64 and arm64 | full checks: three.js's own WebGL examples with `OXGL_BACKEND=software`, each frame judged against its reference screenshot and the `threejs/expectations.txt` entries that apply on each platform; the report and failing examples' images are uploaded as `threejs-results-<runner>` (see three.js examples below) |
+| `ci` | Linux | succeeds only when every job above succeeded; on the quick checks, `asan`, `conformance` and `threejs` may be skipped |
+| `results` | Linux | full checks, after `conformance` and `threejs`, even when they fail: builds a preview of the results page and uploads it as `results-page`; not part of `ci` |
+| `release` | Linux | on `main`, when npm doesn't have `package.json`'s version yet: publishes the tested run's tarballs and builds the results page (see Releases below) |
+| `pages` | Linux | after a release: publishes the page `release` built to GitHub Pages |
+| `caches` | Linux x64 and arm64, macOS arm64, Windows x64 and arm64 | on a push to `main` that changes a cache key's input, and on a manual run on `main`: saves the download caches (see below) |
 
 `build` builds and packs oxgl once per platform. `node-test`, `conformance`
 and `threejs` don't build: each downloads the run's `@oxgl-js/oxgl`
@@ -43,23 +60,21 @@ Linux arm64 only: N-API makes the addon independent of the Node version. The
 README lists the conformance pages and three.js examples whose results differ
 by platform, and why.
 
-Branch protection on `main` should require the single `ci` check (Settings →
-Branches → branch protection rule for `main` → Require status checks → `ci`).
-Jobs can then be added or renamed without changing that setting.
+The `main` ruleset requires the single `ci` check and the merge queue (squash,
+default grouping, a 2-hour status-check timeout, branches need not be up to
+date before queueing). Jobs can be added or renamed without changing it. The
+queue gives each pull request its own run, on top of the ones queued ahead of
+it.
 
-`workflow-lint` and `repo-checks` run on every change. The jobs that build or
-test oxgl (`build`, `check`, `node-test`, `asan`, `conformance`, `threejs`)
-are skipped when every changed file is on the skip list in `ci.yml`'s `changes`
-job: Markdown (except `scripts/platform-README.md`, which `pack.mjs` reads),
-`openspec/`, `.claude/`, `assets/`, `LICENSE`, `.editorconfig`, and Dependabot's
-and zizmor's config. `ci` passes those skips and fails any other. Add a path to
-the list only if no build, lint or test step reads it; anything not listed,
-including a new directory, runs every job.
-
-A change to only the results page's own files (`scripts/results-page.html`,
-`scripts/results-page.mjs`, `test/results-page.test.mjs`), plus anything on the
-skip list, skips the same jobs: `repo-checks` lints and tests the builder, and
-`results` rebuilds the page from the latest `main` run's reports.
+Caches a merge group or pull request run saves are never restored by another
+run, so only runs on `main` save the ones every run restores. A push to `main`
+that changes `angle/bundles.toml`, `conformance/suite.json`,
+`threejs/pin.json` or `package-lock.json` runs `caches`, which saves the
+bundle (with the AddressSanitizer symbols on Linux), suite, three.js and npm
+caches on each platform. A push that changes `Cargo.lock`,
+`rust-toolchain.toml` or `ci.yml` (which sets `ASAN_NIGHTLY`) also runs
+`build`, `check` and `asan` after it, only to save their Rust build caches.
+After the caches are evicted, a manual run on `main` saves them all.
 
 ANGLE is never built here: its recipe and bundle releases live in
 [oxgl-js/oxgl-angle](https://github.com/oxgl-js/oxgl-angle) (see
@@ -77,68 +92,74 @@ Dependabot bumps only the SHA-pinned actions, so bump these by hand.
 
 A release is a version on `main` that npm doesn't have yet. To release your own
 changes, bump `version` in `package.json` and `package-lock.json` in a pull
-request (`npm version patch --no-git-tag-version`, or `minor`/`major`). After
-it merges and `ci` passes on `main`, the `release` job:
+request (`npm version patch --no-git-tag-version`, or `minor`/`major`).
+Nothing checks that you did: a change landed without a bump waits for the next
+release, and `main` ahead of the latest tag shows it. Several changes may land
+before one release. When a version lands through the queue, the `release` job
+of the push run on `main`:
 
-1. Publishes the five platform packages (`@oxgl-js/<platform>`), then `@oxgl-js/oxgl`,
-   from the tarballs that run's `check` jobs packed and smoke-tested, with npm
-   trusted publishing and provenance. No npm token is stored anywhere.
-2. Creates the tag `v<version>` and a GitHub Release with generated notes.
+1. Finds the passing merge group run for that commit and downloads its
+   tarballs, the ones its `build` jobs packed and smoke-tested and its test
+   jobs ran.
+2. Publishes the five platform packages (`@oxgl-js/<platform>`), then
+   `@oxgl-js/oxgl`, with npm trusted publishing and provenance. No npm token
+   is stored anywhere.
+3. Creates the tag `v<version>` and a GitHub Release with generated notes, and
+   builds the results page from that run's reports, which `pages` publishes.
 
 Pushes that leave the version alone publish nothing. If a release fails
 partway, rerun its `release` job: it skips every package npm already has and
 creates the tag and GitHub Release if they're missing. The tarballs are kept for
-7 days; after that, rerun the whole workflow on that commit.
+7 days; after that, start `ci` by hand on `main`. A change merged past the
+queue has no merge group run, so its push fails the release with a message
+saying so; start `ci` by hand on `main` (Actions → ci → Run workflow), which
+builds, tests and releases it.
 
-New ANGLE releases arrive by themselves. `angle-bump.yml` runs daily at
-10:17 UTC, three hours after oxgl-angle's own bump, and when oxgl-angle has a
-newer release it opens a pull request that pins it and bumps the patch version.
-CI runs on it, `merge-bump` merges it when CI passes, and the run on `main`
-releases it. A bump whose CI fails (for example, a conformance page's result
-changed), or that someone pushed a fix to, stays open for a person to finish and
-merge. To skip an oxgl-angle release, label its pull request `skip-bump` and
-close it. `angle/README.md` describes the checks on where a release came from.
+New ANGLE releases arrive by themselves. When oxgl-angle releases a bundle
+version, its release job starts `angle-bump.yml` here, which opens a pull
+request that pins it and bumps the patch version, as the `oxgl-js` GitHub App
+so that CI runs, with auto-merge on. Once its quick checks pass it enters the
+queue, and when the queue lands it, the push releases it. The bump also runs
+on every push to `main` and by hand: it rebuilds an open bump only when it
+went stale (a newer release, a version no longer greater than `main`'s, or a
+conflict), so a queued bump stays in the queue. A bump whose queue run fails
+(for example, a conformance page's result changed) leaves the queue and stays
+open: push the fix to `angle-bump`, and it lands through the queue once its
+checks pass. To skip an oxgl-angle release, label its pull request `skip-bump`
+and close it. `angle/README.md` describes the checks on where a release came
+from.
 
-### One-time setup
+### Setup
 
-These are done once, by the maintainer, in this order:
+Done once, by the maintainer:
 
-1. In this repository's Settings → Actions → General, turn on "Allow GitHub
-   Actions to create and approve pull requests": the bump opens its pull
-   request with the default token.
-2. Merge the release change with `version` at `0.1.1`. (The first attempt
-   published the five platform packages at `0.1.0` before npm refused the
-   unscoped `oxgl`; those stay unused.) The run on `main` packs and
-   smoke-tests, and its `release` job fails, because npm has no trusted
-   publisher yet. Until `@oxgl-js/oxgl` is on npm the daily bump does nothing.
-3. Download that run's `package-main` and `packages-*` artifacts and, signed
-   in to npm as a member of the `oxgl-js` org, run
-   `npm publish <tarball> --access public` for each platform tarball,
-   `oxgl-js-<platform>-0.1.1.tgz`, then for the main one,
-   `oxgl-js-oxgl-0.1.1.tgz`. Pick them by name: `oxgl-js-*.tgz` matches the
-   main tarball too.
-4. On each of the six packages' Settings page on npmjs.com, add a trusted
-   publisher: GitHub Actions, owner `oxgl-js`, repository `oxgl`, workflow
-   `ci.yml`, environment `npm`. Then set "Require two-factor authentication and
-   disallow tokens".
-5. Rerun that run's `release` job. It finds the packages published and creates
-   `v0.1.1` and its GitHub Release.
-
-The `npm` GitHub environment, which only `main` may deploy to, already exists.
+- The `oxgl-js` GitHub App, installed on `oxgl` and `oxgl-angle` only, with
+  contents and pull requests read-and-write and nothing else. Its client ID
+  and private key are the organization secrets `OXGL_BOT_CLIENT_ID` and
+  `OXGL_BOT_PRIVATE_KEY`, limited to those two repositories. The bumps open
+  their pull requests with it, because pull requests the default token opens
+  start no CI and couldn't enter the queue. Releases and npm publishing don't
+  use it.
+- A `full-ci` label in both repositories.
+- The `main` ruleset with the merge queue (see Continuous integration).
+- On each of the six packages' Settings page on npmjs.com, a trusted
+  publisher: GitHub Actions, owner `oxgl-js`, repository `oxgl`, workflow
+  `ci.yml`, environment `npm`, with "Require two-factor authentication and
+  disallow tokens" set. The `npm` GitHub environment, which only `main` may
+  deploy to, holds no secrets.
 
 ## Results page
 
 The [results page](https://oxgl-js.github.io/oxgl/) is one table of every
 conformance page's and three.js example's result on each platform. Its fixed
 parts are in `scripts/results-page.html`; `scripts/results-page.mjs` fills in
-the rows from the runs' reports. The `results` job builds it on every run that
-runs the suites, and on `main` the `pages` job publishes it.
+the rows from the runs' reports. The published page belongs to the latest
+release: the `release` job builds it from the reports of the run whose
+packages it published, naming that version and commit, and `pages` publishes
+it. Nothing else deploys it, so a change to the page goes live with the next
+release. The `results` job builds a preview on every run of the full checks;
+label a pull request `full-ci` to get one.
 
-- **Page-only changes.** A change to only the page's own files skips the full
-  build and suites, and rebuilds the page from the latest `main` run's reports.
-  The page then names both that run's commit and its own. Reports last 90 days:
-  if no `main` run in that time has them, the page is left as it was, and the
-  job log says so.
 - **Building it locally** from any run's artifacts:
 
   ```sh
