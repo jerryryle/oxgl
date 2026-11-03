@@ -295,7 +295,9 @@ jobs:
   # addon independent of the Node version, so Linux alone covers the range.
   node-test:
     needs: [changes, build]
-    if: github.event_name != 'push'
+    # Explicit, since the default success() would also see the skipped
+    # caches job that build waits for.
+    if: ${{ !cancelled() && needs.build.result == 'success' && github.event_name != 'push' }}
     strategy:
       fail-fast: false
       matrix:
@@ -411,7 +413,7 @@ jobs:
   # its report whether it passes or fails.
   conformance:
     needs: [changes, build]
-    if: needs.changes.outputs.full == 'true'
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.changes.outputs.full == 'true' }}
     strategy:
       fail-fast: false
       matrix:
@@ -467,7 +469,7 @@ jobs:
   # and failing examples' images whether it passes or fails.
   threejs:
     needs: [changes, build]
-    if: needs.changes.outputs.full == 'true'
+    if: ${{ !cancelled() && needs.build.result == 'success' && needs.changes.outputs.full == 'true' }}
     strategy:
       fail-fast: false
       matrix:
