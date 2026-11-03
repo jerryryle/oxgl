@@ -17,7 +17,7 @@ import { parseArgs } from 'node:util';
 import { PLATFORMS } from '../conformance/expectations.mjs';
 
 export const TEMPLATE_PATH = fileURLToPath(new URL('results-page.html', import.meta.url));
-const REPO = 'https://github.com/jerryryle/oxgl';
+const REPO = 'https://github.com/oxgl-js/oxgl';
 /** Hover text is cut to this many characters. */
 const MAX_HOVER = 1000;
 

@@ -1,6 +1,6 @@
 # oxgl
 
-[![ci](https://github.com/jerryryle/oxgl/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/jerryryle/oxgl/actions/workflows/ci.yml)
+[![ci](https://github.com/oxgl-js/oxgl/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/oxgl-js/oxgl/actions/workflows/ci.yml)
 [![npm](https://img.shields.io/npm/v/@oxgl-js/oxgl)](https://www.npmjs.com/package/@oxgl-js/oxgl)
 [![license](https://img.shields.io/badge/license-BSD--3--Clause-blue)](LICENSE)
 
@@ -41,7 +41,7 @@ for any other platform; importing oxgl there throws an error with
 
 CI runs the Rust and Node tests, both Khronos conformance suites and three.js's
 examples on all five platforms, with the software backend; it does not yet test
-the GPU backends. The [results page](https://jerryryle.github.io/oxgl/) shows
+the GPU backends. The [results page](https://oxgl-js.github.io/oxgl/) shows
 every conformance page's and three.js example's result on each platform from
 the latest CI run on `main`, with the reason for each one that doesn't pass.
 The results are the same on every platform, apart from the x64 pages listed

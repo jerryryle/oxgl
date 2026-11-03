@@ -101,13 +101,13 @@ test('the page: rows, columns, marks, counts and missing reports', () => {
   assert.match(three, /No report from linux-x64, macos-arm64, windows-x64, windows-arm64/);
   assert.deepEqual(cells(row(three, 'video'))[1], { cls: 'SKIP', title: 'upstream: video hangs CI', label: 'SKIP' });
 
-  assert.match(html, /Results from oxgl commit <a href="https:\/\/github.com\/jerryryle\/oxgl\/commit\/0123456789abcdef"><code>0123456<\/code><\/a> · 2026-11-01 12:34 UTC · conformance suite <code>abcdef0<\/code> · three\.js <code>r182<\/code>\./);
+  assert.match(html, /Results from oxgl commit <a href="https:\/\/github.com\/oxgl-js\/oxgl\/commit\/0123456789abcdef"><code>0123456<\/code><\/a> · 2026-11-01 12:34 UTC · conformance suite <code>abcdef0<\/code> · three\.js <code>r182<\/code>\./);
   assert.doesNotMatch(html, /<!-- results:/);
 });
 
 test('a page republished from earlier results names both commits', () => {
   const reports = allPlatforms('webgl1', ['a.html']);
-  const link = (sha) => `<a href="https://github.com/jerryryle/oxgl/commit/${sha}"><code>${sha.slice(0, 7)}</code></a>`;
+  const link = (sha) => `<a href="https://github.com/oxgl-js/oxgl/commit/${sha}"><code>${sha.slice(0, 7)}</code></a>`;
   const republished = buildPage(reports, { commit: 'b31fde2aaaa', pageCommit: 'c0ffee1bbbb' });
   assert.ok(republished.includes(`Results from oxgl commit ${link('b31fde2aaaa')}`));
   assert.ok(republished.includes(` · page built at ${link('c0ffee1bbbb')}.</p>`));

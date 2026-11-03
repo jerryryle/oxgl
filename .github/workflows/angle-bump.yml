@@ -83,7 +83,7 @@ jobs:
             echo "The open bump pull request is current or carries a fix"
             exit 0
           fi
-          body="Pins oxgl-angle's [$tag](https://github.com/jerryryle/oxgl-angle/releases/tag/$tag) and bumps the version to $(jq -r .version package.json). ci.yml's merge-bump job merges this when CI passes, unless someone pushes to this branch: merge such a fix by hand. To skip this release, label this skip-bump and close it."
+          body="Pins oxgl-angle's [$tag](https://github.com/oxgl-js/oxgl-angle/releases/tag/$tag) and bumps the version to $(jq -r .version package.json). ci.yml's merge-bump job merges this when CI passes, unless someone pushes to this branch: merge such a fix by hand. To skip this release, label this skip-bump and close it."
           git push -q --force "https://x-access-token:${GH_TOKEN}@github.com/${GITHUB_REPOSITORY}.git" HEAD:refs/heads/angle-bump
           if [ "$open" != 0 ]; then
             gh pr edit angle-bump --repo "$GITHUB_REPOSITORY" --title "$title" --body "$body"

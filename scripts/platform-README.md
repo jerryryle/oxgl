@@ -6,6 +6,6 @@ for {{platform}}. Don't install this package directly: install
 
     npm install @oxgl-js/oxgl
 
-Documentation, source and issues: https://github.com/jerryryle/oxgl.
+Documentation, source and issues: https://github.com/oxgl-js/oxgl.
 Licensed BSD-3-Clause; the licenses of bundled third-party code are in
 `THIRD_PARTY_NOTICES`.
