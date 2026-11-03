@@ -10,6 +10,9 @@ import { createContext } from '@oxgl-js/oxgl';
 
 import { allPixels, gpuSkipReason, readAll, withBackendEnv } from './helpers.mjs';
 
+/** Whether this run uses the test-only OpenGL ES backend (a `test-gles` addon, in CI on llvmpipe). */
+const testGles = process.env.OXGL_BACKEND === 'gles';
+
 function renders(gl) {
   gl.clearColor(0, 1, 0, 1);
   gl.clear(gl.COLOR_BUFFER_BIT);
@@ -89,11 +92,37 @@ test('override set inside a worker', { timeout: 30_000 }, async () => {
 
 test('environment untouched', async () => {
   const before = JSON.stringify(process.env);
+  const cwd = process.cwd();
   const reason = await gpuSkipReason();
   withBackendEnv(undefined, () => {
     for (const backend of reason === undefined ? ['software', 'gpu', 'auto'] : ['software', 'auto']) {
-      createContext({ width: 1, height: 1, backend }).destroy();
+      for (const webgl2 of [false, true]) createContext({ width: 1, height: 1, backend, webgl2 }).destroy();
     }
   });
+  // The OpenGL ES backend loads the system's EGL driver into the process.
+  if (testGles) {
+    withBackendEnv('gles', () => createContext({ width: 1, height: 1, webgl2: true }).destroy());
+  }
   assert.equal(JSON.stringify(process.env), before);
+  assert.equal(process.cwd(), cwd);
+});
+
+test('test-only OpenGL ES value rejected by a release build', { skip: testGles && 'this is a test-gles build' }, () => {
+  withBackendEnv('gles', () => {
+    assert.throws(
+      () => createContext({ width: 1, height: 1 }),
+      (error) => error.code === 'OXGL_INVALID_BACKEND' && error.message.includes('gles'),
+    );
+  });
+});
+
+test('test-only OpenGL ES backend renders on llvmpipe', { skip: !testGles && 'needs a test-gles build with OXGL_BACKEND=gles' }, () => {
+  for (const webgl2 of [false, true]) {
+    const gl = createContext({ width: 4, height: 4, webgl2 });
+    const info = gl.getExtension('WEBGL_debug_renderer_info');
+    const renderer = gl.getParameter(info.UNMASKED_RENDERER_WEBGL);
+    assert.match(renderer, /llvmpipe/);
+    assert.match(renderer, /OpenGL ES/);
+    renders(gl);
+  }
 });

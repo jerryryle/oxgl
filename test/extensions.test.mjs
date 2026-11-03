@@ -20,15 +20,16 @@ test('supported extensions each return an object', () => {
     assert.ok(names.includes(name), name);
   }
   assert.notEqual(gl.getSupportedExtensions(), names);
-  for (const name of names) assert.equal(typeof gl.getExtension(name), 'object', name);
+  for (const name of names) assert.notEqual(gl.getExtension(name), null, name);
   assert.ok(!names.includes('EXT_color_buffer_float'));
   assert.equal(gl.getError(), gl.NO_ERROR);
   gl.destroy();
 });
 
-test('WebGL 2 lists its own extensions', () => {
+test('WebGL 2 lists its own extensions (Khronos conformance/extensions/get-extension.html)', () => {
   const gl = createContext({ width: 1, height: 1, webgl2: true });
   const names = gl.getSupportedExtensions();
+  for (const name of names) assert.notEqual(gl.getExtension(name), null, name);
   assert.ok(names.includes('EXT_color_buffer_float'));
   assert.ok(!names.includes('OES_vertex_array_object'));
   assert.equal(gl.getExtension('OES_vertex_array_object'), null);

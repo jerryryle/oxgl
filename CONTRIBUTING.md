@@ -31,15 +31,16 @@ other than `main`, cancels the earlier one; merge group runs and runs on
 | Job | Runs on | Checks |
 |---|---|---|
 | `workflow-lint` | Linux | actionlint, and zizmor with `.github/zizmor.yml` (every action pinned to a commit SHA, minimal permissions, no template injection) |
-| `build` | Linux x64 and arm64, macOS arm64, Windows x64 and arm64 | native + TS build, then the packed packages installed into an empty project and rendered with (`scripts/pack.mjs`, `scripts/smoke-packed.mjs`) and, on Linux, that no library in the package needs glibc newer than 2.34 (`scripts/check-glibc.sh`); the platform tarball is uploaded as `packages-<runner>`, and Linux arm64 also uploads the `@oxgl-js/oxgl` tarball as `package-main`, each kept 7 days in a run whose version isn't on npm and 3 days otherwise |
+| `build` | Linux x64 and arm64, macOS arm64, Windows x64 and arm64 | native + TS build, then the packed packages installed into an empty project and rendered with (`scripts/pack.mjs`, `scripts/smoke-packed.mjs`) and, on Linux, that no library in the package needs glibc newer than 2.34 (`scripts/check-glibc.sh`); Linux x64 then also builds the addon with the test-only `test-gles` feature into `dist-gles/` and uploads it as `addon-linux-x64-gles`, never packed; the platform tarball is uploaded as `packages-<runner>`, and Linux arm64 also uploads the `@oxgl-js/oxgl` tarball as `package-main`, each kept 7 days in a run whose version isn't on npm and 3 days otherwise |
 | `check` | Linux x64 and arm64, macOS arm64, Windows x64 and arm64 | rustfmt, clippy (pedantic, warnings as errors), Rust tests, ESLint and tsc |
 | `repo-checks` | Linux | the ANGLE pin check and the bump script's tests, dependency licenses and `THIRD_PARTY_NOTICES` |
 | `node-test` | Linux x64 and arm64, macOS arm64, Windows x64 and arm64 | Node tests with `OXGL_BACKEND=software` on Node 24, and on Linux arm64 also on Node 22.22.2 (the `engines` floor) and Node 26 |
 | `asan` | Linux arm64 and x64 | full checks: Rust tests under AddressSanitizer and LeakSanitizer |
 | `conformance` | Linux x64 and arm64, macOS arm64, Windows x64 and arm64 | full checks: both Khronos conformance suites with `OXGL_BACKEND=software`, judged against the `conformance/expectations.txt` entries that apply on each platform; each report is uploaded as `conformance-results-<runner>-<suite>` (see Conformance tests below) |
 | `threejs` | Linux x64 and arm64, macOS arm64, Windows x64 and arm64 | full checks: three.js's own WebGL examples with `OXGL_BACKEND=software`, each frame judged against its reference screenshot and the `threejs/expectations.txt` entries that apply on each platform; the report and failing examples' images are uploaded as `threejs-results-<runner>` (see three.js examples below) |
-| `ci` | Linux | succeeds only when every job above succeeded; on the quick checks, `asan`, `conformance` and `threejs` may be skipped |
-| `results` | Linux | full checks, after `conformance` and `threejs`, even when they fail: builds a preview of the results page and uploads it as `results-page`; not part of `ci` |
+| `gles` | Linux x64 | full checks: ANGLE's OpenGL ES backend on Mesa's llvmpipe: the run's Linux x64 packages with the `test-gles` addon swapped in and `OXGL_BACKEND=gles`, running the Node tests, both conformance suites and the three.js examples, judged against the expectations for the `linux-x64-gles` platform; reports are uploaded as `conformance-results-gles-<suite>` and `threejs-results-gles` |
+| `ci` | Linux | succeeds only when every job above succeeded; on the quick checks, `asan`, `conformance`, `threejs` and `gles` may be skipped |
+| `results` | Linux | full checks, after `conformance`, `threejs` and `gles`, even when they fail: builds a preview of the results page and uploads it as `results-page`; not part of `ci` |
 | `release` | Linux | on `main`, when npm doesn't have `package.json`'s version yet: publishes the tested run's tarballs and builds the results page (see Releases below) |
 | `pages` | Linux | after a release: publishes the page `release` built to GitHub Pages |
 | `caches` | Linux x64 and arm64, macOS arm64, Windows x64 and arm64 | on a push to `main` that changes a cache key's input, and on a manual run on `main`: saves the download caches (see below) |
@@ -270,8 +271,10 @@ contexts. Every page gets one outcome: `PASS`, `FAIL`, `TIMEOUT` or `CRASH`.
 `conformance/expectations.txt` lists every page that is not expected to pass,
 one per line as `<suite> <path> <OUTCOME> [<platform> ...] # <reason>`. The
 bracketed list is optional and names the platforms an entry applies to
-(`linux-x64`, `linux-arm64`, `macos-arm64`, `windows-x64`, `windows-arm64`);
-elsewhere the page is expected to pass. An entry without a list applies on every
+(`linux-x64`, `linux-arm64`, `macos-arm64`, `windows-x64`, `windows-arm64`,
+and `linux-x64-gles` for a Linux x64 run on ANGLE's OpenGL ES backend, which a
+run with the test-only `test-gles` addon and `OXGL_BACKEND=gles` is); elsewhere
+the page is expected to pass. An entry without a list applies on every
 platform. A page may have several listed entries, one per outcome, as long as no
 platform is in two of them. A run fails on any
 difference: a page that regressed, a page that passes but is still listed, a

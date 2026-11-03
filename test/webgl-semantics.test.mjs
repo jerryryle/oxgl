@@ -136,3 +136,33 @@ test('WebGL 1 depth textures and DEPTH_STENCIL_ATTACHMENT', () => {
   assert.equal(gl.getError(), gl.NO_ERROR);
   gl.destroy();
 });
+
+test('new textures, renderbuffers and buffers read as zeros (WebGL 1.0 §4.1)', () => {
+  const gl = createContext({ width: 1, height: 1, webgl2: true });
+  const read = () => {
+    assert.equal(gl.checkFramebufferStatus(gl.FRAMEBUFFER), gl.FRAMEBUFFER_COMPLETE);
+    const out = new Uint8Array(16 * 16 * 4).fill(7);
+    gl.readPixels(0, 0, 16, 16, gl.RGBA, gl.UNSIGNED_BYTE, out);
+    return out.every((byte) => byte === 0);
+  };
+  const fb = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, fb);
+  const texture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 16, 16, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+  assert.ok(read(), 'texture');
+  const renderbuffer = gl.createRenderbuffer();
+  gl.bindRenderbuffer(gl.RENDERBUFFER, renderbuffer);
+  gl.renderbufferStorage(gl.RENDERBUFFER, gl.RGBA8, 16, 16);
+  gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, renderbuffer);
+  assert.ok(read(), 'renderbuffer');
+  const buffer = gl.createBuffer();
+  gl.bindBuffer(gl.COPY_READ_BUFFER, buffer);
+  gl.bufferData(gl.COPY_READ_BUFFER, 4096, gl.STATIC_DRAW);
+  const bytes = new Uint8Array(4096).fill(7);
+  gl.getBufferSubData(gl.COPY_READ_BUFFER, 0, bytes);
+  assert.ok(bytes.every((byte) => byte === 0), 'buffer');
+  assert.equal(gl.getError(), gl.NO_ERROR);
+  gl.destroy();
+});

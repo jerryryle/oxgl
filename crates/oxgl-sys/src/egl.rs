@@ -31,12 +31,15 @@ use crate::bindings::{
     EGL_PLATFORM_ANGLE_DEVICE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_DEVICE_TYPE_HARDWARE_ANGLE,
     EGL_PLATFORM_ANGLE_DEVICE_TYPE_SWIFTSHADER_ANGLE, EGL_PLATFORM_ANGLE_TYPE_ANGLE,
     EGL_PLATFORM_ANGLE_TYPE_VULKAN_ANGLE, EGL_RENDERABLE_TYPE,
-    EGL_ROBUST_RESOURCE_INITIALIZATION_ANGLE, EGL_TRUE, EGLConfig, EGLContext, EGLDisplay, EGLint,
-    GLenum, GLsizei,
+    EGL_ROBUST_RESOURCE_INITIALIZATION_ANGLE, EGL_SURFACE_TYPE, EGL_TRUE, EGLConfig, EGLContext,
+    EGLDisplay, EGLint, GLenum, GLsizei,
 };
 use crate::loader::Angle;
 
 static LIVE_CONTEXTS: AtomicUsize = AtomicUsize::new(0);
+
+/// `EGL_DONT_CARE`, `((EGLint)-1)` in the headers: a cast macro bindgen skips.
+const EGL_DONT_CARE: EGLint = -1;
 
 thread_local! {
     /// The context this crate last made current on this thread, or null.
@@ -85,6 +88,11 @@ pub enum DisplayKind {
     Gpu,
     /// `SwiftShader` through ANGLE's Vulkan backend.
     SwiftShader,
+    /// ANGLE's OpenGL ES backend on the system's EGL driver, reached through
+    /// Mesa's surfaceless platform. ANGLE opens `libEGL.so.1` only when this
+    /// display is initialized.
+    #[cfg(target_os = "linux")]
+    Gles,
 }
 
 #[cfg(target_os = "macos")]
@@ -134,11 +142,27 @@ impl Display {
     /// Returns the failing EGL call and error code.
     pub fn open(angle: &Angle, kind: DisplayKind) -> Result<Self, EglError> {
         let fns = angle.fns();
-        let (platform, device) = match kind {
-            DisplayKind::Gpu => (GPU_PLATFORM, EGL_PLATFORM_ANGLE_DEVICE_TYPE_HARDWARE_ANGLE),
+        // Only the OpenGL ES backend names a native platform; elsewhere
+        // EGL_NONE in its place ends the list.
+        let (platform, device, native) = match kind {
+            DisplayKind::Gpu => (
+                GPU_PLATFORM,
+                EGL_PLATFORM_ANGLE_DEVICE_TYPE_HARDWARE_ANGLE,
+                [EGL_NONE, EGL_NONE],
+            ),
             DisplayKind::SwiftShader => (
                 EGL_PLATFORM_ANGLE_TYPE_VULKAN_ANGLE,
                 EGL_PLATFORM_ANGLE_DEVICE_TYPE_SWIFTSHADER_ANGLE,
+                [EGL_NONE, EGL_NONE],
+            ),
+            #[cfg(target_os = "linux")]
+            DisplayKind::Gles => (
+                crate::bindings::EGL_PLATFORM_ANGLE_TYPE_OPENGLES_ANGLE,
+                EGL_PLATFORM_ANGLE_DEVICE_TYPE_HARDWARE_ANGLE,
+                [
+                    crate::bindings::EGL_PLATFORM_ANGLE_NATIVE_PLATFORM_TYPE_ANGLE,
+                    crate::bindings::EGL_PLATFORM_SURFACELESS_MESA,
+                ],
             ),
         };
         let attribs = [
@@ -146,6 +170,8 @@ impl Display {
             platform,
             EGL_PLATFORM_ANGLE_DEVICE_TYPE_ANGLE,
             device,
+            native[0],
+            native[1],
             EGL_NONE,
         ];
         // SAFETY: the attribute list is EGL_NONE-terminated and outlives the
@@ -217,11 +243,30 @@ impl Display {
         })
     }
 
+    /// Whether the display offers a config for `version`. ANGLE offers no
+    /// OpenGL ES 3 config on a device it caps at OpenGL ES 2.0.
+    #[must_use]
+    pub fn supports(&self, version: ClientVersion) -> bool {
+        let renderable = match version {
+            ClientVersion::Es2 => EGL_OPENGL_ES2_BIT,
+            ClientVersion::Es3 => EGL_OPENGL_ES3_BIT,
+        };
+        self.choose_config(renderable).is_ok()
+    }
+
     /// Picks a config that can create a context of the `renderable` API. The
     /// context is used surfaceless, so the config's buffers are irrelevant.
+    /// `EGL_SURFACE_TYPE` defaults to `EGL_WINDOW_BIT`, which no config of
+    /// the OpenGL ES display has: Mesa's surfaceless configs are pbuffer-only.
     fn choose_config(&self, renderable: EGLint) -> Result<EGLConfig, EglError> {
         let fns = self.angle.fns();
-        let attribs = [EGL_RENDERABLE_TYPE, renderable, EGL_NONE];
+        let attribs = [
+            EGL_RENDERABLE_TYPE,
+            renderable,
+            EGL_SURFACE_TYPE,
+            EGL_DONT_CARE,
+            EGL_NONE,
+        ];
         let mut configs: [EGLConfig; 64] = [ptr::null_mut(); 64];
         let mut count: EGLint = 0;
         // SAFETY: `configs` has room for the 64 entries the call may write and

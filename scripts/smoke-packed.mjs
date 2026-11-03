@@ -47,6 +47,10 @@ gl.destroy();
 for (let i = 0; i < pixels.length; i += 4) {
   assert.deepEqual([...pixels.subarray(i, i + 4)], [0, 255, 0, 255], \`pixel \${String(i / 4)}\`);
 }
+// A released addon never has the test-only OpenGL ES mode (Cargo feature test-gles).
+process.env.OXGL_BACKEND = 'gles';
+assert.throws(() => createContext({ width: 1, height: 1 }), { code: 'OXGL_INVALID_BACKEND' });
+delete process.env.OXGL_BACKEND;
 console.log(\`smoke: rendered with \${resolved}\`);
 `;
 

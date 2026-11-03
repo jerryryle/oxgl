@@ -18,8 +18,11 @@ const REASON_LIMIT = 200;
 export const DEFAULT_TOLERANCE = 0.1;
 /** The largest `DIFF` tolerance: beyond it a frame is a failure to triage, not noise. */
 export const MAX_TOLERANCE = 5;
-/** Platform names, as in angle/bundles.toml. */
-export const PLATFORMS = ['linux-x64', 'linux-arm64', 'macos-arm64', 'windows-x64', 'windows-arm64'];
+/**
+ * Platform names: those of angle/bundles.toml, then `linux-x64-gles`, a Linux x64 run on ANGLE's
+ * OpenGL ES backend (`OXGL_BACKEND=gles`, a test-only addon build, on Mesa's llvmpipe in CI).
+ */
+export const PLATFORMS = ['linux-x64', 'linux-arm64', 'macos-arm64', 'windows-x64', 'windows-arm64', 'linux-x64-gles'];
 
 const HEADER = [
   '# Conformance pages not expected to pass, per suite: <suite> <path> <OUTCOME> [<platform> ...] # <reason>',
@@ -33,10 +36,14 @@ export const keyOf = (suite, path) => `${suite} ${path}`;
 /** Map key of an entry: its page, plus its platforms when it lists any. */
 const entryKey = (e) => (e.platforms ? `${keyOf(e.suite, e.path)} [${e.platforms.join(' ')}]` : keyOf(e.suite, e.path));
 
-/** This host's platform name, one of PLATFORMS on a supported host. */
-export function hostPlatform() {
-  const os = { darwin: 'macos', win32: 'windows' }[process.platform] ?? process.platform;
-  return `${os}-${process.arch}`;
+/**
+ * This run's platform name, one of PLATFORMS on a supported host: the host's, or `linux-x64-gles`
+ * when a Linux x64 run uses `OXGL_BACKEND=gles`.
+ */
+export function hostPlatform({ platform = process.platform, arch = process.arch, backend = process.env.OXGL_BACKEND } = {}) {
+  const os = { darwin: 'macos', win32: 'windows' }[platform] ?? platform;
+  const name = `${os}-${arch}`;
+  return name === 'linux-x64' && backend === 'gles' ? 'linux-x64-gles' : name;
 }
 
 const appliesOn = (e, platform) => e.platforms === undefined || e.platforms.includes(platform);

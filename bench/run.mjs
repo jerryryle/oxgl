@@ -6,6 +6,11 @@ import * as THREE from 'three';
 import { createContext } from '../dist/index.js';
 
 const BUDGET_MS = Number(process.env.OXGL_BENCH_MS ?? 1000);
+// `--webgl1` measures WebGL 1 contexts instead of WebGL 2, with GLSL ES 1.00
+// shaders. three.js needs WebGL 2, so its scenes are skipped then.
+const WEBGL2 = !process.argv.slice(2).includes('--webgl1');
+/** The shader source for this run's WebGL version. */
+const glsl = (es300, es100) => (WEBGL2 ? `#version 300 es\n${es300}` : es100);
 
 /** Runs `step` repeatedly for the budget; returns calls per second. */
 function measure(step, finish = () => {}) {
@@ -46,14 +51,21 @@ function program(gl, vs, fs) {
   return p;
 }
 
-const gl = createContext({ width: 256, height: 256, webgl2: true, attributes: { antialias: false } });
+const gl = createContext({ width: 256, height: 256, webgl2: WEBGL2, attributes: { antialias: false } });
 const finishGl = () => gl.finish();
 
 // Per-call overhead of trivial state calls (JS conversion + native hop).
 report('enable/disable (state call)', measure(() => gl.enable(gl.BLEND)), 'calls/s');
 report('getError', measure(() => gl.getError()), 'calls/s');
 report('uniform4f', (() => {
-  const p = program(gl, '#version 300 es\nin vec4 a; void main() { gl_Position = a; }', '#version 300 es\nprecision mediump float; uniform vec4 c; out vec4 o; void main() { o = c; }');
+  const p = program(
+    gl,
+    glsl('in vec4 a; void main() { gl_Position = a; }', 'attribute vec4 a; void main() { gl_Position = a; }'),
+    glsl(
+      'precision mediump float; uniform vec4 c; out vec4 o; void main() { o = c; }',
+      'precision mediump float; uniform vec4 c; void main() { gl_FragColor = c; }',
+    ),
+  );
   gl.useProgram(p);
   const loc = gl.getUniformLocation(p, 'c');
   return measure(() => gl.uniform4f(loc, 1, 0, 0, 1));
@@ -61,7 +73,17 @@ report('uniform4f', (() => {
 
 // Small draws: the cost a scene with many objects pays per object.
 {
-  const p = program(gl, '#version 300 es\nin vec2 a; void main() { gl_Position = vec4(a * 0.01, 0, 1); }', '#version 300 es\nprecision mediump float; out vec4 o; void main() { o = vec4(1); }');
+  const p = program(
+    gl,
+    glsl(
+      'in vec2 a; void main() { gl_Position = vec4(a * 0.01, 0, 1); }',
+      'attribute vec2 a; void main() { gl_Position = vec4(a * 0.01, 0, 1); }',
+    ),
+    glsl(
+      'precision mediump float; out vec4 o; void main() { o = vec4(1); }',
+      'precision mediump float; void main() { gl_FragColor = vec4(1); }',
+    ),
+  );
   gl.useProgram(p);
   const b = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, b);
@@ -79,7 +101,17 @@ report('uniform4f', (() => {
 // Texture sampling fill rate: a full-screen triangle sampling a 256x256 RGBA8
 // texture, slightly minified so LINEAR blends texels.
 {
-  const p = program(gl, '#version 300 es\nin vec2 a; out vec2 uv; void main() { uv = a * 0.7 + 0.5; gl_Position = vec4(a, 0, 1); }', '#version 300 es\nprecision mediump float; in vec2 uv; uniform sampler2D s; out vec4 o; void main() { o = texture(s, uv); }');
+  const p = program(
+    gl,
+    glsl(
+      'in vec2 a; out vec2 uv; void main() { uv = a * 0.7 + 0.5; gl_Position = vec4(a, 0, 1); }',
+      'attribute vec2 a; varying vec2 uv; void main() { uv = a * 0.7 + 0.5; gl_Position = vec4(a, 0, 1); }',
+    ),
+    glsl(
+      'precision mediump float; in vec2 uv; uniform sampler2D s; out vec4 o; void main() { o = texture(s, uv); }',
+      'precision mediump float; varying vec2 uv; uniform sampler2D s; void main() { gl_FragColor = texture2D(s, uv); }',
+    ),
+  );
   gl.useProgram(p);
   const b = gl.createBuffer();
   gl.bindBuffer(gl.ARRAY_BUFFER, b);
@@ -138,7 +170,11 @@ function threeScene(meshes, segments) {
   ctx.destroy();
   return fps;
 }
-report('three.js 1000 meshes (frames)', threeScene(1000, 8), 'frames/s');
-report('three.js 1 mesh, 128x64 segments (frames)', threeScene(1, 128), 'frames/s');
+if (WEBGL2) {
+  report('three.js 1000 meshes (frames)', threeScene(1000, 8), 'frames/s');
+  report('three.js 1 mesh, 128x64 segments (frames)', threeScene(1, 128), 'frames/s');
+} else {
+  console.log('three.js scenes skipped: three.js needs WebGL 2');
+}
 
 if (process.env.OXGL_BENCH_JSON) console.log(JSON.stringify(results));

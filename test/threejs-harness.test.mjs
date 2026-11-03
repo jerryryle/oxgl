@@ -111,6 +111,16 @@ test('Tolerance entries and judging: within the tolerance passes, beyond it regr
   assert.deepEqual(judge(entries, [], new Map([['threejs', ['a']]]), { filtered: true }).stale, []);
 });
 
+test('Update on one platform keeps the others\' entries, including the OpenGL ES backend\'s', () => {
+  const entries = parse('webgl_shadowmap_viewer DIFF 1% # noise\n');
+  const pages = new Map([['threejs', ['webgl_shadowmap_viewer']]]);
+  const next = updateExpectations(entries, [result('webgl_shadowmap_viewer', 'PASS', 0.05)], pages, { tolerances: true, platform: 'macos-arm64' });
+  assert.equal(
+    formatExpectations(next, { suite: 'threejs', header: [] }).trim(),
+    'webgl_shadowmap_viewer DIFF 1% [linux-x64 linux-arm64 windows-x64 windows-arm64 linux-x64-gles] # noise',
+  );
+});
+
 test('Updating expectations: tolerances kept, never raised, given to new and fixed image-only failures', () => {
   const entries = parse('a DIFF 2% # noise\nb FAIL # shader error\nc DIFF 3% # noise\n');
   const pages = new Map([['threejs', ['a', 'b', 'c', 'd', 'e', 'f']]]);

@@ -3,6 +3,7 @@
 //
 // OXGL_SOAK_ITERATIONS overrides the measured cycle count (default 1,000).
 import assert from 'node:assert/strict';
+import { readdirSync } from 'node:fs';
 import { test } from 'node:test';
 import { setFlagsFromString } from 'node:v8';
 import { runInNewContext } from 'node:vm';
@@ -45,15 +46,29 @@ function cycle(backend) {
   used(backend).destroy();
 }
 
+/** The process's thread count on Linux (a driver may start threads per context), else undefined. */
+function threads() {
+  try {
+    return readdirSync('/proc/self/task').length;
+  } catch {
+    return undefined;
+  }
+}
+
 function soak(t, backend) {
   for (let i = 0; i < WARM_UP; i += 1) cycle(backend);
   const baseline = rssAfterGc();
+  const baseThreads = threads();
   const start = performance.now();
   for (let i = 0; i < ITERATIONS; i += 1) cycle(backend);
   const perCycle = (performance.now() - start) / ITERATIONS;
   const growth = rssAfterGc() - baseline;
   t.diagnostic(`${backend}: ${ITERATIONS} cycles, ${perCycle.toFixed(3)} ms/cycle, RSS growth ${(growth / 1048576).toFixed(1)} MiB`);
   assert.ok(growth <= THRESHOLD, `RSS grew by ${(growth / 1048576).toFixed(1)} MiB (limit 32 MiB)`);
+  if (baseThreads !== undefined) {
+    // A few threads may come and go (libuv, the GC); per-context threads would add ITERATIONS.
+    assert.ok(threads() - baseThreads <= 8, `threads grew from ${baseThreads} to ${threads()}`);
+  }
 }
 
 test('software soak test', (t) => {

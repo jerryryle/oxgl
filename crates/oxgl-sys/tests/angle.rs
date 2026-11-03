@@ -300,6 +300,16 @@ fn swiftshader_draws_a_triangle_body() {
 }
 
 #[test]
+fn swiftshader_offers_both_versions() {
+    on_lasting_thread(|| {
+        let angle = Angle::load(&bundle_dir()).unwrap();
+        let display = Display::open(&angle, DisplayKind::SwiftShader).unwrap();
+        assert!(display.supports(ClientVersion::Es2));
+        assert!(display.supports(ClientVersion::Es3));
+    });
+}
+
+#[test]
 fn requestable_extensions_are_listed() {
     on_lasting_thread(|| {
         use oxgl_sys::bindings::{GL_EXTENSIONS, GL_REQUESTABLE_EXTENSIONS_ANGLE};

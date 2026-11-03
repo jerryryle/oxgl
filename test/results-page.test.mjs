@@ -7,7 +7,7 @@ import { Script } from 'node:vm';
 
 import { buildPage, cellOf, main, readReports, TEMPLATE_PATH } from '../scripts/results-page.mjs';
 
-const PLATFORMS = ['linux-x64', 'linux-arm64', 'macos-arm64', 'windows-x64', 'windows-arm64'];
+import { PLATFORMS } from '../conformance/expectations.mjs';
 
 /** A conformance report for one suite on one platform. */
 function conformance(platform, suite, pages, timestamp = '2026-11-01T10:00:00.000Z') {
@@ -89,7 +89,8 @@ test('the page: rows, columns, marks, counts and missing reports', () => {
   assert.match(row(webgl1, 'regressed.html'), /^<tr>/);
   // The union of rows: a test one platform reported is "not run" elsewhere, and only "not run" doesn't make a row non-PASS.
   const armOnly = cells(row(webgl1, 'arm-only.html'));
-  assert.deepEqual(armOnly.map((c) => c.label), ['not run', 'PASS', 'not run', 'not run', 'not run']);
+  assert.match(webgl1, /<th class="platform">windows-arm64<\/th><th class="platform">linux-x64-gles<\/th><\/tr>/, 'OpenGL ES backend column');
+  assert.deepEqual(armOnly.map((c) => c.label), ['not run', 'PASS', 'not run', 'not run', 'not run', 'not run']);
   assert.equal(armOnly[0].title, 'not run');
   assert.match(row(webgl1, 'arm-only.html'), /^<tr class="passing">/);
 
@@ -98,7 +99,7 @@ test('the page: rows, columns, marks, counts and missing reports', () => {
   assert.match(webgl2, /No report from macos-arm64: those columns read "not run"/);
 
   const three = section(html, 'three.js examples');
-  assert.match(three, /No report from linux-x64, macos-arm64, windows-x64, windows-arm64/);
+  assert.match(three, /No report from linux-x64, macos-arm64, windows-x64, windows-arm64, linux-x64-gles/);
   assert.deepEqual(cells(row(three, 'video'))[1], { cls: 'SKIP', title: 'upstream: video hangs CI', label: 'SKIP' });
 
   assert.match(html, /Results from oxgl commit <a href="https:\/\/github.com\/oxgl-js\/oxgl\/commit\/0123456789abcdef"><code>0123456<\/code><\/a> · 2026-11-01 12:34 UTC · conformance suite <code>abcdef0<\/code> · three\.js <code>r182<\/code>\./);
@@ -148,7 +149,7 @@ test('the command reads reports from artifact directories and writes the page', 
       writeFileSync(join(artifact, report.examples ? 'threejs-results.json' : 'conformance-results.json'), JSON.stringify(report));
     }
     writeFileSync(join(dir, 'artifacts', 'unrelated.json'), '{}');
-    assert.equal(readReports(join(dir, 'artifacts')).length, 6);
+    assert.equal(readReports(join(dir, 'artifacts')).length, PLATFORMS.length + 1);
     const out = join(dir, 'site', 'index.html');
     main(['--commit', 'abc1234', '--version', '0.2.3', join(dir, 'artifacts'), out]);
     assert.match(readFileSync(out, 'utf8'), /<h2>WebGL 1 conformance<\/h2>/);

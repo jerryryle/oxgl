@@ -21,6 +21,12 @@ oxgl-core = { path = "../oxgl-core" }
 # Direct dependency for the Node-API typed-array access in `napi_view`.
 oxgl-sys = { path = "../oxgl-sys", features = ["node"] }
 
+[features]
+# Test-only: lets OXGL_BACKEND=gles force ANGLE's OpenGL ES backend and accept a
+# CPU renderer (Mesa's llvmpipe in CI). Linux only; elsewhere it does nothing.
+# Released packages are never built with it.
+test-gles = []
+
 [build-dependencies]
 napi-build = "2.6.0"
 
