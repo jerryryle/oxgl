@@ -1,15 +1,11 @@
 ## MODIFIED Requirements
 
 ### Requirement: Drawing buffer format and initial contents
-The drawing buffer SHALL have an RGBA8 color buffer when `alpha` is `true` and an RGB8 one without alpha when it is `false`, until `drawingBufferStorage` changes it, and `drawingBufferFormat` SHALL report the current one (WebGL 1.0 §2.2, §5.14.1). It SHALL have a depth buffer of at least 16 bits only when `depth` is `true`, and a stencil buffer of at least 8 bits only when `stencil` is `true` (WebGL 1.0 §2.2, §5.2.1). It SHALL initially contain zeros, with depth `1.0`. A headless context is never presented, so its contents SHALL persist until overwritten.
+The drawing buffer SHALL have an RGBA8 color buffer when `alpha` is `true` and an RGB8 one without alpha when it is `false`, until `drawingBufferStorage` changes it (WebGL 1.0 §2.2). It SHALL have a depth buffer of at least 16 bits only when `depth` is `true`, and a stencil buffer of at least 8 bits only when `stencil` is `true` (WebGL 1.0 §2.2, §5.2.1). It SHALL initially contain zeros, with depth `1.0`. A headless context is never presented, so its contents SHALL persist until overwritten.
 
 #### Scenario: Initial contents are zero
 - **WHEN** `readPixels` reads the whole buffer of a freshly created context
 - **THEN** every byte is `0`
-
-#### Scenario: Initial format
-- **WHEN** `drawingBufferFormat` is read on a context with default attributes and on one created with `alpha: false`
-- **THEN** it is `RGBA8` (`0x8058`) and `RGB8` (`0x8051`) respectively (cf. Khronos `conformance/canvas/drawingbuffer-storage-test.html`)
 
 #### Scenario: Alpha channel is present
 - **WHEN** the buffer is cleared with alpha `0.5` and read back as RGBA/UNSIGNED_BYTE
@@ -39,6 +35,13 @@ The drawing buffer SHALL have an RGBA8 color buffer when `alpha` is `true` and a
 - **THEN** no error is generated, the drawing buffer is 8192×8192, and `getParameter(SAMPLES)` is `0`
 
 ## ADDED Requirements
+
+### Requirement: drawingBufferFormat
+`drawingBufferFormat` SHALL report the drawing buffer's current color format: `RGBA8` or `RGB8` from `alpha` at creation, then the format `drawingBufferStorage` last set (WebGL 1.0 §5.14.1).
+
+#### Scenario: Initial format
+- **WHEN** `drawingBufferFormat` is read on a context with default attributes and on one created with `alpha: false`
+- **THEN** it is `RGBA8` (`0x8058`) and `RGB8` (`0x8051`) respectively (cf. Khronos `conformance/canvas/drawingbuffer-storage-test.html`)
 
 ### Requirement: drawingBufferStorage
 `drawingBufferStorage(sizedFormat, width, height)` SHALL reallocate the drawing buffer in `sizedFormat` at `width`×`height`, clamped and cleared as a resize is, keeping `antialias` and all other state (WebGL 1.0 §2.2). `RGBA8` SHALL always be accepted. `SRGB8_ALPHA8` SHALL be accepted on WebGL 2 and with `EXT_sRGB` enabled. `RGBA16F` SHALL be accepted with `EXT_color_buffer_float` or `EXT_color_buffer_half_float` enabled. A later resize SHALL keep the format.
