@@ -40,7 +40,7 @@ Covers texture and sampler objects, texture uploads from views, pixel unpack buf
 - **THEN** `INVALID_OPERATION` is generated (cf. Khronos `conformance2/misc/views-with-offsets.html`)
 
 ### Requirement: WebGL unpack parameters
-`UNPACK_FLIP_Y_WEBGL` and `UNPACK_PREMULTIPLY_ALPHA_WEBGL` SHALL apply to every `texImage2D` and `texSubImage2D` source, views included (WebGL 1.0 §5.14.3 `pixelStorei`). On WebGL 2, either one set with a 3D or 2D-array upload from a view, or with a pixel unpack buffer bound, SHALL generate `INVALID_OPERATION` (WebGL 2.0 §5.36). `UNPACK_COLORSPACE_CONVERSION_WEBGL` SHALL have no effect on oxgl's sources.
+`UNPACK_FLIP_Y_WEBGL` and `UNPACK_PREMULTIPLY_ALPHA_WEBGL` SHALL apply to every `texImage2D` and `texSubImage2D` source, views included (WebGL 1.0 §5.14.3 `pixelStorei`). On WebGL 2, either one set with a 3D or 2D-array upload from a view, or with a pixel unpack buffer bound, SHALL generate `INVALID_OPERATION` (WebGL 2.0 §5.36). `UNPACK_COLORSPACE_CONVERSION_WEBGL` set to `NONE` SHALL turn off the color-space conversion of `TexImageSource` uploads, and SHALL have no other effect.
 
 #### Scenario: Flipped view upload
 - **WHEN** a 1×2 texture is uploaded from a view with red in its first row and green in its second, with `UNPACK_FLIP_Y_WEBGL` true
@@ -49,6 +49,10 @@ Covers texture and sampler objects, texture uploads from views, pixel unpack buf
 #### Scenario: Premultiplied view upload
 - **WHEN** an `RGBA`/`UNSIGNED_BYTE` texel `[255, 255, 255, 128]` is uploaded with `UNPACK_PREMULTIPLY_ALPHA_WEBGL` true
 - **THEN** it samples as `[128, 128, 128, 128]` within one unit
+
+#### Scenario: Conversion turned off
+- **WHEN** `unpackColorSpace` is `"display-p3"`, `UNPACK_COLORSPACE_CONVERSION_WEBGL` is `NONE`, and an `ImageData`-shaped red pixel is uploaded
+- **THEN** the texture samples `[255, 0, 0, 255]`
 
 ### Requirement: TexImageSource uploads
 The `TexImageSource` forms of `texImage2D`, `texSubImage2D`, `texImage3D` and `texSubImage3D` SHALL accept an `ImageData`-shaped object, an oxgl context's canvas, an object with a 2D context, or a document image, convert its RGBA8 pixels to the requested format and type (WebGL 1.0 §5.14.8, WebGL 2.0 §3.7.6), and throw `TypeError` for any other value. On WebGL 2 a bound pixel unpack buffer SHALL make these forms generate `INVALID_OPERATION`.
@@ -175,3 +179,89 @@ Uploading a video element SHALL upload the frame the host's internal image decod
 #### Scenario: Decoded video
 - **WHEN** a host's decoder returns a 16×8 frame for a playing video, and the video is uploaded
 - **THEN** the texture is 16×8 with that frame's pixels (cf. Khronos `conformance/textures/video/tex-2d-rgba-rgba-unsigned_byte.html`)
+
+### Requirement: Pixels from image libraries
+An `ImageData`-shaped source's `data` SHALL be accepted as any 8-bit typed array, including a Node `Buffer` that starts partway into its `ArrayBuffer`, and read from its own first byte as `width × height` RGBA8 pixels, top row first and unpremultiplied, with the WebGL unpack parameters applied (WebGL 1.0 §5.14.8). A `data` holding fewer pixels than the upload needs SHALL generate `INVALID_OPERATION`.
+
+#### Scenario: Buffer with a byte offset
+- **WHEN** a 2×1 source's `data` is a `Buffer` that is a subarray at byte offset 3 of a larger buffer, holding red then green, and is uploaded as `RGBA`/`UNSIGNED_BYTE`
+- **THEN** the texture's left texel samples red and its right texel green
+
+#### Scenario: Plain Uint8Array
+- **WHEN** a 1×1 source with `data: new Uint8Array([0, 0, 255, 255])` is uploaded
+- **THEN** the texel samples blue
+
+#### Scenario: Alpha kept unpremultiplied
+- **WHEN** a 1×1 source with `data` `[255, 0, 0, 128]` is uploaded as `RGBA`/`UNSIGNED_BYTE` without `UNPACK_PREMULTIPLY_ALPHA_WEBGL`
+- **THEN** the texel reads `[255, 0, 0, 128]`
+
+#### Scenario: Short data
+- **WHEN** a source declares `width: 2, height: 2` with 12 bytes of `data` and is uploaded
+- **THEN** `INVALID_OPERATION` is generated and the texture is not redefined
+
+#### Scenario: three.js texture image
+- **WHEN** a three.js `Texture` whose `image` is a 2×2 `{ width, height, data }` object, with `needsUpdate` set, maps a quad that three.js renders
+- **THEN** each quadrant shows its source pixel, with the source's top row at the top of the quad
+
+### Requirement: Other pixel views are not ImageData
+An object whose `data` is a view other than an 8-bit typed array or the `Uint16Array` of 16-bit pixels, such as a float array, SHALL NOT be taken as `ImageData`-shaped, so the upload throws the `TypeError` of an unsupported `TexImageSource`.
+
+#### Scenario: Float pixels rejected
+- **WHEN** `texImage2D(TEXTURE_2D, 0, RGBA, RGBA, UNSIGNED_BYTE, { width: 1, height: 1, data: new Float32Array([1, 0, 0, 1]) })` is called
+- **THEN** a `TypeError` is thrown and the texture is not redefined
+
+#### Scenario: Other wide views and DataView rejected
+- **WHEN** the same upload is made with `data` an `Int16Array`, a `Uint32Array` or a `DataView`, each with enough bytes for one RGBA8 pixel
+- **THEN** each throws a `TypeError`
+
+#### Scenario: Signed bytes accepted
+- **WHEN** the same upload is made with `data: new Int8Array([127, 0, 0, 127])`
+- **THEN** no exception is thrown and the texel reads `[127, 0, 0, 127]`
+
+#### Scenario: Typed array from another realm
+- **WHEN** a 1×1 source's `data` is a `Uint8ClampedArray` created in another realm (`vm.runInNewContext`) holding red, and is uploaded
+- **THEN** no exception is thrown and the texel samples red
+
+### Requirement: unpackColorSpace
+`unpackColorSpace` SHALL start as `"srgb"` and accept `"srgb"` or `"display-p3"`, ignoring any other assigned value as WebIDL does for enumeration attributes (WebGL 1.0 §5.14.1). A `TexImageSource` upload SHALL convert the source's pixels from the source's color space into `unpackColorSpace` before any other conversion, unless `UNPACK_COLORSPACE_CONVERSION_WEBGL` is `NONE` (WebGL 1.0 §5.14.8). Uploads from views SHALL NOT be converted.
+
+#### Scenario: sRGB red into Display P3
+- **WHEN** `unpackColorSpace` is `"display-p3"` and an `ImageData`-shaped `[255, 0, 0, 255]` pixel is uploaded as `RGBA`/`UNSIGNED_BYTE`
+- **THEN** the texture samples `[234, 51, 35, 255]` within two units (cf. Khronos `conformance/textures/video/tex-2d-rgba-rgba-unsigned_byte.html`, which expects these values within six)
+
+#### Scenario: Same color space
+- **WHEN** `unpackColorSpace` is `"srgb"` and an `ImageData`-shaped `[200, 100, 50, 255]` pixel is uploaded
+- **THEN** the texture samples exactly `[200, 100, 50, 255]`
+
+#### Scenario: View uploads are not converted
+- **WHEN** `unpackColorSpace` is `"display-p3"` and a `Uint8Array` `[255, 0, 0, 255]` is uploaded
+- **THEN** the texture samples `[255, 0, 0, 255]`
+
+### Requirement: Color space of upload sources
+A source's color space SHALL be:
+- the `colorSpace` property of an `ImageData`-shaped object when it is `"srgb"` or `"display-p3"`, else `"srgb"`;
+- the `drawingBufferColorSpace` of an oxgl context's canvas;
+- `"srgb"` for every other source.
+
+Converting from Display P3 into sRGB SHALL clamp colors outside the sRGB gamut.
+
+#### Scenario: Display P3 ImageData into sRGB
+- **WHEN** `unpackColorSpace` is `"srgb"` and an `ImageData`-shaped object with `colorSpace: "display-p3"` and pixel `[234, 51, 35, 255]` is uploaded
+- **THEN** the texture samples `[255, 0, 0, 255]` within two units
+
+#### Scenario: Canvas of a Display P3 context
+- **WHEN** context A has `drawingBufferColorSpace` `"display-p3"` and is cleared to `(234, 51, 35) / 255`, opaque, and context B with `unpackColorSpace` `"srgb"` uploads `A.canvas`
+- **THEN** B's texture samples `[255, 0, 0, 255]` within two units
+
+#### Scenario: Out-of-gamut color clamped
+- **WHEN** an `ImageData`-shaped object with `colorSpace: "display-p3"` and pixel `[0, 255, 0, 255]` is uploaded with `unpackColorSpace` `"srgb"`
+- **THEN** the texture samples `[0, 255, 0, 255]`, the clamped sRGB green
+
+### Requirement: ImageBitmap color conversion
+An `ImageBitmap`'s pixels SHALL be converted between color spaces as other sources are.
+
+Accepted trade-off: those pixels may already be premultiplied, and they are converted as if they were not. Translucent pixels of a premultiplied bitmap converted between color spaces can be off by a few units.
+
+#### Scenario: Opaque bitmap converted
+- **WHEN** a conformance page uploads an opaque red `ImageBitmap` with `unpackColorSpace` `"display-p3"`
+- **THEN** the texture samples `[234, 51, 35, 255]` within two units

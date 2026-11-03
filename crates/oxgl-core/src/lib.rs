@@ -3,6 +3,7 @@
 
 pub mod backend;
 pub mod codec;
+pub mod color;
 pub mod context;
 pub mod drawing_buffer;
 pub mod error;

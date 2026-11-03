@@ -37,6 +37,13 @@ export interface NativeAttributes {
   failIfMajorPerformanceCaveat: boolean;
 }
 
+/** The drawing buffer's size and color format (native `Storage`). */
+export interface NativeStorage {
+  width: number;
+  height: number;
+  format: number;
+}
+
 /** The arguments of a texture upload (native `TexArgs`). */
 export interface NativeTexArgs {
   target: number;
@@ -109,7 +116,7 @@ export interface NativeBinding {
   texParameter: (index: number, version: number, target: number, pname: number, value: number, float: boolean) => void;
   getTexParameter: (index: number, version: number, target: number, pname: number) => NativeParameter | null;
   generateMipmap: (index: number, version: number, target: number) => void;
-  texUpload: (index: number, version: number, call: number, args: NativeTexArgs, kind: number, source: ArrayBufferView | null, offset: number, sourceWidth: number, sourceHeight: number) => void;
+  texUpload: (index: number, version: number, call: number, args: NativeTexArgs, kind: number, source: ArrayBufferView | null, offset: number, sourceWidth: number, sourceHeight: number, sourceColorSpace: number, unpackColorSpace: number) => void;
   compressedTexUploadBuffer: (index: number, version: number, call: number, args: NativeTexArgs, imageSize: number, offset: number) => void;
   compressedTexUpload: (index: number, version: number, call: number, args: NativeTexArgs, source: ArrayBufferView, offset: number, length: number) => void;
   copyTexImage2D: (index: number, version: number, target: number, level: number, internalFormat: number, x: number, y: number, width: number, height: number, border: number) => void;
@@ -166,6 +173,10 @@ export interface NativeBinding {
   presentDrawingBuffer: (index: number, version: number, always: boolean) => void;
   drawRangeElements: (index: number, version: number, mode: number, start: number, end: number, count: number, type: number, offset: number) => void;
   resize(index: number, version: number, width: number, height: number): { width: number; height: number };
+  /** `drawingBufferStorage`; the resulting size and format, or `null` when lost. */
+  drawingBufferStorage(index: number, version: number, format: number, width: number, height: number): NativeStorage | null;
+  /** Reallocates and clears the drawing buffer at its size and format; `null` when lost. */
+  reallocate(index: number, version: number): NativeStorage | null;
   destroy(index: number, version: number): void;
   release(index: number, version: number): void;
   liveContexts(): number;

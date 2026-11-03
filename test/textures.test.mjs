@@ -1,6 +1,7 @@
 // textures spec scenarios.
 import assert from 'node:assert/strict';
 import { test } from 'node:test';
+import { runInNewContext } from 'node:vm';
 
 import { createContext, WebGLSampler, WebGLTexture } from '@oxgl-js/oxgl';
 
@@ -139,6 +140,76 @@ test('ImageData-shaped source converted to the requested type', () => {
   gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGB, gl.RGB, gl.UNSIGNED_SHORT_5_6_5, source);
   assert.deepEqual(draw(gl)[0], RED);
   assert.equal(gl.getError(), gl.NO_ERROR);
+  gl.destroy();
+});
+
+test('ImageData-shaped source from a Buffer with a byte offset', () => {
+  const { gl } = textured();
+  const backing = Buffer.alloc(3 + 8 + 5, 9);
+  const data = backing.subarray(3, 11);
+  data.set([...RED, ...GREEN]);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, { width: 2, height: 1, data });
+  assert.deepEqual(draw(gl), [RED, GREEN, RED, GREEN]);
+  assert.equal(gl.getError(), gl.NO_ERROR);
+  gl.destroy();
+});
+
+test('ImageData-shaped source from a plain Uint8Array', () => {
+  const { gl } = textured();
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, { width: 1, height: 1, data: new Uint8Array(BLUE) });
+  assert.deepEqual(draw(gl), [BLUE, BLUE, BLUE, BLUE]);
+  gl.destroy();
+});
+
+test('ImageData-shaped source keeps alpha unpremultiplied', () => {
+  const { gl } = textured();
+  const data = new Uint8Array([255, 0, 0, 128]);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, { width: 1, height: 1, data });
+  assert.deepEqual(draw(gl)[0], [255, 0, 0, 128]);
+  gl.destroy();
+});
+
+test('ImageData-shaped source with short data', () => {
+  const { gl } = textured();
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, { width: 1, height: 1, data: new Uint8Array(RED) });
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, { width: 2, height: 2, data: new Uint8Array(12) });
+  assert.equal(gl.getError(), gl.INVALID_OPERATION);
+  assert.deepEqual(draw(gl), [RED, RED, RED, RED], 'texture not redefined');
+  gl.destroy();
+});
+
+test('ImageData-shaped source with float pixels is rejected', () => {
+  const { gl } = textured();
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, { width: 1, height: 1, data: new Uint8Array(RED) });
+  const source = { width: 1, height: 1, data: new Float32Array([0, 1, 0, 1]) };
+  assert.throws(() => gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source), TypeError);
+  assert.deepEqual(draw(gl), [RED, RED, RED, RED], 'texture not redefined');
+  gl.destroy();
+});
+
+test('ImageData-shaped source with other wide views or a DataView is rejected', () => {
+  const { gl } = textured();
+  for (const data of [new Int16Array(2), new Uint32Array(1), new DataView(new ArrayBuffer(4))]) {
+    const source = { width: 1, height: 1, data };
+    assert.throws(() => gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source), TypeError, data.constructor.name);
+  }
+  gl.destroy();
+});
+
+test('ImageData-shaped source with signed bytes', () => {
+  const { gl } = textured();
+  const source = { width: 1, height: 1, data: new Int8Array([127, 0, 0, 127]) };
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, source);
+  assert.deepEqual(draw(gl)[0], [127, 0, 0, 127]);
+  gl.destroy();
+});
+
+test('ImageData-shaped source with a typed array from another realm', () => {
+  const { gl } = textured();
+  const data = runInNewContext('new Uint8ClampedArray([255, 0, 0, 255])');
+  assert.equal(data instanceof Uint8ClampedArray, false, 'from another realm');
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, { width: 1, height: 1, data });
+  assert.deepEqual(draw(gl), [RED, RED, RED, RED]);
   gl.destroy();
 });
 

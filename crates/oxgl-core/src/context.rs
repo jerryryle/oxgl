@@ -2,10 +2,11 @@
 
 use oxgl_sys::bindings::{
     GL_FRAGMENT_SHADER, GL_GUILTY_CONTEXT_RESET_EXT, GL_HIGH_INT, GL_INNOCENT_CONTEXT_RESET_EXT,
-    GL_INVALID_ENUM, GL_INVALID_OPERATION, GL_INVALID_VALUE, GL_LOW_FLOAT, GL_NO_ERROR,
-    GL_NUM_COMPRESSED_TEXTURE_FORMATS, GL_PACK_ALIGNMENT, GL_PACK_ROW_LENGTH, GL_PACK_SKIP_PIXELS,
-    GL_PACK_SKIP_ROWS, GL_PRIMITIVE_RESTART_FIXED_INDEX, GL_RENDERER, GL_SHADING_LANGUAGE_VERSION,
-    GL_VENDOR, GL_VERSION, GL_VERTEX_SHADER,
+    GL_INVALID_ENUM, GL_INVALID_OPERATION, GL_INVALID_VALUE, GL_LOW_FLOAT,
+    GL_MAX_RENDERBUFFER_SIZE, GL_NO_ERROR, GL_NUM_COMPRESSED_TEXTURE_FORMATS, GL_PACK_ALIGNMENT,
+    GL_PACK_ROW_LENGTH, GL_PACK_SKIP_PIXELS, GL_PACK_SKIP_ROWS, GL_PRIMITIVE_RESTART_FIXED_INDEX,
+    GL_RENDERER, GL_RGBA8, GL_RGBA16F, GL_SHADING_LANGUAGE_VERSION, GL_SRGB8_ALPHA8, GL_VENDOR,
+    GL_VERSION, GL_VERTEX_SHADER,
 };
 use oxgl_sys::{
     Current, PixelDestination, PrecisionFormat, ReadPixels, StateCall, ValueType, Values,
@@ -429,6 +430,63 @@ impl Context {
         if !self.buffer.resize(width, height, &mut self.errors) {
             self.errors.mark_lost();
         }
+    }
+
+    /// `drawingBufferStorage` (WebGL 1.0 §2.2): `INVALID_OPERATION` without
+    /// `alpha`, `INVALID_ENUM` for a format the enabled extensions do not
+    /// make renderable, `INVALID_VALUE` above `MAX_RENDERBUFFER_SIZE`; the
+    /// drawing buffer is unchanged after any of them. A no-op when lost.
+    pub fn drawing_buffer_storage(&mut self, format: u32, width: u32, height: u32) {
+        let Some(current) = current(&self.buffer, &mut self.errors) else {
+            return;
+        };
+        if !self.buffer.attributes().alpha {
+            self.errors.synthesize(GL_INVALID_OPERATION);
+            return;
+        }
+        let extension = |name| self.extensions.is_enabled(name);
+        let accepted = match format {
+            GL_RGBA8 => true,
+            GL_SRGB8_ALPHA8 => self.webgl2 || extension("EXT_sRGB"),
+            GL_RGBA16F => {
+                extension("EXT_color_buffer_float") || extension("EXT_color_buffer_half_float")
+            }
+            _ => false,
+        };
+        if !accepted {
+            self.errors.synthesize(GL_INVALID_ENUM);
+            return;
+        }
+        let max = crate::drawing_buffer::integers(&current, GL_MAX_RENDERBUFFER_SIZE)
+            .map_or(0, |[max, _]| max.unsigned_abs());
+        if width > max || height > max {
+            self.errors.synthesize(GL_INVALID_VALUE);
+            return;
+        }
+        // Both are at most MAX_RENDERBUFFER_SIZE, an i32.
+        let (Ok(width), Ok(height)) = (i32::try_from(width), i32::try_from(height)) else {
+            return;
+        };
+        if !self.buffer.storage(format, width, height, &mut self.errors) {
+            self.errors.mark_lost();
+        }
+    }
+
+    /// Reallocates and clears the drawing buffer at its size and format, as
+    /// a change of `drawingBufferColorSpace` does. A no-op when lost.
+    pub fn reallocate(&mut self) {
+        if self.errors.is_lost() {
+            return;
+        }
+        if !self.buffer.reallocate(&mut self.errors) {
+            self.errors.mark_lost();
+        }
+    }
+
+    /// The drawing buffer's color format (`drawingBufferFormat`).
+    #[must_use]
+    pub fn drawing_buffer_format(&self) -> u32 {
+        self.buffer.color_format()
     }
 
     /// The drawing buffer after compositing; see [`DrawingBuffer::present`].

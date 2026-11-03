@@ -4,7 +4,8 @@
 use napi::bindgen_prelude::{Env, Uint8Array, Unknown};
 use napi_derive::napi;
 use oxgl_core::Context;
-use oxgl_core::textures::{TexCopy, TexSource};
+use oxgl_core::color::ColorSpace;
+use oxgl_core::textures::{SourceImage, TexCopy, TexSource};
 use oxgl_sys::napi_view::ReadSource;
 use oxgl_sys::{TexImage, Upload};
 
@@ -132,6 +133,8 @@ pub fn tex_upload(
     offset: f64,
     source_width: u32,
     source_height: u32,
+    source_color_space: u32,
+    unpack_color_space: u32,
 ) -> napi::Result<()> {
     let view = source.as_ref().map(ReadSource::new).transpose()?.flatten();
     with_context(env, index, version, |c| {
@@ -150,12 +153,16 @@ pub fn tex_upload(
                 offset: byte_offset,
             },
             (2, _) => TexSource::UnpackBuffer(long(offset)),
-            (3 | 4, Some(v)) => TexSource::Rgba8 {
+            (3 | 4, Some(v)) => TexSource::Rgba8(SourceImage {
                 source: v,
                 width: source_width as usize,
                 height: source_height as usize,
+                color_spaces: (
+                    ColorSpace::from_code(source_color_space),
+                    ColorSpace::from_code(unpack_color_space),
+                ),
                 as_is: kind == 4,
-            },
+            }),
             _ => TexSource::None,
         };
         c.tex_upload(call, args, source);

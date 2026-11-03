@@ -4,10 +4,13 @@
 [![npm](https://img.shields.io/npm/v/@oxgl-js/oxgl)](https://www.npmjs.com/package/@oxgl-js/oxgl)
 [![license](https://img.shields.io/badge/license-BSD--3--Clause-blue)](LICENSE)
 
-Standards-compliant WebGL 1 and WebGL 2 for Node.js, rendered headless through
-ANGLE, with a SwiftShader software fallback. The full WebGL 1 and WebGL 2 APIs
-are implemented, with extensions and context loss, and are checked against the
-Khronos conformance suite; three.js renders through it unmodified.
+Oxgl is headless WebGL 1 and WebGL 2 for Node.js that strives for standards
+compliance. It renders through ANGLE. By default it uses the GPU when one is
+available and the SwiftShader software renderer otherwise. It implements the
+WebGL 1 and WebGL 2 APIs, including extensions and context loss, and is tested
+against the Khronos WebGL conformance suites.
+
+Three.js works with oxgl without any changes to three.js (see three.js below).
 
 ## Install
 
@@ -15,54 +18,59 @@ Khronos conformance suite; three.js renders through it unmodified.
 npm install @oxgl-js/oxgl
 ```
 
-Prebuilt for Linux x64 and arm64 (glibc 2.34 or newer, such as Ubuntu 22.04 or
-Debian 12), macOS arm64, and Windows x64 and arm64, on Node.js 22.22.2 or
-newer. Installing needs no Rust toolchain, compiler or install script: npm
-downloads only the host's platform package (`@oxgl-js/<platform>`), which holds
-the native addon and its ANGLE libraries. Linux with musl (such as Alpine) has
-no build; importing oxgl there throws an error with
-`code === 'OXGL_NATIVE_MISSING'`. To build from source, see Prerequisites below
-and `CONTRIBUTING.md`.
+Oxgl needs Node.js 22.22.2 or newer, on one of the platforms below. Installing
+needs no Rust toolchain, compiler or install script: npm downloads only the
+package for your platform, which holds the native addon and its ANGLE
+libraries. To build from source, see Prerequisites below and
+`CONTRIBUTING.md`.
 
 ## Platforms
 
-Supported and tested: Linux x64 and Linux arm64 (glibc), macOS arm64, Windows
-x64 and Windows arm64. Each has a pinned ANGLE bundle, and CI runs the Rust and
-Node tests, both Khronos conformance suites and three.js's examples on each with
-the software backend. The [results page](https://jerryryle.github.io/oxgl/)
-shows every conformance page's and three.js example's result on each platform
-from the latest CI run on `main`, with the reason for each one that doesn't
-pass.
-Conformance results differ from Linux arm64 only in these pages, which
-`conformance/expectations.txt` lists for the platforms they apply to:
+| Platform | Package | GPU backend |
+|---|---|---|
+| Linux x64 (glibc) | `@oxgl-js/linux-x64-gnu` | Vulkan |
+| Linux arm64 (glibc) | `@oxgl-js/linux-arm64-gnu` | Vulkan |
+| macOS arm64 | `@oxgl-js/darwin-arm64` | Metal |
+| Windows x64 | `@oxgl-js/win32-x64-msvc` | Direct3D 11 |
+| Windows arm64 | `@oxgl-js/win32-arm64-msvc` | Direct3D 11 |
 
-- On x64 (Linux and Windows), 18 deqp pages that render to 32-bit integer
-  color buffers (`rgba32i`, `r32ui` and similar) fail their image comparisons,
-  because of a bug in the WebGL conformance tests: their shaders convert floats
-  just past the 32-bit integer range, which GLSL leaves undefined, and the
-  reference images assume the result is clamped. arm64 clamps and x86 does not.
-  The native dEQP tests fixed this in 2018; the WebGL port has not.
+On Linux, oxgl needs glibc 2.34 or newer, such as Ubuntu 22.04 or Debian 12.
+There is no build for Linux with musl (such as Alpine), for macOS on Intel, or
+for any other platform; importing oxgl there throws an error with
+`code === 'OXGL_NATIVE_MISSING'`.
 
-Docker on a Mac exposes no GPU to Linux containers, so the Linux arm64 runs use
-the software backend. The GPU backend path has been checked on macOS arm64
-(ANGLE Metal on an Apple GPU): all Node tests pass, and the Khronos results match
-Linux arm64 except for differences in image decoding by the conformance
-runner's canvas package (node-canvas at the time; now `@napi-rs/canvas`).
+CI runs the Rust and Node tests, both Khronos conformance suites and three.js's
+examples on all five platforms, with the software backend; it does not yet test
+the GPU backends. The [results page](https://jerryryle.github.io/oxgl/) shows
+every conformance page's and three.js example's result on each platform from
+the latest CI run on `main`, with the reason for each one that doesn't pass.
+The results are the same on every platform, apart from the x64 pages listed
+under Known issues and the three.js examples noted in the three.js section
+below.
 
 ## Known issues
 
-- **SwiftShader initialization briefly changes process-global state.** The
-  first SwiftShader context in a process (`backend: 'software'`,
-  `OXGL_BACKEND=software`, or an `'auto'` context the GPU cannot provide,
-  whether there is no usable GPU or one GPU context fails to create, for
-  example when GPU memory runs out) makes ANGLE set
-  `VK_ICD_FILENAMES` and, on Linux and Windows, change the working directory
-  for a few milliseconds, then restore both. A thread that reads the
-  environment or uses a relative path at that moment can misbehave or crash.
-  GPU backends are unaffected. To control when this happens, create and destroy
-  one software context at startup, before starting other threads. The cause is
-  ANGLE's `ScopedVkLoaderEnvironment`; this entry goes away once the pinned
-  ANGLE stops doing it (tracked in `angle/README.md`, "Known upstream issues").
+- **18 WebGL 2 conformance pages fail with the software backend on x64.** On
+  Linux x64 and Windows x64, 18 deqp pages that render to 32-bit integer color
+  buffers (`rgba32i`, `r32ui` and similar) fail their image comparisons. The
+  bug is in the tests: their shaders convert floats just outside the 32-bit
+  integer range, which GLSL leaves undefined, and the reference images assume
+  the result is clamped. On arm64 the conversion clamps and on x86 it does not,
+  so the same pages pass on arm64. The native dEQP tests fixed this in 2018
+  (VK-GL-CTS commit 6624c8aa); their WebGL port has not.
+  `conformance/expectations.txt` lists the pages.
+- **SwiftShader initialization briefly changes process-global state.** When a
+  process creates its first SwiftShader context, ANGLE sets `VK_ICD_FILENAMES`
+  and, on Linux and Windows, changes the working directory for a few
+  milliseconds, then restores both. A thread that reads the environment or uses
+  a relative path at that moment can misbehave or crash. This happens with
+  `backend: 'software'`, with `OXGL_BACKEND=software`, and when an `'auto'`
+  context falls back to SwiftShader, for example because there is no usable GPU
+  or GPU memory has run out. GPU contexts are unaffected. To control when it
+  happens, create and destroy one software context at startup, before starting
+  other threads. The cause is ANGLE's `ScopedVkLoaderEnvironment`, and the issue
+  will go away when the pinned ANGLE stops doing this (tracked in
+  `angle/README.md`, "Known upstream issues").
 - **SwiftShader can get the depth of a near-clipped triangle wrong.** With the
   software backend, a large triangle that the near plane clips can be drawn
   with depths that are too near, hiding geometry in front of it. A typical
@@ -122,7 +130,34 @@ canvas. `gl.resize(width, height)` (not part of WebGL) does the same for any
 context, also updating a `HeadlessCanvas`. A resize clears the buffer and
 keeps all other state, including the viewport.
 
-Libraries that take a canvas and a context, such as three.js, can use both:
+`gl.drawingBufferStorage(format, width, height)` reallocates the drawing buffer
+in `RGBA8`, `SRGB8_ALPHA8` (WebGL 2, or WebGL 1 with `EXT_sRGB`) or `RGBA16F`
+(with `EXT_color_buffer_float` or `EXT_color_buffer_half_float`), and
+`gl.drawingBufferFormat` reports the current format. A half-float drawing
+buffer reads back as `RGBA`/`FLOAT`. Resizing afterwards keeps the format.
+
+A drawing buffer whose storage would take more than 1 GiB is allocated
+without multisampling, and then smaller, as the WebGL specification allows. For
+example, an antialiased buffer larger than about 5460×5460 loses its
+multisampling.
+
+### Color spaces
+
+`gl.unpackColorSpace` (`"srgb"`, the default, or `"display-p3"`) is the color
+space that `TexImageSource` uploads are converted into. An `ImageData`-shaped
+object's `colorSpace` property gives its own color space, and another oxgl
+context's canvas has that context's `drawingBufferColorSpace`. Every other
+source counts as sRGB. Uploads from typed arrays are not converted, and
+`pixelStorei(UNPACK_COLORSPACE_CONVERSION_WEBGL, NONE)` turns conversion off.
+
+`gl.drawingBufferColorSpace` records the color space of the drawing buffer's
+values; changing it clears the buffer. `encodePNG` marks a Display P3 buffer's
+PNG with a `cICP` chunk.
+
+### three.js
+
+Three.js needs no changes to work with oxgl. Pass it an oxgl context and that
+context's canvas:
 
 ```js
 import * as THREE from 'three';
@@ -148,7 +183,7 @@ the 354 examples it runs (377 less 23 that three.js's own test also skips):
   workers, or no `AudioContext`. 8 differ for known reasons: SwiftShader (3,
   including the near-clipped triangle under "Known issues"), random noise
   (3), more compressed texture formats in SwiftShader, and a wall-clock
-  timer. None is unexplained.
+  timer.
 
 The other platforms give the same outcomes, with two exceptions. 3 of the
 examples that differ on Linux arm64 (`webgl_shadowmap_viewer` and the two
@@ -158,6 +193,88 @@ and Windows), `webgl_camera_logarithmicdepthbuffer` differs in 2.20% of
 pixels rather than 1.73%, mostly where its normal z-buffer view shows
 z-fighting. `threejs/expectations.txt` lists the platforms each entry applies
 to.
+
+### Images and textures
+
+Node has no `<img>` element or image decoder, so the `TexImageSource` forms of
+`texImage2D`, `texSubImage2D`, `texImage3D` and `texSubImage3D` take:
+
+- an `ImageData`-shaped object, `{ width, height, data }`, whose `data` is an
+  8-bit typed array (a `Uint8Array`, `Uint8ClampedArray` or Node `Buffer`) of
+  RGBA pixels, top row first and not premultiplied, or a `Uint16Array` of
+  16-bit RGBA pixels. Other arrays, such as a `Float32Array`, throw a
+  `TypeError`, and `data` too short for `width × height` pixels generates
+  `INVALID_OPERATION`;
+- another oxgl context's `canvas`;
+- any object with `getContext('2d')`, such as an `@napi-rs/canvas` canvas.
+
+Decoding a file with an image library gives an `ImageData`-shaped object
+directly. With [`sharp`](https://www.npmjs.com/package/sharp):
+
+```js
+import sharp from 'sharp';
+
+const { data, info } = await sharp('wood.png').ensureAlpha().raw().toBuffer({ resolveWithObject: true });
+gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, { width: info.width, height: info.height, data });
+```
+
+With [`pngjs`](https://www.npmjs.com/package/pngjs), whose decoded image is
+already `{ width, height, data }`:
+
+```js
+import { readFileSync } from 'node:fs';
+import { PNG } from 'pngjs';
+
+const image = PNG.sync.read(readFileSync('wood.png'));
+gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, image);
+```
+
+A 2D canvas library works too, by drawing the image into a canvas and uploading
+the canvas. A 2D canvas stores premultiplied pixels, so semi-transparent pixels
+lose some precision this way; opaque images upload exactly.
+
+```js
+import { createCanvas, loadImage } from '@napi-rs/canvas';
+
+const img = await loadImage('wood.png');
+const canvas = createCanvas(img.width, img.height);
+canvas.getContext('2d').drawImage(img, 0, 0);
+gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, canvas);
+```
+
+In three.js, an `ImageData`-shaped object is a texture's image like any other:
+
+```js
+const texture = new THREE.Texture(image); // image from sharp or pngjs, as above
+texture.colorSpace = THREE.SRGBColorSpace;
+texture.needsUpdate = true;
+```
+
+### Saving a PNG
+
+`encodePNG(gl)` (not part of WebGL) resolves with a PNG of the context's
+drawing buffer, as a browser's `canvas.toDataURL('image/png')` would encode
+it: top row first, with alpha unpremultiplied. It reads the drawing buffer
+whatever framebuffer is bound and leaves all context state unchanged.
+
+```js
+import { writeFile } from 'node:fs/promises';
+import { createContext, encodePNG } from '@oxgl-js/oxgl';
+
+const gl = createContext({ width: 64, height: 32 });
+gl.clearColor(0, 1, 0, 1);
+gl.clear(gl.COLOR_BUFFER_BIT);
+await writeFile('frame.png', await encodePNG(gl));
+gl.destroy();
+```
+
+The pixels are read during the call, so drawing afterwards does not change the
+result. Compression runs on libuv's thread pool, so it does not block the event
+loop; that pool has 4 threads by default, shared with `fs` and `dns.lookup`, so
+a server encoding many large frames at once may want a larger
+`UV_THREADPOOL_SIZE`. The result is a Node `Buffer`, declared as `Uint8Array`
+so the package's TypeScript declarations need no Node types. On a lost or
+destroyed context the promise rejects with `OXGL_CONTEXT_LOST`.
 
 ### Backends
 
@@ -217,33 +334,32 @@ Invalid options throw a `TypeError` or `RangeError`. Other failures throw an
 | `OXGL_INVALID_BACKEND` | `OXGL_BACKEND` has a value other than `auto`, `gpu`, `software`, or empty |
 | `OXGL_CONTEXT_CREATION_FAILED` | no backend could create the context, for example WebGL 2 on a backend without OpenGL ES 3.0, or `failIfMajorPerformanceCaveat` with the software backend |
 | `OXGL_NATIVE_MISSING` | the native addon or its ANGLE libraries are missing or failed to load |
+| `OXGL_CONTEXT_LOST` | `encodePNG` was given a lost or destroyed context (the promise rejects) |
 
 WebGL errors are reported through `getError()`, as in a browser.
 
 ## Performance
 
-`npm run bench` measures per-call overhead, draws, transfers and two three.js
-scenes. On Linux arm64 in Docker (16 cores, software backend, 2 s per case):
+To measure performance on your own machine, build oxgl and run the benchmarks:
 
-| Case | Result |
-|---|---|
-| `enable` (a state call: WebIDL conversion and the native call) | 11.6 M calls/s |
-| `uniform4f` | 7.3 M calls/s |
-| `drawArrays`, one small triangle | 53 k draws/s |
-| `bufferSubData`, 1 MiB | 32 GB/s |
-| `texSubImage2D`, 512×512 RGBA8 | 26 GB/s |
-| `readPixels`, 256×256 RGBA8 | 3.3 GB/s |
-| three.js, 1000 lit meshes | 52 frames/s |
-| three.js, one 128×64-segment lit sphere | 1230 frames/s |
+```sh
+npm run build
+npm run bench
+```
 
-Draws cost the same as calling ANGLE directly (51.9 k draws/s in
-`cargo test -p oxgl-sys --test angle --release raw_draw_rate -- --ignored`):
-the time is SwiftShader's, and a GPU backend draws much faster. oxgl adds
-about 100 ns per call.
+They measure state calls, uniform updates, draws, buffer and texture uploads,
+`readPixels`, and two three.js scenes, and report operations per second or
+bytes per second for each. They use the backend `OXGL_BACKEND` selects (the
+default is `auto`) and run each case for 1 second; to run longer, set
+`OXGL_BENCH_MS` to a time in milliseconds. Results vary widely between
+machines and backends, so compare them on one machine.
 
-On the GPU backend (macOS arm64, ANGLE Metal, Apple M4 Max), the same
-benchmarks give 715 k small draws/s and 830 frames/s for the 1000-mesh
-three.js scene.
+Oxgl adds little overhead of its own: about 100 ns per WebGL call on Linux
+arm64, for checking the arguments and calling into native code. Most of the
+time for draws and three.js frames is spent in the renderer, which on the
+software backend is SwiftShader, so a GPU backend is usually much faster for
+draws. To compare draws with calling ANGLE directly, run
+`cargo test -p oxgl-sys --test angle --release raw_draw_rate -- --ignored`.
 
 ## Prerequisites
 

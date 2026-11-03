@@ -93,3 +93,103 @@ The implementation SHALL NOT access the destination's memory after `readPixels` 
 #### Scenario: Mismatched overload
 - **WHEN** `readPixels` with an `ArrayBufferView` is called while a pixel pack buffer is bound
 - **THEN** `INVALID_OPERATION` is generated
+
+### Requirement: Drawing buffer as a PNG
+The package SHALL export `encodePNG(gl)`, returning a `Promise` of a Node `Buffer` holding a PNG of `gl`'s drawing buffer at its current size: 8-bit RGBA, top row first, unpremultiplied as a canvas's pixels are read (WebGL 1.0 §5.14.8), as `toDataURL('image/png')` serializes a canvas (HTML §4.12.5, "Serializing bitmaps to a file"). It SHALL read the drawing buffer whatever framebuffer is bound, resolving an antialiased one.
+
+#### Scenario: Rows top first
+- **WHEN** a 1×2 context has its top row cleared red and its bottom row green (with a scissor test) and the awaited `encodePNG(gl)` is decoded
+- **THEN** the image is 1×2, its first row is red and its second green, all opaque
+
+#### Scenario: Premultiplied buffer unpremultiplied
+- **WHEN** a context with default attributes is cleared to `(0.5, 0, 0, 0.5)` and the awaited `encodePNG(gl)` is decoded
+- **THEN** its pixel is `[255, 0, 0, 128]` within one unit
+
+#### Scenario: No alpha channel
+- **WHEN** a context created with `alpha: false` is cleared to `(0, 0, 1, 0)` and the awaited `encodePNG(gl)` is decoded
+- **THEN** its pixel is `[0, 0, 255, 255]`
+
+#### Scenario: Antialiased buffer
+- **WHEN** a context created with `antialias: true` is cleared to blue and the awaited `encodePNG(gl)` is decoded
+- **THEN** every pixel is blue
+
+#### Scenario: Framebuffer object bound
+- **WHEN** a context is cleared to red, then binds a framebuffer object cleared to green, and calls `encodePNG(gl)`
+- **THEN** the decoded image is red
+
+#### Scenario: After a resize
+- **WHEN** a 4×4 context is resized to 8×2 and the awaited `encodePNG(gl)` is decoded
+- **THEN** the image is 8×2
+
+### Requirement: PNG result typed without Node types
+The package's TypeScript declarations SHALL type `encodePNG`'s result as `Promise<Uint8Array>`, so that a project with the DOM library's globals and no Node type definitions can use them.
+
+#### Scenario: Declarations without Node types
+- **WHEN** a TypeScript project with `lib: ["ES2023", "DOM"]`, `types: []` and no `@types/node` type-checks `const png: Uint8Array = await encodePNG(gl)` against the package's declarations
+- **THEN** it compiles without errors
+
+### Requirement: Pixels read at the call
+`encodePNG` SHALL read the drawing buffer before it returns, so drawing to, resizing, losing or destroying the context before the promise settles SHALL NOT change the result.
+
+#### Scenario: Drawing after the call
+- **WHEN** a context is cleared to red, `encodePNG(gl)` is called, the context is cleared to green and destroyed, and the promise is then awaited and decoded
+- **THEN** the image is red
+
+#### Scenario: Resizing after the call
+- **WHEN** a 4×4 context is cleared to red, `encodePNG(gl)` is called, the context is resized to 8×2 and cleared to green, and the promise is then awaited and decoded
+- **THEN** the image is 4×4 and red
+
+### Requirement: Encoding leaves the context unchanged
+`encodePNG` SHALL leave every piece of the context's state unchanged, including bindings, pixel pack parameters and a bound pixel pack buffer, and SHALL neither add nor remove errors reported by `getError`.
+
+#### Scenario: State and errors kept
+- **WHEN** a WebGL 2 context binds a framebuffer object and a pixel pack buffer, sets `PACK_ALIGNMENT` to 8 and `PACK_ROW_LENGTH` to 3, generates `INVALID_ENUM`, and calls `encodePNG(gl)`
+- **THEN** the bindings and pack parameters read back as set, and `getError()` returns `INVALID_ENUM` and then `NO_ERROR`
+
+### Requirement: Encoding errors
+`encodePNG` SHALL return a promise rejected with a `TypeError` when its argument is not a context oxgl created, and with an `Error` with `code === 'OXGL_CONTEXT_LOST'` when the context is lost or destroyed; it SHALL NOT throw synchronously. A context restored after a loss SHALL encode again.
+
+#### Scenario: Not a context
+- **WHEN** `encodePNG({})` is called
+- **THEN** it returns a promise that rejects with a `TypeError`
+
+#### Scenario: Destroyed context
+- **WHEN** a context is destroyed and `encodePNG(gl)` is called
+- **THEN** it returns a promise that rejects with an `Error` with `code === 'OXGL_CONTEXT_LOST'`
+
+#### Scenario: Lost and restored
+- **WHEN** a context's canvas calls `preventDefault()` on `webglcontextlost`, the context is lost through `WEBGL_lose_context`, `encodePNG(gl)` is called, `restoreContext()` is called, and after `webglcontextrestored` fires the context is cleared to red
+- **THEN** the first promise rejects with `OXGL_CONTEXT_LOST`, and `encodePNG(gl)` after the restore decodes as red
+
+### Requirement: Reading half-float and sRGB drawing buffers
+Wherever oxgl reads the drawing buffer as 8-bit RGBA for `encodePNG` or for an upload of its canvas, an `RGBA16F` drawing buffer SHALL be read as floats, clamped to `[0, 1]` and rounded to 8 bits. An `SRGB8_ALPHA8` drawing buffer SHALL be read as its stored 8-bit values, without converting them to linear.
+
+#### Scenario: Half-float buffer as a PNG
+- **WHEN** a WebGL 2 context with `RGBA16F` storage is cleared to `(2.0, 0.5, -1.0, 1.0)` and the awaited `encodePNG(gl)` is decoded
+- **THEN** its pixel is `[255, 128, 0, 255]` within one unit
+
+#### Scenario: sRGB buffer uploaded to another context
+- **WHEN** context A with `SRGB8_ALPHA8` storage is cleared to the linear equivalent of `(64, 32, 16) / 255`, opaque, and context B uploads `A.canvas`
+- **THEN** B's texture samples `[64, 32, 16, 255]` within one unit (cf. Khronos `conformance2/canvas/drawingbuffer-storage-test.html`, "Drawing opaque SRGB8_ALPHA8 to canvas")
+
+### Requirement: Unpremultiplying half-float and sRGB drawing buffers
+When that read is of a premultiplied drawing buffer, an `RGBA16F` buffer's colors SHALL be divided by alpha before rounding to 8 bits, and an `SRGB8_ALPHA8` buffer's stored, encoded values SHALL be divided by alpha as they are.
+
+#### Scenario: Semi-transparent half-float buffer
+- **WHEN** a premultiplied WebGL 2 context with `RGBA16F` storage is cleared to `(0.005, 0.005, 0.005, 0.01)` and the awaited `encodePNG(gl)` is decoded
+- **THEN** its pixel is `[128, 128, 128, 3]` within two units
+
+#### Scenario: Semi-transparent sRGB buffer
+- **WHEN** a premultiplied WebGL 2 context with `SRGB8_ALPHA8` storage is cleared to the linear equivalent of `(32, 64, 16) / 255` with alpha `64 / 255`, and context B uploads its canvas
+- **THEN** B's texture samples `[128, 255, 64, 64]` within five units (Khronos `conformance2/canvas/drawingbuffer-storage-test.html`, "Drawing transparent SRGB8_ALPHA8 to canvas")
+
+### Requirement: PNG color space
+`encodePNG` SHALL mark the PNG of a drawing buffer whose `drawingBufferColorSpace` is `"display-p3"` with a `cICP` chunk giving Display P3 primaries, the sRGB transfer function and full-range RGB (colour primaries 12, transfer characteristics 13, matrix coefficients 0, video full range 1; the `cICP` chunk of PNG, Third Edition). A PNG of an `"srgb"` drawing buffer SHALL carry no color-space chunk, as before.
+
+#### Scenario: Display P3 PNG
+- **WHEN** a context sets `drawingBufferColorSpace` to `"display-p3"`, clears, and the awaited `encodePNG(gl)` is parsed
+- **THEN** it has a `cICP` chunk with bytes `[12, 13, 0, 1]`, before its `IDAT` chunk
+
+#### Scenario: sRGB PNG
+- **WHEN** a context with the default color space is encoded
+- **THEN** the PNG has no `cICP`, `iCCP`, `sRGB` or `gAMA` chunk

@@ -13,6 +13,8 @@ test('CommonJS require returns the same exports as import', async () => {
   const required = createRequire(import.meta.url)('@oxgl-js/oxgl');
   const imported = await import('@oxgl-js/oxgl');
   assert.equal(required.nativeAbiVersion, imported.nativeAbiVersion);
+  assert.equal(typeof imported.encodePNG, 'function');
+  assert.equal(required.encodePNG, imported.encodePNG);
 });
 
 test('a missing addon throws OXGL_NATIVE_MISSING naming platform and arch', () => {

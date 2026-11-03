@@ -1,0 +1,27 @@
+<!DOCTYPE html>
+<html><head><script src="harness.js"></script></head><body>
+<script>
+// An opaque red ImageBitmap uploaded with unpackColorSpace "display-p3"
+// converts as other sources do: sRGB red is [234, 51, 35] in Display P3.
+var img = new Image();
+img.onload = function () {
+  createImageBitmap(img).then(function (bitmap) {
+    var gl = document.createElement("canvas").getContext("webgl");
+    gl.unpackColorSpace = "display-p3";
+    var texture = gl.createTexture();
+    gl.bindTexture(gl.TEXTURE_2D, texture);
+    gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, gl.RGBA, gl.UNSIGNED_BYTE, bitmap);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, gl.createFramebuffer());
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+    var px = new Uint8Array(4);
+    gl.readPixels(1, 1, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, px);
+    var expected = [234, 51, 35, 255];
+    var near = expected.every(function (v, i) { return Math.abs(px[i] - v) <= 2; });
+    if (near) testPassed("converted"); else testFailed("pixel " + Array.prototype.slice.call(px));
+    finishTest();
+  }, function (e) { testFailed("createImageBitmap rejected: " + e.name); finishTest(); });
+};
+img.onerror = function () { testFailed("image failed to load"); finishTest(); };
+img.src = "data:image/svg+xml," + encodeURIComponent('<svg xmlns="http://www.w3.org/2000/svg" width="3" height="4"><rect width="3" height="4" fill="red"/></svg>');
+</script>
+</body></html>

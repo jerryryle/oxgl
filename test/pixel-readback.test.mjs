@@ -1,11 +1,15 @@
 // pixel-readback spec scenarios.
 import assert from 'node:assert/strict';
+import { execFileSync } from 'node:child_process';
 import { once } from 'node:events';
+import { createRequire } from 'node:module';
 import { test } from 'node:test';
+import { fileURLToPath } from 'node:url';
 import { Worker } from 'node:worker_threads';
 
-import { createContext } from '@oxgl-js/oxgl';
+import { createContext, encodePNG } from '@oxgl-js/oxgl';
 
+import { decodePng } from '../conformance/png.mjs';
 import { allPixels } from './helpers.mjs';
 
 function context(t, options = {}) {
@@ -242,5 +246,162 @@ test('implementation read format', (t) => {
     gl.pixelStorei(gl.PACK_ALIGNMENT, 1);
     gl.readPixels(0, 0, 1, 1, format, type, new View(components));
     assert.equal(gl.getError(), gl.NO_ERROR, `webgl2: ${String(webgl2)}`);
+  }
+});
+
+/** The decoded image of the PNG that `encodePNG(gl)` resolves with. */
+async function encoded(promise) {
+  const png = await promise;
+  assert.ok(Buffer.isBuffer(png), 'resolves with a Buffer');
+  const image = decodePng(png);
+  assert.ok(image !== undefined, 'a valid PNG');
+  return image;
+}
+
+function near(actual, expected, tolerance = 1) {
+  assert.ok(
+    actual.every((v, i) => Math.abs(v - expected[i]) <= tolerance),
+    `${JSON.stringify(actual)} is not within ${String(tolerance)} of ${JSON.stringify(expected)}`,
+  );
+}
+
+test('encodePNG writes rows top first', async (t) => {
+  const gl = context(t, { width: 1, height: 2 });
+  gl.enable(gl.SCISSOR_TEST);
+  gl.scissor(0, 1, 1, 1);
+  gl.clearColor(1, 0, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.scissor(0, 0, 1, 1);
+  gl.clearColor(0, 1, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  const image = await encoded(encodePNG(gl));
+  assert.equal(image.width, 1);
+  assert.equal(image.height, 2);
+  assert.deepEqual([...image.data], [255, 0, 0, 255, 0, 255, 0, 255]);
+});
+
+test('encodePNG unpremultiplies a premultiplied buffer', async (t) => {
+  const gl = context(t, { width: 1, height: 1 });
+  gl.clearColor(0.5, 0, 0, 0.5);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  near([...(await encoded(encodePNG(gl))).data], [255, 0, 0, 128]);
+});
+
+test('encodePNG of a context without alpha is opaque', async (t) => {
+  const gl = context(t, { width: 1, height: 1, attributes: { alpha: false } });
+  gl.clearColor(0, 0, 1, 0);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  assert.deepEqual([...(await encoded(encodePNG(gl))).data], [0, 0, 255, 255]);
+});
+
+test('encodePNG resolves an antialiased buffer', async (t) => {
+  const gl = context(t, { attributes: { antialias: true } });
+  gl.clearColor(0, 0, 1, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  assert.ok(allPixels((await encoded(encodePNG(gl))).data, [0, 0, 255, 255]));
+});
+
+test('encodePNG reads the drawing buffer while a framebuffer object is bound', async (t) => {
+  const gl = context(t);
+  gl.clearColor(1, 0, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  const texture = gl.createTexture();
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 4, 4, 0, gl.RGBA, gl.UNSIGNED_BYTE, null);
+  gl.bindFramebuffer(gl.FRAMEBUFFER, gl.createFramebuffer());
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+  gl.clearColor(0, 1, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  assert.ok(allPixels((await encoded(encodePNG(gl))).data, [255, 0, 0, 255]));
+});
+
+test('encodePNG after a resize has the new size', async (t) => {
+  const gl = context(t);
+  gl.resize(8, 2);
+  const image = await encoded(encodePNG(gl));
+  assert.equal(image.width, 8);
+  assert.equal(image.height, 2);
+});
+
+test('encodePNG reads the pixels at the call', async (t) => {
+  const gl = context(t);
+  gl.clearColor(1, 0, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  const png = encodePNG(gl);
+  gl.clearColor(0, 1, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  gl.destroy();
+  assert.ok(allPixels((await encoded(png)).data, [255, 0, 0, 255]));
+});
+
+test('encodePNG is not affected by a resize after the call', async (t) => {
+  const gl = context(t);
+  gl.clearColor(1, 0, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  const png = encodePNG(gl);
+  gl.resize(8, 2);
+  gl.clearColor(0, 1, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  const image = await encoded(png);
+  assert.equal(image.width, 4);
+  assert.equal(image.height, 4);
+  assert.ok(allPixels(image.data, [255, 0, 0, 255]));
+});
+
+test('encodePNG leaves state and errors unchanged', async (t) => {
+  const gl = context(t, { webgl2: true });
+  const framebuffer = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, framebuffer);
+  const buffer = gl.createBuffer();
+  gl.bindBuffer(gl.PIXEL_PACK_BUFFER, buffer);
+  gl.pixelStorei(gl.PACK_ALIGNMENT, 8);
+  gl.pixelStorei(gl.PACK_ROW_LENGTH, 3);
+  gl.enable(0);
+  await encoded(encodePNG(gl));
+  assert.equal(gl.getParameter(gl.FRAMEBUFFER_BINDING), framebuffer);
+  assert.equal(gl.getParameter(gl.PIXEL_PACK_BUFFER_BINDING), buffer);
+  assert.equal(gl.getParameter(gl.PACK_ALIGNMENT), 8);
+  assert.equal(gl.getParameter(gl.PACK_ROW_LENGTH), 3);
+  assert.equal(gl.getError(), gl.INVALID_ENUM);
+  assert.equal(gl.getError(), gl.NO_ERROR);
+});
+
+test('encodePNG rejects a value that is not a context', async () => {
+  let png;
+  assert.doesNotThrow(() => {
+    png = encodePNG({});
+  });
+  await assert.rejects(png, TypeError);
+});
+
+test('encodePNG rejects a destroyed context', async () => {
+  const gl = createContext({ width: 4, height: 4 });
+  gl.destroy();
+  await assert.rejects(encodePNG(gl), { code: 'OXGL_CONTEXT_LOST' });
+});
+
+test('encodePNG rejects a lost context and encodes again after a restore', async (t) => {
+  const gl = context(t);
+  const lose = gl.getExtension('WEBGL_lose_context');
+  gl.canvas.addEventListener('webglcontextlost', (event) => event.preventDefault());
+  lose.loseContext();
+  await once(gl.canvas, 'webglcontextlost');
+  await assert.rejects(encodePNG(gl), { code: 'OXGL_CONTEXT_LOST' });
+  lose.restoreContext();
+  await once(gl.canvas, 'webglcontextrestored');
+  gl.clearColor(1, 0, 0, 1);
+  gl.clear(gl.COLOR_BUFFER_BIT);
+  assert.ok(allPixels((await encoded(encodePNG(gl))).data, [255, 0, 0, 255]));
+});
+
+test('encodePNG declarations need no Node types', () => {
+  // A consumer with the DOM library and without @types/node type-checks the
+  // built declarations; tsc exits non-zero on an error and prints it to stdout.
+  const tsc = createRequire(import.meta.url).resolve('typescript/bin/tsc');
+  const project = fileURLToPath(new URL('fixtures/dom-types/tsconfig.json', import.meta.url));
+  try {
+    execFileSync(process.execPath, [tsc, '-p', project], { stdio: 'pipe' });
+  } catch (error) {
+    assert.fail(`tsc failed:\n${String(error.stdout)}${String(error.stderr)}`);
   }
 });
