@@ -120,9 +120,55 @@ Results on llvmpipe (task 3.2), with oxgl built with `test-gles` against `angle-
 
 ## Results on the Pi
 
-Filled in by tasks 5.x: renderer string, attributes and bits, the refused CPU renderer, every failing conformance page and three.js example with its reason and whether V3D or oxgl is at fault, and `npm run bench` on GLES (WebGL 2) beside Vulkan (`--webgl1`).
+Raspberry Pi 5 on Debian 13 (Raspberry Pi OS), Mesa 26.2.2, oxgl built against `angle-8103.1` (the arm64 container build, glibc 2.39, run on the Pi's 2.41), Node 26.7.0. `libegl1` and `libegl-mesa0` were already installed, as was `libgles2`; oxgl doesn't need `libgles2`: a GLES context maps the bundle's `libGLESv2.so` and Mesa's `libEGL.so.1`, `libEGL_mesa.so.0`, `libGLdispatch.so.0` and gallium, and no system `libGLESv2.so.2`.
+
+- RGB8 read (task 1.5): a C probe on the bundle's libraries, with a WebGL-compatible ANGLE context on V3D, reports `RGBA`/`UNSIGNED_BYTE` as the read format of an `RGB8` framebuffer, reads it without error, and keeps the context. A read as `RGB` is refused with `INVALID_OPERATION`, and the reset status stays `NO_ERROR`. Against `angle-8078.8` the advertised format was `RGB` and the read lost the context.
+- WebGL 2 `'gpu'` (task 5.1): renderer `ANGLE (Broadcom, V3D 7.1.10.2, OpenGL ES 3.1)`. RGBA, depth and stencil bits are 8/8/8/8/24/0 with default attributes. `SAMPLES` is 4 with `antialias: true` and 0 without. A clear reads back exactly, with no error or loss.
+- WebGL 1 `'gpu'` stays on Vulkan: `ANGLE (Broadcom, Vulkan 1.3.354 (V3D 7.1.10.2 (0x55701C33)), V3DV Mesa)`, with 8/8/8/8 bits and `SAMPLES` 4.
+- Refusals (task 5.2):
+  - With `LIBGL_ALWAYS_SOFTWARE=1`, WebGL 2 `'gpu'` throws `OXGL_GPU_UNAVAILABLE`: "Vulkan: offers OpenGL ES 2.0 only; OpenGL ES: the GPU backend renders on a CPU (ANGLE (Mesa, llvmpipe (LLVM 19.1.7 128 bits), OpenGL ES 3.2))". WebGL 1 still gets V3DV.
+  - As `oxglnorender`, Mesa can't open `/dev/dri`, so Vulkan itself falls to lavapipe. Every `'gpu'` request then throws `OXGL_GPU_UNAVAILABLE` with "Vulkan: the GPU backend renders on a CPU (ANGLE (Mesa, Vulkan 1.4.354 (llvmpipe (LLVM 19.1.7 128 bits) (0x00000000)), llvmpipe))". The OpenGL ES display is never opened, as designed for a Vulkan device rejected as a CPU.
+- `npm test` (task 5.4): after the fixes below, 432 pass and 7 skipped with no `OXGL_BACKEND`, and 434 pass and 5 skipped with `gpu`, none failing. The first run (429 and 430 passing, one failure each) surfaced two defects, neither specific to the OpenGL ES backend:
+  - **Vulkan GPU and SwiftShader share one ANGLE display on Linux.** Both are opened with `EGL_PLATFORM_ANGLE_TYPE_VULKAN_ANGLE` and differ only in `EGL_PLATFORM_ANGLE_DEVICE_TYPE_ANGLE`, which ANGLE's platform display map leaves out of its key (`Display::GetDisplayFromNativeDisplay`). The first kind opened initializes the shared display. After a `'software'` context, `'gpu'` gets SwiftShader and is refused, WebGL 2 included, so the soak test's GPU probe skips. After a `'gpu'` context, `'software'` renders on V3DV. macOS and Windows open their GPU display on another platform type, and CI has no Vulkan GPU, so neither showed it. A distinct `EGL_PLATFORM_ANGLE_DISPLAY_KEY_ANGLE` per display kind separates them, but was reverted: the two kinds then become two Vulkan renderers in one process, which ANGLE doesn't support safely. Volk's function pointers are process-wide, and ANGLE reloads them for a renderer only in `ContextVk::onMakeCurrent` (`vk_renderer.cpp`: "Vulkan calls made through the function pointers are not synchronized"). In a `linux/arm64` container, two SwiftShader contexts, then `'auto'` (which probes lavapipe, rejects it, and falls back to SwiftShader), segfaulted. The backtrace runs `eglMakeCurrent` → `Context::initializeDefaultResources` → `ContextVk::initialize` → `vkCreateBuffer`, dispatched to lavapipe with SwiftShader's device. That is a context's first make-current, which initializes before `onMakeCurrent` reloads volk. ANGLE `main` is the same. Patching `initialize` would still leave concurrent use from two threads on different renderers unsafe. See Open Questions.
+  - `drawing-buffer-storage`'s "over the allocation budget" asks for 8192×8192, above `MAX_RENDERBUFFER_SIZE` on V3DV (7680) and V3D's GLES (4096), so it gets `INVALID_VALUE`. Fixed: the test now sizes the buffer from the limits, and skips where no allowed size exceeds the budget multisampled.
+
+- Conformance and three.js (task 5.5), `OXGL_BACKEND=gpu`, so WebGL 2 runs on V3D through the OpenGL ES backend and WebGL 1 on V3DV through Vulkan. Each page is judged against the software expectations, so the list below is every page whose result differs from them, classified by cross-checking with llvmpipe (the `linux-x64-gles` run, task 6.3) and SwiftShader.
+  - WebGL 2 on V3D (GLES): 2850 pass, 10 fail, 3 timeouts, 2 skipped, of 2865.
+    - ANGLE (fails on llvmpipe too, with an ANGLE cause): `conformance2/reading/read-pixels-from-fbo-test.html`. ANGLE's OpenGL ES backend advertises `RGBA_INTEGER`/`UNSIGNED_SHORT` as the read format of `RGBA16UI`; Mesa refuses that pair, and in a WebGL context the error loses the context. Like the `RGB8` case, it needs an ANGLE patch.
+    - OpenGL ES backend, not yet diagnosed (also on llvmpipe): `ext-texture-norm16.html`, `deqp/.../draw/random.html` (case 76), and the timeouts of `khr-parallel-shader-compile.html` and both `offscreencanvas-transfer-image-bitmap.html` pages.
+    - V3D (passes on llvmpipe and SwiftShader): `deqp/.../fboinvalidate/default.html` (`render_depth_stencil`), `instanced-rendering-large-divisor.html`, `tex-srgb-mipmap.html` (sRGB mipmap generation), `transform_feedback/too-small-buffers.html`.
+    - Passing on V3D where SwiftShader fails: `unary_operator_00.html`.
+  - WebGL 1 on V3DV (Vulkan): 963 pass, 6 fail, 1 crash. `sampler-array-using-loop-index.html` crashes the page's process (SIGSEGV), `gl-enable-enum-test.html` accepts `GL_MULTISAMPLE`, and `gl-max-texture-dimensions.html` fails because V3DV's limit, 7680, is not a power of two. The others are `ext-polygon-offset-clamp.html` and `webgl-compressed-texture-size-limit.html`. These are on the Vulkan path, which this change doesn't touch.
+  - three.js (WebGL 2 on V3D): 282 pass, 72 fail, 23 skipped of 354. Most failures are small rasterization differences against the Chrome references. The largest are `webgl_read_float_buffer` (78%), `webgl_lightprobes` (63%) and `webgl_lightprobes_complex` (27%). `webgl_clipculldistance` fails because V3D lacks `WEBGL_clip_cull_distance`. `webxr_vr_panorama_depth` throws a type error in the runner's image upload. Not yet diagnosed individually.
+- llvmpipe through the OpenGL ES backend (task 6.3) has, besides those shared above, an ANGLE failure of its own: WebGL 1's `copyTexImage2D` from a half-float framebuffer is passed to the driver, which refuses a float-to-fixed-point copy (ES 3.0 §3.8.5), and the error loses the context (`ext-color-buffer-half-float.html`). Its other failures pass on V3D and are recorded as llvmpipe's in the expectations.
+
+- Without Mesa (task 5.3): `sudo apt-get remove libegl1 libegl-mesa0` also removed `libegl-dev` and `libgles-dev`, and `/usr/lib/aarch64-linux-gnu/libEGL.so.1` was gone. oxgl imported. WebGL 1 `'gpu'` rendered on V3DV, `'software'` rendered on SwiftShader (in a process of its own), and WebGL 2 `'gpu'` threw `OXGL_GPU_UNAVAILABLE`: "Vulkan: offers OpenGL ES 2.0 only; OpenGL ES: eglInitialize failed (EGL error 0x3001); the OpenGL ES backend needs the system's EGL driver (libEGL.so.1, from Mesa's libegl1 and libegl-mesa0)". WebGL 2 `'auto'` did not fall back to SwiftShader, contrary to this design: it threw `OXGL_CONTEXT_CREATION_FAILED`, ending "SwiftShader: eglChooseConfig failed (EGL error 0x3009)", because its SwiftShader display is the V3DV display it shares (Open Question 3), which has no ES 3 config. All four packages were reinstalled, and WebGL 2 `'gpu'` and `'auto'` render on V3D again.
+- Bench (task 5.6), `OXGL_BACKEND=gpu`, WebGL 2 on V3D's OpenGL ES backend beside WebGL 1 on V3DV:
+
+  | Measure | GLES (WebGL 2) | Vulkan (WebGL 1) |
+  |---|---|---|
+  | enable/disable (calls/s) | 3,138,042 | 3,213,500 |
+  | getError (calls/s) | 445,517 | 2,316,912 |
+  | uniform4f (calls/s) | 1,909,939 | 2,183,780 |
+  | drawArrays, 1 small triangle (draws/s) | 622,661 | 669,397 |
+  | bufferSubData 24 B + drawArrays (pairs/s) | 97,263 | 253,964 |
+  | textured full-screen draw, NEAREST (Mpixels/s) | 3,979 | 4,009 |
+  | textured full-screen draw, LINEAR (Mpixels/s) | 3,397 | 3,412 |
+  | bufferSubData 1 MiB (MB/s) | 12,157 | 10,344 |
+  | texSubImage2D 512×512 RGBA8 (MB/s) | 5,377 | 5,923 |
+  | readPixels 256×256 RGBA8 (MB/s) | 634 | 691 |
+  | three.js 1000 meshes (frames/s) | 87.9 | (WebGL 2 only) |
+  | three.js 1 mesh, 128×64 segments (frames/s) | 9,368 | (WebGL 2 only) |
+
+  Most calls are within 15%. `getError` is 5× slower on GLES, which suggests ANGLE's GL backend asks the driver each time, and small `bufferSubData`-then-draw pairs are 2.6× slower.
 
 ## Open Questions
 
 1. CI cost: run conformance and three.js on `gles` in every full run (as designed), or only the Node tests, with conformance run by hand?
-2. CI redesign: the `gles` job is added to today's `ci.yml`. If the redesign lands first, the job moves into it unchanged.
+3. Linux GPU and SwiftShader in one process. Today both use one ANGLE Vulkan display, so the first opened decides the device for both. Options:
+   - (a) Make it explicit: on Linux, the first of `'gpu'` or `'software'` that opens a Vulkan display decides it for the process, and a later request for the other one throws, naming the backend already in use, instead of silently rendering on the wrong device. This is simple and safe; it gives up mixing a Vulkan GPU and SwiftShader in one Linux process.
+   - (b) An ANGLE patch that dispatches through the Vulkan loader's trampolines instead of volk's per-device pointers when more than one renderer exists, plus distinct display keys. This keeps both backends, but is a larger upstream patch whose thread-safety needs proving.
+   - (c) Leave it, documented as a known issue.
+
+   On the Pi it also stops WebGL 2 `'auto'` falling back to SwiftShader when Mesa's EGL is missing (task 5.3), so (a) alone doesn't serve the Pi either: only separate displays, (b), give `'auto'` a working fallback there.
+2. ~~CI redesign~~: resolved. The merge-queue CI landed first, and the `gles` job moved into it as a full-only job.

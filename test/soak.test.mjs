@@ -34,16 +34,16 @@ const pixel = new Uint8Array(4);
 
 /** Creates a context and renders into it, so its buffers are resident (an
  * untouched buffer may never be backed by physical memory, hiding a leak). */
-function used(backend) {
-  const gl = createContext({ width: SIZE, height: SIZE, backend });
+function used(backend, webgl2 = false) {
+  const gl = createContext({ width: SIZE, height: SIZE, backend, webgl2 });
   gl.clearColor(0, 1, 0, 1);
   gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
   gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
   return gl;
 }
 
-function cycle(backend) {
-  used(backend).destroy();
+function cycle(backend, webgl2) {
+  used(backend, webgl2).destroy();
 }
 
 /** The process's thread count on Linux (a driver may start threads per context), else undefined. */
@@ -55,12 +55,12 @@ function threads() {
   }
 }
 
-function soak(t, backend) {
-  for (let i = 0; i < WARM_UP; i += 1) cycle(backend);
+function soak(t, backend, webgl2 = false) {
+  for (let i = 0; i < WARM_UP; i += 1) cycle(backend, webgl2);
   const baseline = rssAfterGc();
   const baseThreads = threads();
   const start = performance.now();
-  for (let i = 0; i < ITERATIONS; i += 1) cycle(backend);
+  for (let i = 0; i < ITERATIONS; i += 1) cycle(backend, webgl2);
   const perCycle = (performance.now() - start) / ITERATIONS;
   const growth = rssAfterGc() - baseline;
   t.diagnostic(`${backend}: ${ITERATIONS} cycles, ${perCycle.toFixed(3)} ms/cycle, RSS growth ${(growth / 1048576).toFixed(1)} MiB`);
@@ -75,8 +75,17 @@ test('software soak test', (t) => {
   soak(t, 'software');
 });
 
-test('GPU soak test', { skip: await gpuSkipReason() }, (t) => {
+const gpuSkip = await gpuSkipReason();
+
+test('GPU soak test', { skip: gpuSkip }, (t) => {
   soak(t, 'gpu');
+});
+
+// On Linux, a GPU whose Vulkan driver offers OpenGL ES 2.0 only (the Pi 5's
+// V3D) runs WebGL 2 on the OpenGL ES backend, which loads the system's EGL
+// driver. Under OXGL_BACKEND=gles every soak test runs there.
+test('GPU soak test (WebGL 2)', { skip: gpuSkip }, (t) => {
+  soak(t, 'gpu', true);
 });
 
 /** Forces GC and yields until `done()` holds, failing after 10 s. */

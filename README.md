@@ -72,6 +72,29 @@ below.
   other threads. The cause is ANGLE's `ScopedVkLoaderEnvironment`, and the issue
   will go away when the pinned ANGLE stops doing this (tracked in
   `angle/README.md`, "Known upstream issues").
+- **On Linux, the first Vulkan backend a process opens serves both `'gpu'` and
+  `'software'`.** Both are ANGLE's Vulkan backend there, and ANGLE gives them
+  one display, so whichever opens first decides the device. After a
+  `'software'` context, `'gpu'` (WebGL 2 included) finds only SwiftShader and
+  throws `OXGL_GPU_UNAVAILABLE`; after a `'gpu'` context on a Vulkan GPU,
+  `'software'` contexts render on that GPU. Other platforms are unaffected:
+  their GPU backend is Metal or Direct3D 11. Use one of the two backends per
+  process on Linux.
+- **On the OpenGL ES backend, two calls lose the context.** Over Mesa's
+  drivers (V3D, llvmpipe), ANGLE passes these to the driver, which refuses
+  them, and a WebGL context then reports itself lost:
+  - `readPixels` from an `RGBA16UI` color buffer in its advertised
+    implementation format;
+  - WebGL 1's `copyTexImage2D` from a half-float framebuffer.
+
+  Tracked in `angle/README.md`, "Known upstream issues".
+- **WebGL 2 on a Raspberry Pi 5 passes all but a few conformance pages.** On
+  V3D through the OpenGL ES backend, 2850 of 2865 WebGL 2 pages pass. Four
+  failures are V3D's own: sRGB mipmap generation, a large instance divisor,
+  invalidating the default framebuffer's depth and stencil, and transform
+  feedback into too-small buffers. The others are shared with the backend on
+  llvmpipe. WebGL 1 runs on Vulkan (V3DV), whose texture limit of 7680 is not a
+  power of two, which one page expects.
 - **SwiftShader can get the depth of a near-clipped triangle wrong.** With the
   software backend, a large triangle that the near plane clips can be drawn
   with depths that are too near, hiding geometry in front of it. A typical
@@ -387,6 +410,10 @@ To build from source:
   LLVM on Windows. Set `LIBCLANG_PATH` if it is not found.
 - For `npm run conformance`: ffmpeg (with ffprobe), which decodes the
   suite's videos.
+- For the OpenGL ES backend's tests on Linux (the test-only `test-gles` build
+  run with `OXGL_BACKEND=gles`, as CI's `gles` job does): Mesa's EGL and GL
+  drivers, `libegl1`, `libegl-mesa0` and `libgl1-mesa-dri` on Debian and
+  Ubuntu.
 - For the license check: cargo-deny and cargo-about at the versions CI pins
   (`CARGO_DENY_VERSION` and `CARGO_ABOUT_VERSION` in
   `.github/workflows/ci.yml`), installed with

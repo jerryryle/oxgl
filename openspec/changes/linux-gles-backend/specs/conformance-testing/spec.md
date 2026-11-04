@@ -41,3 +41,14 @@ An update run SHALL rewrite the expectations file from its outcomes on its own p
 #### Scenario: Update on the OpenGL ES backend
 - **WHEN** an update run with `OXGL_BACKEND=gles` on Linux x64 finds that a page passes whose entry is `FAIL` without platforms
 - **THEN** the entry is rewritten as `FAIL` for the five other platforms, and runs on them still expect `FAIL`
+
+### Requirement: Expectations update adds outcomes
+When an update run's page has a non-`PASS` outcome and no entry applies, the run SHALL add its platform to the page's entry with that outcome if one exists, otherwise add an entry for its platform alone if the page has entries with platforms, and otherwise add an entry without platforms. A run on `linux-x64-gles` SHALL instead always add an entry for its platform alone, since the OpenGL ES backend's outcomes don't carry over to the software backend.
+
+#### Scenario: Update after a platform starts failing
+- **WHEN** an update run on macOS arm64 finds that a page fails whose only entry is `FAIL` for `linux-x64` and `windows-x64`
+- **THEN** the entry is rewritten as `FAIL` for `linux-x64`, `windows-x64` and `macos-arm64`
+
+#### Scenario: New failure on the OpenGL ES backend
+- **WHEN** an update run with `OXGL_BACKEND=gles` on Linux x64 finds that a page without entries fails
+- **THEN** it adds an entry for `linux-x64-gles` alone, and the five other platforms still expect the page to pass

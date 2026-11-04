@@ -312,6 +312,14 @@ test('Update on the OpenGL ES backend keeps the entry for the five other platfor
   ]);
 });
 
+test('Update on the OpenGL ES backend adds a failure for that platform alone', () => {
+  const run = concludeRun(new Map(), [result('webgl2', 'p.html', 'FAIL')], pages({ webgl2: ['p.html'] }), {
+    platform: 'linux-x64-gles',
+    update: true,
+  });
+  assert.deepEqual(entryLines(run.written), ['webgl2 p.html FAIL [linux-x64-gles] # failed']);
+});
+
 test('Unknown platform: parsing fails naming the entry', () => {
   assert.throws(() => parseExpectations('webgl2 p.html FAIL [linux-riscv64] # x'), /:1: unknown platform linux-riscv64/);
   assert.throws(() => parseExpectations('webgl2 p.html FAIL [] # x'), /empty platform list/);

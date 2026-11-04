@@ -224,8 +224,8 @@ function staleEntries(expectations, pages) {
  * matches stay as they are (keeping their reason). Otherwise `platform` is
  * removed from the page's entry (and the entry when no platform remains), and
  * a non-PASS outcome is added to the page's entry with that outcome, to a new
- * entry for `platform` when the page has other entries, or to a new entry
- * without platforms. On an unfiltered run stale entries are dropped.
+ * entry for `platform` when the page has other entries or `platform` is
+ * `linux-x64-gles`, or to a new entry without platforms. On an unfiltered run stale entries are dropped.
  *
  * With `tolerances`, a `DIFF` entry stays while its page is within it and
  * outside DEFAULT_TOLERANCE, and its page counts as passing within that; a
@@ -276,7 +276,9 @@ export function updateExpectations(
       next.delete(entryKey(same));
       const widened = withPlatforms(same, [...same.platforms, platform]);
       next.set(entryKey(widened), widened);
-    } else if (others.length > 0) {
+    } else if (others.length > 0 || platform === 'linux-x64-gles') {
+      // The OpenGL ES backend runs on another driver than the five software
+      // platforms, so what fails there says nothing about them.
       const listed = withPlatforms(fresh, [platform]);
       next.set(entryKey(listed), listed);
     } else next.set(entryKey(fresh), fresh);

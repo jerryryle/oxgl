@@ -10,7 +10,7 @@
 
   Verify on the Pi that `EGL_PLATFORM_ANGLE_TYPE_OPENGLES_ANGLE` with `EGL_PLATFORM_SURFACELESS_MESA` initializes and gives an ES 3 context, with a C probe against the artifact's libraries.
 - [x] 1.4 After the recipe change merges and `angle-8078.8` is released, copy its URLs and digests into oxgl's `angle/bundles.toml` and run `python3 angle/scripts/check_pin.py`. Verify that `npm run build` and `npm test` pass on macOS arm64 against the new pin.
-- [ ] 1.5 In oxgl-angle, add `angle/patches/angle-gles-rgb8-implementation-read-format.patch` (the design's ANGLE recipe section), with `ReadPixelsTest.RGBImplementationColorReadFormat` in ANGLE's tests and its row in the README's "Source patches" table, and bump `bundle_version` to `angle-8078.9`. Verify that the patched files compile with ANGLE's flags and the test passes on macOS. On the pull-request run's Linux artifacts, verify that the C probe reads an `RGB8` framebuffer in its advertised format on the Pi's V3D, in a WebGL context and without losing it, and that `OXGL_BACKEND=gles npm test` passes in the arm64 container. After the release, pin it as in 1.4. (Done: patch, test, README row, release and pin; the test passes on macOS and `OXGL_BACKEND=gles npm test` passes in the arm64 container against the release. Open: the Pi probe, run against the released bundles. Main has since pinned `angle-8103.1`, which carries the patch, so the probe runs against that.)
+- [x] 1.5 In oxgl-angle, add `angle/patches/angle-gles-rgb8-implementation-read-format.patch` (the design's ANGLE recipe section), with `ReadPixelsTest.RGBImplementationColorReadFormat` in ANGLE's tests and its row in the README's "Source patches" table, and bump `bundle_version` to `angle-8078.9`. Verify that the patched files compile with ANGLE's flags and the test passes on macOS. On the pull-request run's Linux artifacts, verify that the C probe reads an `RGB8` framebuffer in its advertised format on the Pi's V3D, in a WebGL context and without losing it, and that `OXGL_BACKEND=gles npm test` passes in the arm64 container. After the release, pin it as in 1.4. (Done: patch, test, README row, release and pin; the test passes on macOS and `OXGL_BACKEND=gles npm test` passes in the arm64 container against the release. The Pi probe passed against `angle-8103.1`, which main now pins and which carries the patch.)
 
 ## 2. Display and selection (oxgl-sys, oxgl-core)
 
@@ -34,34 +34,34 @@ Each check names its architecture, and its result stands only for that architect
 
 ## 4. Browser behaviour on the OpenGL ES backend
 
-- [ ] 4.1 Add Node tests, run without a `backend` option so they follow `OXGL_BACKEND`, for each item of "Browser behaviour on the OpenGL ES backend" not already covered on every backend:
+- [x] 4.1 Add Node tests, run without a `backend` option so they follow `OXGL_BACKEND`, for each item of "Browser behaviour on the OpenGL ES backend" not already covered on every backend:
   - `getContextAttributes()` and `RED/GREEN/BLUE/ALPHA/DEPTH/STENCIL_BITS` and `SAMPLES` match the allocated buffer, with and without `antialias`;
   - new buffers, textures and renderbuffers read as zeros;
   - every name `getSupportedExtensions()` lists is enabled by `getExtension`;
   - `loseContext`/`restoreContext`, `destroy()`, `encodePNG`, and uploads from `ImageData`-shaped objects and 2D canvases.
 
   Verify they pass with `OXGL_BACKEND=software`, and with `gles` in the container from 3.2.
-- [ ] 4.2 Add backend-selection Node tests, which may name a backend because selection is what they check:
+- [x] 4.2 Add backend-selection Node tests, which may name a backend because selection is what they check:
   - with `OXGL_BACKEND=gles`, `GL_RENDERER` names llvmpipe;
   - in a release build, `gles` is rejected;
   - on a GPU host, a WebGL 2 `'gpu'` context renders, skipping with the reason elsewhere, as `gpu.test.mjs` does;
   - the "Environment untouched" test of "Display reuse and isolation" also covers the OpenGL ES display: `process.env` and `process.cwd()` are identical before and after a context is created on it, under `OXGL_BACKEND=gles` and, on the Pi, through the automatic WebGL 2 path. Run in the gles CI job and in 5.4.
-- [ ] 4.3 Add a test that creates and destroys 200 GLES contexts in one process and checks that thread count and RSS stop growing. Add another that a child process exits with status 0 after using a GLES context. Verify both in the container, and on the Pi in 5.x.
+- [x] 4.3 Add a test that creates and destroys 200 GLES contexts in one process and checks that thread count and RSS stop growing. Add another that a child process exits with status 0 after using a GLES context. Verify both in the container, and on the Pi in 5.x.
 
 ## 5. On the Pi (Raspberry Pi 5, V3D)
 
-- [ ] 5.1 Install the build on the Pi with Mesa's `libegl1 libegl-mesa0`, checking whether `libgles2` is needed, and correct the README if so. Verify the first two backend-selection Pi scenarios: WebGL 2 `'gpu'` gives a renderer naming V3D (not Vulkan, not llvmpipe), RGBA bits 8/8/8/8, and `SAMPLES` 4 with `antialias: true`. Also check that WebGL 1 stays on Vulkan.
-- [ ] 5.2 Verify the refusals: as `oxglnorender` (outside `render`), and as `baton` with `LIBGL_ALWAYS_SOFTWARE=1`, `'gpu'` WebGL 2 throws `OXGL_GPU_UNAVAILABLE` naming the refused CPU renderer and returns no context.
-- [ ] 5.3 Verify done-when 5 for Vulkan on the Pi. Remove Mesa's EGL and GL libraries (`sudo apt-get remove libegl1 libegl-mesa0`, recording what apt removes with them), then confirm that `/usr/lib/aarch64-linux-gnu/libEGL.so.1` is gone. Then:
+- [x] 5.1 Install the build on the Pi with Mesa's `libegl1 libegl-mesa0`, checking whether `libgles2` is needed, and correct the README if so. Verify the first two backend-selection Pi scenarios: WebGL 2 `'gpu'` gives a renderer naming V3D (not Vulkan, not llvmpipe), RGBA bits 8/8/8/8, and `SAMPLES` 4 with `antialias: true`. Also check that WebGL 1 stays on Vulkan.
+- [x] 5.2 Verify the refusals: as `oxglnorender` (outside `render`), and as `baton` with `LIBGL_ALWAYS_SOFTWARE=1`, `'gpu'` WebGL 2 throws `OXGL_GPU_UNAVAILABLE` naming the refused CPU renderer and returns no context.
+- [x] 5.3 Verify done-when 5 for Vulkan on the Pi. Remove Mesa's EGL and GL libraries (`sudo apt-get remove libegl1 libegl-mesa0`, recording what apt removes with them), then confirm that `/usr/lib/aarch64-linux-gnu/libEGL.so.1` is gone. Then:
   - import oxgl;
   - create a WebGL 1 `'gpu'` context, which must render with a renderer naming V3DV, and a `'software'` context;
   - check that a WebGL 2 `'gpu'` request throws `OXGL_GPU_UNAVAILABLE`, naming `OpenGL ES` with a cause about `libEGL.so.1`;
   - reinstall the packages afterwards.
 
   Record the results in design.md.
-- [ ] 5.4 Run `npm test` on the Pi with no `OXGL_BACKEND` (WebGL 2 tests on GLES, WebGL 1 on Vulkan), and with `OXGL_BACKEND=gpu`. Fix oxgl defects.
-- [ ] 5.5 Run both conformance suites and `npm run threejs` on the Pi with `OXGL_BACKEND=gpu`, so WebGL 2 runs on GLES. Record every failing page and example in design.md's "Results on the Pi" with its reason, marking which are V3D's (they also fail with Mesa's GL directly, or with a V3D-specific cause) and which are oxgl's. Fix oxgl's, or bring them back as findings. Add V3D failures to the README's known issues.
-- [ ] 5.6 Add `--webgl1` to `bench/run.mjs`. Run `npm run bench` on the Pi on GLES (WebGL 2, default) and on Vulkan (`--webgl1`), with `OXGL_BACKEND=gpu`, and record both side by side in design.md.
+- [x] 5.4 Run `npm test` on the Pi with no `OXGL_BACKEND` (WebGL 2 tests on GLES, WebGL 1 on Vulkan), and with `OXGL_BACKEND=gpu`. Fix oxgl defects.
+- [x] 5.5 Run both conformance suites and `npm run threejs` on the Pi with `OXGL_BACKEND=gpu`, so WebGL 2 runs on GLES. Record every failing page and example in design.md's "Results on the Pi" with its reason, marking which are V3D's (they also fail with Mesa's GL directly, or with a V3D-specific cause) and which are oxgl's. Fix oxgl's, or bring them back as findings. Add V3D failures to the README's known issues.
+- [x] 5.6 Add `--webgl1` to `bench/run.mjs`. Run `npm run bench` on the Pi on GLES (WebGL 2, default) and on Vulkan (`--webgl1`), with `OXGL_BACKEND=gpu`, and record both side by side in design.md.
 
 ## 6. Expectations and CI
 
@@ -76,7 +76,7 @@ Each check names its architecture, and its result stands only for that architect
 
 ## 7. Docs
 
-- [ ] 7.1 README:
+- [x] 7.1 README:
   - the backend table says that on Linux a WebGL 2 context uses the OpenGL ES backend on the system's EGL driver when the Vulkan GPU gives OpenGL ES 2.0 only;
   - the errors table's `OXGL_GPU_UNAVAILABLE` row mentions the CPU-renderer refusal on either backend;
   - Prerequisites list Mesa's EGL packages for that case;

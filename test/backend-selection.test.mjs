@@ -2,6 +2,7 @@
 // from JS; the Rust tests (oxgl-core backend.rs) cover selection order, the
 // CPU-renderer deny-list, and that a GPU failure is never retried.
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { once } from 'node:events';
 import { test } from 'node:test';
 import { Worker } from 'node:worker_threads';
@@ -105,6 +106,24 @@ test('environment untouched', async () => {
   }
   assert.equal(JSON.stringify(process.env), before);
   assert.equal(process.cwd(), cwd);
+});
+
+// The OpenGL ES backend loads the system's EGL driver, whose threads and
+// atexit handlers must not stop the process from exiting.
+test('a process exits cleanly after WebGL 2 contexts', { timeout: 60_000 }, async () => {
+  const backends = (await gpuSkipReason()) === undefined ? ['auto', 'gpu'] : ['auto'];
+  for (const backend of backends) {
+    const script = `
+      import { createContext } from '@oxgl-js/oxgl';
+      createContext({ width: 4, height: 4, backend: '${backend}', webgl2: true }).destroy();
+      const kept = createContext({ width: 4, height: 4, backend: '${backend}', webgl2: true });
+      kept.clear(kept.COLOR_BUFFER_BIT);
+      console.log('ok');
+    `;
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8' });
+    assert.equal(result.status, 0, `${backend}: ${result.stderr}`);
+    assert.equal(result.stdout.trim(), 'ok');
+  }
 });
 
 test('test-only OpenGL ES value rejected by a release build', { skip: testGles && 'this is a test-gles build' }, () => {
