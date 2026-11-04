@@ -128,12 +128,16 @@ function runOne(script, args, { execArgv, timeoutMs, totalMs, teardownMs }) {
       }
     });
     child.on('error', (error) => {
-      // Only a failed spawn lands here; 'exit' may not follow.
+      // Only a failed spawn lands here; 'close' may not follow, and a later
+      // one resolves the settled promise to no effect.
       clearTimeout(timer);
       clearTimeout(total);
       done({ harnessError: `could not start the page process: ${error.message}`, durationMs: 0 });
     });
-    child.on('exit', (code, signal) => {
+    // 'close', not 'exit': 'exit' can fire before the parent has read the
+    // child's last IPC messages, so a page that sent its outcome and exited
+    // would count as exiting without one.
+    child.on('close', (code, signal) => {
       clearTimeout(timer);
       clearTimeout(total);
       const durationMs = Math.round(performance.now() - started);

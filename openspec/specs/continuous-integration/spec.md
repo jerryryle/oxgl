@@ -5,41 +5,6 @@ Defines the automated checks every oxgl change must pass before merge: the jobs,
 
 ## Requirements
 
-### Requirement: Triggers
-CI SHALL run on every pull request targeting `main` and every push to `main`, and SHALL cancel superseded runs for the same pull request. The jobs that build or test oxgl SHALL be skipped when every changed file is on the repository's skip list or is a results page file (results-page), which SHALL name only files no build, test or lint step reads, and SHALL run otherwise, including when the changed files cannot be determined. Workflow lint and the repository checks SHALL run on every change.
-
-#### Scenario: Pull request opened
-- **WHEN** a pull request targeting `main` is opened or updated
-- **THEN** the CI workflow runs against its head commit and any earlier run for that pull request is cancelled
-
-#### Scenario: Documentation-only change
-- **WHEN** a pull request changes only `README.md` and files under `openspec/`
-- **THEN** workflow lint and the repository checks run, the jobs that build or test oxgl (the build, the Rust checks, the Node tests, AddressSanitizer, conformance and the three.js examples) are skipped, and the `ci` check passes
-
-#### Scenario: Skip list holds only unread files
-- **WHEN** a reviewer reads the skip list
-- **THEN** it names only Markdown documentation, OpenSpec artifacts, agent configuration, repository assets (`assets/`, such as the social card), the license text, editor configuration, and Dependabot's and zizmor's configuration
-
-#### Scenario: Asset-only change
-- **WHEN** a pull request changes only files under `assets/`
-- **THEN** workflow lint and the repository checks run, the jobs that build or test oxgl are skipped, and the `ci` check passes
-
-#### Scenario: Code change runs everything
-- **WHEN** a pull request changes `README.md` and one file under `crates/`
-- **THEN** every job runs
-
-#### Scenario: New path runs everything
-- **WHEN** a pull request adds a file in a directory the list does not name
-- **THEN** every job runs
-
-#### Scenario: Push to main
-- **WHEN** a push to `main` changes only files on the list
-- **THEN** the jobs that build or test oxgl are skipped; when it changes any other file, or the pushed range cannot be compared, every job runs
-
-#### Scenario: Page-only change
-- **WHEN** a pull request changes only `scripts/results-page.html` and `README.md`
-- **THEN** the jobs that build or test oxgl are skipped, the results page's own checks run, and the `ci` check passes when they pass
-
 ### Requirement: Platform matrix
 The main CI job SHALL run on every supported host: Linux x64, Linux arm64, macOS arm64, Windows x64 and Windows arm64 (see node-api). A failure on any of them SHALL fail the overall check.
 
@@ -116,25 +81,6 @@ Workflows SHALL reference third-party actions by full commit SHA, SHALL declare 
 - **WHEN** a workflow file references an action by tag instead of commit SHA
 - **THEN** a workflow lint step in CI fails
 
-### Requirement: Aggregate status check
-CI SHALL expose a single aggregate check named `ci` that succeeds only when every required job succeeds, so branch protection can require one stable check name as jobs evolve. A job that builds or tests oxgl and was skipped because the change touches only listed paths (see Triggers) SHALL count as succeeding. A skip for any other reason SHALL NOT.
-
-#### Scenario: Skipped required job
-- **WHEN** a required job is cancelled or skipped due to an upstream failure
-- **THEN** the `ci` check reports failure
-
-#### Scenario: Skipped for a documentation-only change
-- **WHEN** the jobs that build or test oxgl are skipped because every changed file is on the list
-- **THEN** the `ci` check succeeds if workflow lint and the repository checks succeeded
-
-#### Scenario: Change detection fails
-- **WHEN** the job that determines the changed files fails
-- **THEN** the `ci` check reports failure
-
-#### Scenario: Tests skipped after a failed build
-- **WHEN** the build fails on one platform, so the Node tests, conformance and three.js jobs are skipped
-- **THEN** the `ci` check reports failure
-
 ### Requirement: License check
 CI SHALL run the project's license check on every pull request: dependency licenses against the allowlist, and `THIRD_PARTY_NOTICES` against the current dependency graph. A failure SHALL fail the aggregate `ci` check.
 
@@ -162,11 +108,11 @@ CI SHALL run both conformance suites (conformance-testing) on every supported pl
 - **THEN** the job restores the suite from a cache keyed by that commit instead of fetching it
 
 ### Requirement: three.js examples job
-CI SHALL run the three.js example suite (threejs-examples) on every supported platform with `OXGL_BACKEND=software`, each judged against the checked-in expectations that apply on that platform, against that platform's packages from the run's build. Every such job SHALL be required by the aggregate `ci` check, skipped as the other heavy jobs are, and SHALL upload its report and output images, named by runner, as workflow artifacts whether it passes or fails.
+CI SHALL run the three.js example suite (threejs-examples) on every supported platform with `OXGL_BACKEND=software`, each judged against the checked-in expectations that apply on that platform, against that platform's packages from the run's build. Every such job SHALL be required by the aggregate `ci` check whenever the run includes the full checks (see "Events and job sets"), and SHALL upload its report and output images, named by runner, as workflow artifacts whether it passes or fails.
 
 #### Scenario: Example regression fails CI
 - **WHEN** a pull request makes an example that is expected to pass render a frame that does not match its reference
-- **THEN** the three.js job fails, naming the example, and the `ci` check fails
+- **THEN** the three.js job fails in its merge group run, naming the example, and the `ci` check fails
 
 #### Scenario: Platform-only example regression
 - **WHEN** a pull request makes an example fail on macOS arm64 only
@@ -192,45 +138,34 @@ Whenever the conformance and three.js jobs run, CI SHALL build the results page 
 - **THEN** the results page is still built, every webgl2 row shows "not run" under macos-arm64, and the webgl2 section says it has no report from macos-arm64
 
 #### Scenario: Documentation-only change
-- **WHEN** a pull request changes only files on the skip list, so the suites don't run
+- **WHEN** a pull request without the `full-ci` label changes only documentation, so its run is the quick checks and the suites don't run
 - **THEN** no results page is built
 
 ### Requirement: Results page is deployed from main only
-CI SHALL deploy the results page to GitHub Pages only from runs on `main`, in a job of its own that alone holds the `pages: write` and `id-token: write` permissions. Pull request runs SHALL NOT deploy.
+CI SHALL deploy the results page to GitHub Pages only from a run on `main` that released a version, in a job of its own that alone holds the `pages: write` and `id-token: write` permissions, and SHALL deploy the page built from the reports of the run whose packages it published. Pull request and merge group runs SHALL NOT deploy. A change to the page's template or builder SHALL appear on the published page with the next release.
 
 #### Scenario: Push to main
-- **WHEN** a push to `main` runs the suites
-- **THEN** the page built from that run's reports is published at the repository's GitHub Pages URL
+- **WHEN** a push to `main` publishes version `0.2.3` from the merge group run that tested it
+- **THEN** the page built from that merge group run's reports is published at the repository's GitHub Pages URL
+
+#### Scenario: Change that doesn't release
+- **WHEN** a push to `main` lands a change, such as an edit to `scripts/results-page.html`, while the version is already on npm
+- **THEN** nothing is deployed and the published page stays as it was until the next release
 
 #### Scenario: Pull request
-- **WHEN** CI runs for a pull request
-- **THEN** the page is built and uploaded as an artifact, and the deploy job does not run
-
-### Requirement: Page-only changes republish from the last full run
-A results page file is the template, the builder or the builder's tests. For a change whose files are all results page files or on the skip list, with at least one results page file, CI SHALL lint and test the builder in the repository checks, and SHALL build the page from the reports of the latest `main` run that uploaded them. On `main` it SHALL deploy that page. When no such run's reports are still available, it SHALL deploy nothing and say why in the log.
-
-#### Scenario: Template change on main
-- **WHEN** a push to `main` changes only `scripts/results-page.html`
-- **THEN** no build or test job runs, the builder's lint and tests run, and the page is rebuilt from the latest `main` run's reports and deployed
-
-#### Scenario: Page-only pull request
-- **WHEN** a pull request changes only `scripts/results-page.mjs` and `test/results-page.test.mjs`
-- **THEN** the builder's lint and tests run, a preview page built from the latest `main` run's reports is uploaded as an artifact, and nothing is deployed
-
-#### Scenario: Reports expired
-- **WHEN** a page-only push to `main` finds no `main` run whose reports are still available
-- **THEN** the page job deploys nothing, the published page stays as it was, and the log says no reports were available
-
-#### Scenario: Generator change that needs new report fields
-- **WHEN** a change touches `scripts/results-page.mjs` and `conformance/run.mjs`
-- **THEN** it is not page-only, and every job runs
+- **WHEN** CI runs for a pull request or a merge group
+- **THEN** any page built is uploaded as an artifact, and the deploy job does not run
 
 ### Requirement: Manual runs
-CI SHALL also run when started manually (`workflow_dispatch`) on any branch, running every job against the branch's head commit, as when the changed files cannot be determined. A manual run SHALL cancel an earlier one still in progress on the same branch, except on `main`, where every run completes.
+CI SHALL also run when started manually (`workflow_dispatch`) on any branch, running the full checks against the branch's head commit. A manual run on `main` SHALL also release as a merge group's commit does (release, "A new version on main is released"). A manual run SHALL cancel an earlier one still in progress on the same branch, except on `main`, where every run completes.
 
 #### Scenario: Manual run
-- **WHEN** CI is started manually on a branch
-- **THEN** every job runs against the branch's head commit, the `ci` check is reported on that commit, and an earlier manual run still in progress on that branch is cancelled unless the branch is `main`
+- **WHEN** CI is started manually on a branch other than `main`
+- **THEN** every job runs against the branch's head commit, the `ci` check is reported on that commit, nothing is released, and an earlier manual run still in progress on that branch is cancelled
+
+#### Scenario: Manual run on main after a bypass merge
+- **WHEN** a pull request was merged past the queue, `main`'s version is not on npm, and CI is started manually on `main`
+- **THEN** every job runs, and when `ci` passes the version is published from that run's packages
 
 ### Requirement: Packed packages are smoke-tested
 On each supported platform, CI SHALL pack `@oxgl-js/oxgl` and that platform's package with `npm pack`, and install both tarballs into an empty project outside the repository. It SHALL then import the package there and render with `backend: 'software'`. A failure SHALL fail the `ci` check. Each platform's build job SHALL keep its platform tarball as a run artifact, and exactly one designated build job SHALL also keep its `@oxgl-js/oxgl` tarball.
@@ -257,3 +192,89 @@ In each run, CI SHALL build and pack oxgl once per supported platform, in one bu
 #### Scenario: Packages kept on every run
 - **WHEN** a pull request's run finishes
 - **THEN** each platform's packages can be downloaded from the run, whether or not the run releases
+
+### Requirement: Events and job sets
+CI SHALL run on every pull request targeting `main`, every merge group of its merge queue, every push to `main` and every manual run, cancelling only superseded runs of a pull request or of manual runs off `main`. A pull request runs the quick checks, a merge group the full checks, and a push to `main` publishes what the merge group run for its commit produced, building only to warm caches. Which build and test jobs run SHALL NOT depend on which files changed.
+
+#### Scenario: Pull request opened
+- **WHEN** a pull request targeting `main` is opened or updated
+- **THEN** the quick checks run against its head commit and any earlier run for that pull request is cancelled
+
+#### Scenario: Documentation pull request
+- **WHEN** a pull request changes only `README.md`
+- **THEN** the same quick checks run as for a code change, and its merge group runs the full checks
+
+#### Scenario: Push to main
+- **WHEN** a push to `main` lands a merge group's commit that changes no file a cache is keyed on
+- **THEN** no job that builds or tests oxgl runs, and the run releases or deploys only what that merge group's run produced (release, "A new version on main is released")
+
+### Requirement: Pull requests run the quick checks
+A pull request's run SHALL run workflow lint, the repository checks, the Rust checks, the build with its packed-package smoke test, and the Node tests, on every platform. It SHALL skip AddressSanitizer, conformance, the three.js examples and the results page, unless the pull request carries the `full-ci` label, in which case it SHALL run the full checks. Adding or removing a label SHALL start no run; a manual run on the branch gives the full checks at once.
+
+#### Scenario: Code change on a pull request
+- **WHEN** a pull request without the `full-ci` label changes a file under `crates/`
+- **THEN** the Rust checks, builds, smoke tests and Node tests run on all five platforms, and no conformance, three.js or AddressSanitizer job runs
+
+#### Scenario: Another label added
+- **WHEN** a label is added to a pull request whose quick checks are running
+- **THEN** no run starts and the running one continues
+
+#### Scenario: Full checks on request
+- **WHEN** a pull request labelled `full-ci` is updated
+- **THEN** its run includes AddressSanitizer, both conformance suites and the three.js examples on every platform, and builds a results page artifact
+
+### Requirement: The merge queue runs the full checks
+The `main` branch SHALL accept changes through a merge queue that requires the `ci` check. Each merge group's run SHALL run every job against the group's commit, which is the commit that lands on `main`, and when the version in `package.json` is not on npm SHALL keep each platform's packages and every suite's report as run artifacts for at least 7 days, for the release.
+
+#### Scenario: Pull request queued
+- **WHEN** a pull request whose quick checks passed is added to the merge queue
+- **THEN** a run on the merge group's commit runs AddressSanitizer, conformance and the three.js examples along with the quick checks, and the pull request lands only if `ci` passes there
+
+#### Scenario: Queue run fails
+- **WHEN** a merge group's conformance job fails
+- **THEN** the pull request is removed from the queue and nothing lands
+
+### Requirement: One aggregate check
+CI SHALL expose a single aggregate check named `ci`, required by branch protection and the merge queue, that succeeds only when every job the run's event needs succeeds (see "Events and job sets"). On a pull request's quick checks, the full-only jobs (AddressSanitizer, conformance, the three.js examples) count as succeeding when skipped. Any other skipped, cancelled or failed job SHALL fail the check.
+
+#### Scenario: Quick checks pass
+- **WHEN** a pull request without `full-ci` passes every quick check and skips the full-only jobs
+- **THEN** the `ci` check succeeds
+
+#### Scenario: Full check skipped in a merge group
+- **WHEN** a merge group run skips a conformance job
+- **THEN** the `ci` check reports failure
+
+#### Scenario: Tests skipped after a failed build
+- **WHEN** the build fails on one platform, so the Node tests, conformance and three.js jobs are skipped
+- **THEN** the `ci` check reports failure
+
+### Requirement: Caches are warmed from main
+Because caches a merge group or pull request run saves aren't visible to later runs, a push to `main` that changes a file a cache is keyed on, and a manual run on `main`, SHALL save on each platform every cache the checks restore whose key isn't saved yet: the downloads (ANGLE bundles with their symbols, the conformance suite, three.js, Cargo and npm) and the Rust build caches. Other pushes SHALL start no cache job.
+
+#### Scenario: New bundle pinned
+- **WHEN** a push to `main` lands a change to `angle/bundles.toml`
+- **THEN** the run saves each platform's new bundle cache, and the next merge group run restores the bundles instead of downloading them
+
+#### Scenario: Lockfile changed
+- **WHEN** a push to `main` lands a change to `Cargo.lock`
+- **THEN** the run's build, check and AddressSanitizer jobs run only to save their build caches for the new key, publish nothing, and the next merge group run's builds start from them instead of compiling from scratch
+
+#### Scenario: Nothing changed
+- **WHEN** a push to `main` lands a change that touches none of the files the cache keys are computed from
+- **THEN** no cache job runs
+
+#### Scenario: Cold start
+- **WHEN** the caches on `main` have been evicted and CI is started manually on `main`
+- **THEN** that run saves every platform's input caches
+
+### Requirement: Bot identity
+Pull requests and cross-repository dispatches made by automation SHALL use a short-lived installation token of the `oxgl-js` organization's GitHub App, created in the step just before it is used, so their pull requests start CI like any other. No personal access token SHALL be stored. Releases and package publishing SHALL NOT use the App's token.
+
+#### Scenario: Bump pull request starts CI
+- **WHEN** the bump workflow opens a pull request
+- **THEN** CI runs for it on the `pull_request` event without anyone approving the run
+
+#### Scenario: Token created where it's used
+- **WHEN** the workflow logs are read
+- **THEN** every App token is created in the job that uses it, immediately before the step that uses it
