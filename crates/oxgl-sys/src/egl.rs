@@ -198,6 +198,19 @@ impl Display {
         })
     }
 
+    /// Terminates the display, so that it holds no device. ANGLE keeps the
+    /// display itself, and initializes it again, possibly on another device,
+    /// when it is next opened. Callers terminate only a display they hold the
+    /// only handle to, with no context alive on it.
+    pub fn terminate(self) {
+        // SAFETY: `raw` is a display returned by eglGetPlatformDisplayEXT.
+        // eglTerminate accepts any valid display, initialized or not, and
+        // later calls on a terminated display fail with EGL_NOT_INITIALIZED
+        // (EGL 1.5 §3.2) rather than misbehave. Its result is ignored: the
+        // only failure is EGL_BAD_DISPLAY, which `raw` rules out.
+        unsafe { (self.angle.fns().eglTerminate)(self.raw) };
+    }
+
     /// Creates a WebGL-compatible, surfaceless context for `version`.
     ///
     /// # Errors

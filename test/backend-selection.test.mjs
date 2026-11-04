@@ -9,7 +9,7 @@ import { Worker } from 'node:worker_threads';
 
 import { createContext } from '@oxgl-js/oxgl';
 
-import { allPixels, gpuSkipReason, readAll, withBackendEnv } from './helpers.mjs';
+import { allPixels, gpuSkipReason, oneVulkanDevice, readAll, withBackendEnv } from './helpers.mjs';
 
 /** Whether this run uses the test-only OpenGL ES backend (a `test-gles` addon, in CI on llvmpipe). */
 const testGles = process.env.OXGL_BACKEND === 'gles';
@@ -95,8 +95,11 @@ test('environment untouched', async () => {
   const before = JSON.stringify(process.env);
   const cwd = process.cwd();
   const reason = await gpuSkipReason();
+  // 'software' ran first in this process, so on Linux it holds the one Vulkan
+  // device and 'gpu' would be refused.
+  const gpu = reason === undefined && !oneVulkanDevice;
   withBackendEnv(undefined, () => {
-    for (const backend of reason === undefined ? ['software', 'gpu', 'auto'] : ['software', 'auto']) {
+    for (const backend of gpu ? ['software', 'gpu', 'auto'] : ['software', 'auto']) {
       for (const webgl2 of [false, true]) createContext({ width: 1, height: 1, backend, webgl2 }).destroy();
     }
   });
@@ -106,6 +109,61 @@ test('environment untouched', async () => {
   }
   assert.equal(JSON.stringify(process.env), before);
   assert.equal(process.cwd(), cwd);
+});
+
+/**
+ * Runs `script` (an ES module that may import oxgl) in a child process without
+ * OXGL_BACKEND, so the backends it names are used, and returns its last stdout
+ * line as JSON.
+ */
+function inChild(script) {
+  const env = { ...process.env };
+  delete env.OXGL_BACKEND;
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], { env, encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  return JSON.parse(result.stdout.trim().split('\n').at(-1));
+}
+
+/** A child script creating a context on each of `backends` in turn, reporting each renderer or error. */
+function contextsScript(backends) {
+  return `
+    import { createContext } from '@oxgl-js/oxgl';
+    const results = [];
+    for (const backend of ${JSON.stringify(backends)}) {
+      try {
+        const gl = createContext({ width: 4, height: 4, backend });
+        const info = gl.getExtension('WEBGL_debug_renderer_info');
+        results.push({ renderer: gl.getParameter(info.UNMASKED_RENDERER_WEBGL) });
+      } catch (error) {
+        results.push({ code: error.code, message: error.message });
+      }
+    }
+    console.log(JSON.stringify(results));
+  `;
+}
+
+test('a Linux process uses one Vulkan device', { timeout: 60_000 }, async (t) => {
+  const reason = await gpuSkipReason();
+  if (reason !== undefined) return t.skip(reason);
+  if (!oneVulkanDevice) return t.skip('only Linux shares one Vulkan display between the GPU and SwiftShader');
+  const [, software] = inChild(contextsScript(['gpu', 'software']));
+  assert.equal(software.code, 'OXGL_CONTEXT_CREATION_FAILED', software.message ?? software.renderer);
+  assert.match(software.message, /the Vulkan GPU is in use, and a Linux process uses one Vulkan device/);
+  const [, gpu, auto] = inChild(contextsScript(['software', 'gpu', 'auto']));
+  assert.equal(gpu.code, 'OXGL_GPU_UNAVAILABLE', gpu.message ?? gpu.renderer);
+  assert.match(gpu.message, /SwiftShader is in use/);
+  assert.match(auto.renderer, /SwiftShader/);
+});
+
+test('software after auto on a host without a GPU renders on SwiftShader', { timeout: 60_000 }, async (t) => {
+  if (process.env.OXGL_BACKEND) return t.skip(`OXGL_BACKEND=${process.env.OXGL_BACKEND} forces a backend`);
+  const reason = await gpuSkipReason();
+  if (reason === undefined) return t.skip('this host has a GPU');
+  // On Linux, a GPU display rejected as a CPU (such as Mesa's lavapipe) is
+  // released, so SwiftShader can initialize.
+  for (const result of inChild(contextsScript(['auto', 'software']))) {
+    assert.match(result.renderer ?? result.message, /SwiftShader/);
+  }
 });
 
 // The OpenGL ES backend loads the system's EGL driver, whose threads and

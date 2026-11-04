@@ -72,14 +72,17 @@ below.
   other threads. The cause is ANGLE's `ScopedVkLoaderEnvironment`, and the issue
   will go away when the pinned ANGLE stops doing this (tracked in
   `angle/README.md`, "Known upstream issues").
-- **On Linux, the first Vulkan backend a process opens serves both `'gpu'` and
-  `'software'`.** Both are ANGLE's Vulkan backend there, and ANGLE gives them
-  one display, so whichever opens first decides the device. After a
-  `'software'` context, `'gpu'` (WebGL 2 included) finds only SwiftShader and
-  throws `OXGL_GPU_UNAVAILABLE`; after a `'gpu'` context on a Vulkan GPU,
-  `'software'` contexts render on that GPU. Other platforms are unaffected:
-  their GPU backend is Metal or Direct3D 11. Use one of the two backends per
-  process on Linux.
+- **On Linux, a process uses either a Vulkan GPU or SwiftShader, not both.**
+  Both are ANGLE's Vulkan backend there, and ANGLE gives them one display, so
+  the first to open holds it for the process. After a `'gpu'` context on a
+  Vulkan GPU, `'software'` throws `OXGL_CONTEXT_CREATION_FAILED`. After a
+  `'software'` context, `'gpu'` throws `OXGL_GPU_UNAVAILABLE` and `'auto'` uses
+  SwiftShader. Both messages name the backend in use. This applies even when
+  WebGL 2 runs on the OpenGL ES backend, since selecting it opens the Vulkan
+  GPU first. On a Pi without Mesa's EGL, WebGL 2 `'auto'` therefore fails
+  rather than falling back to SwiftShader. Other platforms are unaffected:
+  their GPU backend is Metal or Direct3D 11. To use both on Linux, create the
+  other kind in a child process.
 - **On the OpenGL ES backend, two calls lose the context.** Over Mesa's
   drivers (V3D, llvmpipe), ANGLE passes these to the driver, which refuses
   them, and a WebGL context then reports itself lost:

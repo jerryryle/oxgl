@@ -121,3 +121,27 @@ On the Linux OpenGL ES backend, `getSupportedExtensions` SHALL list only extensi
 #### Scenario: Every reported extension enables
 - **WHEN** `getExtension(name)` is called for each name `getSupportedExtensions()` returns on the OpenGL ES backend
 - **THEN** each returns a non-null object (cf. Khronos `conformance/extensions/get-extension.html`)
+
+### Requirement: One Vulkan device per process on Linux
+On Linux, where the Vulkan GPU and SwiftShader share one ANGLE display, the first of them to initialize on an accepted device SHALL hold it for the process. A later request for the other SHALL fail with a message naming the backend in use, not render on the held device. `'auto'` SHALL treat a refused GPU as unavailable.
+
+Accepted trade-off: a Linux process cannot render on a Vulkan GPU and on SwiftShader at once.
+
+#### Scenario: Software after a Vulkan GPU context
+- **WHEN** a WebGL 1 context has been created with `backend: 'gpu'` on a Linux machine with a Vulkan GPU, and `createContext({ width: 4, height: 4, backend: 'software' })` is called
+- **THEN** an `Error` with `code === 'OXGL_CONTEXT_CREATION_FAILED'` is thrown whose message names the Vulkan GPU in use, and no context is returned
+
+#### Scenario: GPU after a software context
+- **WHEN** a context has been created with `backend: 'software'` on a Linux machine with a Vulkan GPU, and `createContext({ width: 4, height: 4, backend: 'gpu' })` is called
+- **THEN** an `Error` with `code === 'OXGL_GPU_UNAVAILABLE'` is thrown whose message names SwiftShader in use, and `backend: 'auto'` returns a SwiftShader context
+
+#### Scenario: WebGL 2 without Mesa's EGL on the Pi
+- **WHEN** Mesa's EGL is not installed on the Pi and `createContext({ width: 4, height: 4, webgl2: true })` is called
+- **THEN** an `Error` with `code === 'OXGL_CONTEXT_CREATION_FAILED'` is thrown whose message names the OpenGL ES failure with its `libEGL.so.1` cause, and the Vulkan GPU in use as the reason SwiftShader was not used
+
+### Requirement: A GPU display rejected as a CPU holds nothing
+A GPU display whose renderer is rejected as a CPU SHALL be terminated once the rejection is recorded, so that it holds no device and SwiftShader can initialize afterwards.
+
+#### Scenario: Software after a Vulkan device rejected as a CPU
+- **WHEN** the only Vulkan device on a Linux machine is Mesa's lavapipe, a context is created with `backend: 'auto'`, and then another with `backend: 'software'`
+- **THEN** both contexts' `GL_RENDERER` names SwiftShader, not llvmpipe

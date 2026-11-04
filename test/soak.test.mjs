@@ -1,91 +1,17 @@
 // Memory soak tests (context-creation spec: "No resource growth across context
-// lifecycles" and "Garbage-collected contexts release resources").
+// lifecycles" and "Garbage-collected contexts release resources"). The GPU
+// soak tests are in soak-gpu.test.mjs: on Linux a process uses one Vulkan
+// device, the GPU or SwiftShader.
 //
 // OXGL_SOAK_ITERATIONS overrides the measured cycle count (default 1,000).
 import assert from 'node:assert/strict';
-import { readdirSync } from 'node:fs';
 import { test } from 'node:test';
-import { setFlagsFromString } from 'node:v8';
-import { runInNewContext } from 'node:vm';
 
-import { createContext } from '@oxgl-js/oxgl';
-
-import { gpuSkipReason, liveContexts } from './helpers.mjs';
-
-// Equivalent to running with --expose-gc, without depending on how the test
-// runner passes flags to its subprocesses.
-setFlagsFromString('--expose-gc');
-const gc = runInNewContext('gc');
-
-const ITERATIONS = Number(process.env.OXGL_SOAK_ITERATIONS ?? 1000);
-const WARM_UP = 50;
-const SIZE = 256;
-const THRESHOLD = 32 * 1024 * 1024;
-
-const turn = () => new Promise((resolve) => setImmediate(resolve));
-
-function rssAfterGc() {
-  gc();
-  gc();
-  return process.memoryUsage.rss();
-}
-
-const pixel = new Uint8Array(4);
-
-/** Creates a context and renders into it, so its buffers are resident (an
- * untouched buffer may never be backed by physical memory, hiding a leak). */
-function used(backend, webgl2 = false) {
-  const gl = createContext({ width: SIZE, height: SIZE, backend, webgl2 });
-  gl.clearColor(0, 1, 0, 1);
-  gl.clear(gl.COLOR_BUFFER_BIT | gl.DEPTH_BUFFER_BIT);
-  gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_BYTE, pixel);
-  return gl;
-}
-
-function cycle(backend, webgl2) {
-  used(backend, webgl2).destroy();
-}
-
-/** The process's thread count on Linux (a driver may start threads per context), else undefined. */
-function threads() {
-  try {
-    return readdirSync('/proc/self/task').length;
-  } catch {
-    return undefined;
-  }
-}
-
-function soak(t, backend, webgl2 = false) {
-  for (let i = 0; i < WARM_UP; i += 1) cycle(backend, webgl2);
-  const baseline = rssAfterGc();
-  const baseThreads = threads();
-  const start = performance.now();
-  for (let i = 0; i < ITERATIONS; i += 1) cycle(backend, webgl2);
-  const perCycle = (performance.now() - start) / ITERATIONS;
-  const growth = rssAfterGc() - baseline;
-  t.diagnostic(`${backend}: ${ITERATIONS} cycles, ${perCycle.toFixed(3)} ms/cycle, RSS growth ${(growth / 1048576).toFixed(1)} MiB`);
-  assert.ok(growth <= THRESHOLD, `RSS grew by ${(growth / 1048576).toFixed(1)} MiB (limit 32 MiB)`);
-  if (baseThreads !== undefined) {
-    // A few threads may come and go (libuv, the GC); per-context threads would add ITERATIONS.
-    assert.ok(threads() - baseThreads <= 8, `threads grew from ${baseThreads} to ${threads()}`);
-  }
-}
+import { liveContexts } from './helpers.mjs';
+import { gc, ITERATIONS, rssAfterGc, soak, THRESHOLD, turn, used } from './soak-helpers.mjs';
 
 test('software soak test', (t) => {
   soak(t, 'software');
-});
-
-const gpuSkip = await gpuSkipReason();
-
-test('GPU soak test', { skip: gpuSkip }, (t) => {
-  soak(t, 'gpu');
-});
-
-// On Linux, a GPU whose Vulkan driver offers OpenGL ES 2.0 only (the Pi 5's
-// V3D) runs WebGL 2 on the OpenGL ES backend, which loads the system's EGL
-// driver. Under OXGL_BACKEND=gles every soak test runs there.
-test('GPU soak test (WebGL 2)', { skip: gpuSkip }, (t) => {
-  soak(t, 'gpu', true);
 });
 
 /** Forces GC and yields until `done()` holds, failing after 10 s. */
