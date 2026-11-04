@@ -69,22 +69,26 @@ oxgl-angle keeps a copy for its own build.
 ANGLE changes in two steps, one in each repository:
 
 1. In [oxgl-angle](https://github.com/oxgl-js/oxgl-angle), change the recipe
-   with a new `bundle_version`, merge it, and release it (its
+   with a new `bundle_version` and land it through its merge queue, which
+   builds the bundles; the push to its `main` releases them (its
    `angle/README.md` has the steps). oxgl-angle also does this by itself for
-   each new Chrome stable release, daily at 07:17 UTC.
-2. Here, `.github/workflows/angle-bump.yml` picks the release up daily at
-   10:17 UTC, three hours later:
+   each new Chrome stable release.
+2. oxgl-angle's release job then starts `.github/workflows/angle-bump.yml`
+   here:
    - It runs `angle/scripts/bump.sh`, which pins the release's bundles and
      digests and bumps the patch version.
-   - It opens or refreshes a pull request from the `angle-bump` branch and runs
-     CI on it.
-   - When CI passes, ci.yml's `merge-bump` job merges it, and the run on `main`
-     publishes the new version to npm.
+   - It opens or refreshes a pull request from the `angle-bump` branch, as the
+     `oxgl-js` GitHub App, with auto-merge on.
+   - The merge queue runs the full checks against the new bundles and lands
+     it, and the push to `main` publishes the new version to npm.
 
-   A bump whose CI fails, or that someone pushed a fix to, waits for a person;
-   to skip a release, label its pull request `skip-bump` and close it. The bump
-   refuses a release that oxgl-angle's own workflows didn't make (created and
-   every asset uploaded by `github-actions[bot]`, tag on oxgl-angle's `main`).
+   A bump whose queue run fails leaves the queue and stays open for a person
+   to push a fix to `angle-bump`; it then lands through the queue. To skip a
+   release, label its pull request `skip-bump` and close it. The bump refuses
+   a release that oxgl-angle's own workflows didn't make (created and every
+   asset uploaded by `github-actions[bot]`, tag on oxgl-angle's `main`). It
+   also runs on every push to `main` and by hand (Actions → angle-bump → Run
+   workflow), rebuilding an open bump only when it went stale.
    To pin by hand instead, run `angle/scripts/bump.sh [<tag>]` and open a PR.
    After an ANGLE update, also recheck the known upstream issues below.
 

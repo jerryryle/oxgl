@@ -42,8 +42,8 @@ for any other platform; importing oxgl there throws an error with
 CI runs the Rust and Node tests, both Khronos conformance suites and three.js's
 examples on all five platforms, with the software backend; it does not yet test
 the GPU backends. The [results page](https://oxgl-js.github.io/oxgl/) shows
-every conformance page's and three.js example's result on each platform from
-the latest CI run on `main`, with the reason for each one that doesn't pass.
+every conformance page's and three.js example's result on each platform for
+the latest release, with the reason for each one that doesn't pass.
 The results are the same on every platform, apart from the x64 pages listed
 under Known issues and the three.js examples noted in the three.js section
 below.

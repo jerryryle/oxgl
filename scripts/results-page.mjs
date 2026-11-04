@@ -4,11 +4,10 @@
 // <dir> (as actions/download-artifact lays them out) and fills the markers in
 // scripts/results-page.html with escaped static HTML.
 //
-//     node scripts/results-page.mjs --commit <sha> [--page-commit <sha>] <dir> <out.html>
+//     node scripts/results-page.mjs --commit <sha> [--version <version>] <dir> <out.html>
 //
-// --commit is the oxgl commit whose CI run produced the reports; --page-commit,
-// when it differs, the commit the page itself was built at (a page-only change
-// republishing earlier results).
+// --commit is the oxgl commit whose CI run produced the reports; --version, the
+// oxgl version released from them, when the page is built for a release.
 import { mkdirSync, readdirSync, readFileSync, writeFileSync } from 'node:fs';
 import { basename, dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -150,22 +149,22 @@ const formatTime = (iso) => `${iso.slice(0, 10)} ${iso.slice(11, 16)} UTC`;
 /** A linked, shortened oxgl commit. */
 const commitLink = (sha) => `<a href="${REPO}/commit/${escapeHtml(sha)}"><code>${escapeHtml(sha.slice(0, 7))}</code></a>`;
 
-function renderMeta({ commit, pageCommit, newest, suiteCommits, threejsTag }) {
+function renderMeta({ commit, version, newest, suiteCommits, threejsTag }) {
   const parts = [`Results from oxgl commit ${commitLink(commit)}`];
+  if (version) parts.unshift(`oxgl <a href="${REPO}/releases/tag/v${escapeHtml(version)}">${escapeHtml(version)}</a>`);
   if (newest) parts.push(escapeHtml(formatTime(newest)));
   if (suiteCommits.length > 0) parts.push(`conformance suite ${suiteCommits.map((c) => `<code>${escapeHtml(String(c).slice(0, 7))}</code>`).join(', ')}`);
   if (threejsTag) parts.push(`three.js <code>${escapeHtml(threejsTag)}</code>`);
-  if (pageCommit && pageCommit !== commit) parts.push(`page built at ${commitLink(pageCommit)}`);
   return `<p class="meta">${parts.join(' · ')}.</p>`;
 }
 
 /**
  * The filled page for `reports` (from readReports), the oxgl `commit` they
- * come from and, when it differs, the `pageCommit` the page was built at.
+ * come from and, for a release, the `version` released from them.
  */
-export function buildPage(reports, { commit, pageCommit, template = readFileSync(TEMPLATE_PATH, 'utf8') }) {
+export function buildPage(reports, { commit, version, template = readFileSync(TEMPLATE_PATH, 'utf8') }) {
   const { runs, ...meta } = collect(reports);
-  const markers = { '<!-- results:meta -->': renderMeta({ commit, pageCommit, ...meta }), '<!-- results:sections -->': SECTIONS.map((s) => renderSection(s, runs)).join('\n') };
+  const markers = { '<!-- results:meta -->': renderMeta({ commit, version, ...meta }), '<!-- results:sections -->': SECTIONS.map((s) => renderSection(s, runs)).join('\n') };
   let html = template;
   for (const [marker, content] of Object.entries(markers)) {
     if (!html.includes(marker)) throw new Error(`results-page: the template has no ${marker} marker`);
@@ -175,13 +174,13 @@ export function buildPage(reports, { commit, pageCommit, template = readFileSync
 }
 
 export function main(argv = process.argv.slice(2)) {
-  const { values, positionals } = parseArgs({ args: argv, options: { commit: { type: 'string' }, 'page-commit': { type: 'string' } }, allowPositionals: true });
+  const { values, positionals } = parseArgs({ args: argv, options: { commit: { type: 'string' }, version: { type: 'string' } }, allowPositionals: true });
   const [dir, out] = positionals;
   if (!values.commit || !dir || !out || positionals.length !== 2) {
-    throw new Error('usage: node scripts/results-page.mjs --commit <sha> [--page-commit <sha>] <dir> <out.html>');
+    throw new Error('usage: node scripts/results-page.mjs --commit <sha> [--version <version>] <dir> <out.html>');
   }
   const reports = readReports(dir);
-  const html = buildPage(reports, { commit: values.commit, pageCommit: values['page-commit'] });
+  const html = buildPage(reports, { commit: values.commit, version: values.version });
   mkdirSync(dirname(out), { recursive: true });
   writeFileSync(out, html);
   console.log(`results-page: ${out} from ${String(reports.length)} reports (${String(html.length)} bytes)`);

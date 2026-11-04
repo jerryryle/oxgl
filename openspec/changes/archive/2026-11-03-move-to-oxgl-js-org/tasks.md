@@ -10,7 +10,7 @@
 
 ## 2. oxgl-angle references (in the oxgl-angle repository)
 
-- [ ] 2.1 Point `README.md`'s oxgl link at `https://github.com/oxgl-js/oxgl`. Verify that `git grep jerryryle/` there finds nothing outside `assets/`, and open a PR whose `angle-build` check passes.
+- [x] 2.1 Point `README.md`'s oxgl link at `https://github.com/oxgl-js/oxgl`. Verify that `git grep jerryryle/` there finds nothing outside `assets/`, and open a PR whose `angle-build` check passes.
 
 ## 3. oxgl package, pin and bump references
 
