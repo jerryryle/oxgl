@@ -110,8 +110,8 @@ pub trait BackendProbe {
 #[derive(Debug, Clone)]
 struct Opened<D> {
     display: D,
-    /// `GL_RENDERER`, for the GPU displays; empty for `SwiftShader`. Never a
-    /// CPU renderer for [`Backend::Gpu`].
+    /// `GL_RENDERER`, checked for a CPU on the OpenGL ES display; empty for
+    /// `SwiftShader`. Never a CPU renderer for [`Backend::Gpu`].
     renderer: String,
     /// Whether the display offers OpenGL ES 3.0.
     es3: bool,
@@ -160,18 +160,21 @@ impl<P: BackendProbe> Backends<P> {
     }
 
     /// The opened display for `backend`, opening it on first use.
+    /// A display never opened is refused while the other Vulkan backend holds
+    /// the display it shares; one already opened (or failed) keeps its result.
     fn opened(&mut self, backend: Backend) -> Result<Opened<P::Display>, String> {
-        if let Some(holder) = self.vulkan_holder(backend) {
-            return Err(format!(
-                "{holder} is in use, and a Linux process uses one Vulkan device"
-            ));
-        }
+        let holder = self.vulkan_holder(backend);
         let probe = &self.probe;
         let slot = match backend {
             Backend::Gpu => &mut self.gpu,
             Backend::Software => &mut self.software,
             Backend::Gles => &mut self.gles,
         };
+        if let (None, Some(holder)) = (&slot, holder) {
+            return Err(format!(
+                "{holder} is in use, and a Linux process uses one Vulkan device"
+            ));
+        }
         slot.get_or_insert_with(|| {
             let display = probe.open_display(backend)?;
             let renderer = match backend {
@@ -213,10 +216,11 @@ impl<P: BackendProbe> Backends<P> {
         (self.vulkan_gpu && matches!(other, Some(Ok(_)))).then_some(holder)
     }
 
-    /// The opened display for a GPU backend, refusing a CPU renderer (which
-    /// only the OpenGL ES display keeps).
-    fn gpu_display(&mut self, backend: Backend) -> Result<Opened<P::Display>, String> {
-        let opened = self.opened(backend)?;
+    /// The opened OpenGL ES display, refusing a CPU renderer. The display
+    /// itself is kept for the test-only [`RequestedBackend::Gles`], which
+    /// accepts one; the platform GPU display is refused in [`Self::opened`].
+    fn gles_gpu_display(&mut self) -> Result<Opened<P::Display>, String> {
+        let opened = self.opened(Backend::Gles)?;
         if is_cpu_renderer(&opened.renderer) {
             return Err(format!(
                 "the GPU backend renders on a CPU ({})",
@@ -233,12 +237,12 @@ impl<P: BackendProbe> Backends<P> {
     /// The error names each backend tried.
     fn try_gpu(&mut self, request: &ContextRequest) -> Result<(Backend, P::Context), String> {
         let gpu = self
-            .gpu_display(Backend::Gpu)
+            .opened(Backend::Gpu)
             .map_err(|cause| format!("{}: {cause}", gpu_name()))?;
         if request.webgl2 && self.vulkan_gpu && !gpu.es3 {
             let tried = format!("{}: offers OpenGL ES 2.0 only; OpenGL ES", gpu_name());
             let gles = self
-                .gpu_display(Backend::Gles)
+                .gles_gpu_display()
                 .map_err(|cause| format!("{tried}: {cause}"))?;
             return self
                 .probe
@@ -939,5 +943,23 @@ mod tests {
             .create(RequestedBackend::Software, &REQUEST)
             .unwrap();
         assert_eq!(backend, Backend::Software);
+    }
+
+    #[test]
+    fn linux_remembered_gpu_failure_outranks_the_holder() {
+        for (probe, cause) in [
+            (no_gpu(), "0x3001"),
+            (FakeProbe::default(), "renders on a CPU"),
+        ] {
+            let mut backends = linux(probe);
+            let (backend, _) = backends.create(RequestedBackend::Auto, &REQUEST).unwrap();
+            assert_eq!(backend, Backend::Software);
+            let message = backends
+                .create(RequestedBackend::Gpu, &REQUEST)
+                .unwrap_err()
+                .to_string();
+            assert!(!message.contains("in use"), "{message}");
+            assert!(message.contains(cause), "{message}");
+        }
     }
 }

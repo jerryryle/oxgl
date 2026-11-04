@@ -1,5 +1,20 @@
 ## MODIFIED Requirements
 
+### Requirement: Node checks in software mode
+On each platform, CI SHALL install dependencies with `npm ci` and run the JS lint and type check. It SHALL run the Node test suite (including the soak test) with `OXGL_BACKEND=software` against that platform's packages from the run's build (Each platform is built once per run), on Node 24 on every platform and on both ends of `engines` on Linux arm64. On Linux x64 it SHALL then install Mesa's Vulkan driver (`mesa-vulkan-drivers`) and run the backend-selection tests without `OXGL_BACKEND`.
+
+#### Scenario: Software rendering on every platform
+- **WHEN** the Node test step runs
+- **THEN** `OXGL_BACKEND` is `software` and clear-then-readPixels and soak tests execute (not skip) on every platform in the matrix
+
+#### Scenario: Oldest supported Node
+- **WHEN** the Node tests run on Linux arm64 on Node 22.22.2
+- **THEN** they use the same Linux arm64 packages as the Node 24 leg, and pass
+
+#### Scenario: A Vulkan GPU display rejected as a CPU
+- **WHEN** the Linux x64 leg runs the backend-selection tests with lavapipe as the only Vulkan device
+- **THEN** the test that creates an `'auto'` context and then a `'software'` one runs (not skips), and both render on SwiftShader
+
 ### Requirement: Each platform is built once per run
 In each run, CI SHALL build and pack oxgl once per supported platform, in one build job per platform, and SHALL upload that platform's packages as a run artifact. Every job that runs oxgl's Node tests, conformance suites or three.js examples SHALL run them against those packages, unpacked into `dist/`, and SHALL NOT build the addon itself. The one exception is the OpenGL ES backend job, which replaces the Linux x64 addon with the run's `test-gles` build. The `@oxgl-js/oxgl` package every such job uses SHALL be the single one the run keeps for the release. The Linux x64 build job SHALL also build the addon with the Cargo feature `test-gles`, after packing and outside the packed directory, and upload it as a separate artifact, which SHALL NOT be packed into any package or released.
 

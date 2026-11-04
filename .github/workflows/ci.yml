@@ -344,6 +344,19 @@ jobs:
       - run: npm test
         env:
           OXGL_BACKEND: software
+      # With Mesa's lavapipe as the only Vulkan device, 'auto' opens the GPU
+      # display, rejects it as a CPU and terminates it, and SwiftShader then
+      # initializes the display it shares (openspec backend-selection, "A GPU
+      # display rejected as a CPU holds nothing"). Only a run without
+      # OXGL_BACKEND reaches that path.
+      - name: Install Mesa's Vulkan driver (Linux x64)
+        if: matrix.os == 'ubuntu-24.04'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends mesa-vulkan-drivers
+      - name: Backend selection over lavapipe (Linux x64)
+        if: matrix.os == 'ubuntu-24.04'
+        run: node --test test/backend-selection.test.mjs
 
   # Rust test suites under AddressSanitizer + LeakSanitizer, on both Linux
   # architectures (README.md, CONTRIBUTING.md). Part of the full checks; on a

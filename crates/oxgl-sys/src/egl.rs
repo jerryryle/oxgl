@@ -18,6 +18,7 @@ use std::ffi::{CStr, c_char};
 use std::fmt;
 use std::marker::PhantomData;
 use std::ptr;
+use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 
 use std::cell::Cell;
@@ -116,12 +117,19 @@ pub enum ClientVersion {
 pub struct Display {
     angle: Angle,
     raw: EGLDisplay,
+    /// Shared by every clone of this handle, contexts' included, so
+    /// [`Display::terminate`] can tell whether it holds the only one. It
+    /// counts this open's handles only: another `Display::open` that ANGLE
+    /// maps to the same display (on Linux, the GPU and `SwiftShader` kinds)
+    /// has its own.
+    handles: Arc<()>,
 }
 
 // SAFETY: an EGLDisplay is a process-global handle, and EGL requires display
 // functions to be callable from any thread (EGL 1.5 §2.6), and an initialized
 // display is usable from every thread of the process (§3.2); ANGLE locks
-// internally. `Angle` is an `Arc` of immutable function pointers.
+// internally. `Angle` is an `Arc` of immutable function pointers, and
+// `handles` an `Arc<()>`.
 unsafe impl Send for Display {}
 // SAFETY: as above; no method mutates `Display` itself.
 unsafe impl Sync for Display {}
@@ -195,14 +203,21 @@ impl Display {
         Ok(Self {
             angle: angle.clone(),
             raw,
+            handles: Arc::new(()),
         })
     }
 
     /// Terminates the display, so that it holds no device. ANGLE keeps the
     /// display itself, and initializes it again, possibly on another device,
-    /// when it is next opened. Callers terminate only a display they hold the
-    /// only handle to, with no context alive on it.
+    /// when it is next opened. Does nothing while another handle from the
+    /// same open exists, such as a clone or a live context's. Handles from
+    /// another open of the same ANGLE display are not seen, so the caller
+    /// must ensure none is in use (on Linux, `oxgl-core`'s backend cache
+    /// never opens the GPU kind while `SwiftShader` holds the display).
     pub fn terminate(self) {
+        if Arc::strong_count(&self.handles) > 1 {
+            return;
+        }
         // SAFETY: `raw` is a display returned by eglGetPlatformDisplayEXT.
         // eglTerminate accepts any valid display, initialized or not, and
         // later calls on a terminated display fail with EGL_NOT_INITIALIZED

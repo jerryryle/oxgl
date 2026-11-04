@@ -109,6 +109,21 @@ test('environment untouched', async () => {
   }
   assert.equal(JSON.stringify(process.env), before);
   assert.equal(process.cwd(), cwd);
+  // On Linux, the GPU and its WebGL 2 path (the OpenGL ES backend on a GPU
+  // whose Vulkan driver gives OpenGL ES 2.0 only) need a process of their own.
+  // A Pi without Mesa's EGL fails here, with the backend's install hint.
+  if (reason === undefined && oneVulkanDevice) {
+    const child = inChild(`
+      import { createContext } from '@oxgl-js/oxgl';
+      const before = JSON.stringify(process.env);
+      const cwd = process.cwd();
+      for (const backend of ['gpu', 'auto']) {
+        for (const webgl2 of [false, true]) createContext({ width: 1, height: 1, backend, webgl2 }).destroy();
+      }
+      console.log(JSON.stringify({ env: JSON.stringify(process.env) === before, cwd: process.cwd() === cwd }));
+    `);
+    assert.deepEqual(child, { env: true, cwd: true }, 'GPU contexts in a child process');
+  }
 });
 
 /**
@@ -162,7 +177,8 @@ test('software after auto on a host without a GPU renders on SwiftShader', { tim
   // On Linux, a GPU display rejected as a CPU (such as Mesa's lavapipe) is
   // released, so SwiftShader can initialize.
   for (const result of inChild(contextsScript(['auto', 'software']))) {
-    assert.match(result.renderer ?? result.message, /SwiftShader/);
+    assert.equal(result.code, undefined, result.message);
+    assert.match(result.renderer, /SwiftShader/);
   }
 });
 
