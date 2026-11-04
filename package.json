@@ -1,6 +1,6 @@
 {
   "name": "@oxgl-js/oxgl",
-  "version": "0.2.2",
+  "version": "0.2.3",
   "description": "Standards-compliant headless WebGL 1 and WebGL 2 for Node.js",
   "license": "BSD-3-Clause",
   "repository": {
