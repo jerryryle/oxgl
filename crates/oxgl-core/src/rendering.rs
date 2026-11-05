@@ -1173,7 +1173,9 @@ impl Context {
         }
     }
 
-    /// `drawElements`, or WebGL 2's `drawRangeElements` with `range`.
+    /// `drawElements`, or WebGL 2's `drawRangeElements` with `range`, which
+    /// is discarded after its check: a GLES driver may trust it and read
+    /// outside its vertex data for an index outside it.
     pub fn draw_elements(
         &mut self,
         mode: u32,
@@ -1185,14 +1187,11 @@ impl Context {
         let Some(current) = current(&self.buffer, &mut self.errors) else {
             return;
         };
-        if offset < 0 {
+        if offset < 0 || range.is_some_and(|(start, end)| end < start) {
             self.errors.synthesize(GL_INVALID_VALUE);
             return;
         }
-        match range {
-            None => current.draw_elements(mode, count, ty, offset),
-            Some((start, end)) => current.draw_range_elements(mode, start, end, count, ty, offset),
-        }
+        current.draw_elements(mode, count, ty, offset);
     }
 }
 

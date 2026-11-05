@@ -170,6 +170,13 @@ test('triangle and indexed draw', () => {
       gl.clear(gl.COLOR_BUFFER_BIT);
       gl.drawRangeElements(gl.TRIANGLES, 0, 5, 6, gl.UNSIGNED_SHORT, 0);
       assert.ok(allPixels(readAll(gl), [255, 0, 0, 255]));
+      // The range is discarded: indices outside it still draw.
+      gl.clear(gl.COLOR_BUFFER_BIT);
+      gl.drawRangeElements(gl.TRIANGLES, 5, 5, 6, gl.UNSIGNED_SHORT, 0);
+      assert.ok(allPixels(readAll(gl), [255, 0, 0, 255]));
+      assert.equal(gl.getError(), gl.NO_ERROR);
+      gl.drawRangeElements(gl.TRIANGLES, 5, 0, 6, gl.UNSIGNED_SHORT, 0);
+      assert.equal(gl.getError(), gl.INVALID_VALUE);
     }
     assert.equal(gl.getError(), gl.NO_ERROR);
     gl.destroy();

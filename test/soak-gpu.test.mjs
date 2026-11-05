@@ -13,8 +13,9 @@ test('GPU soak test', { skip: gpuSkip }, (t) => {
 });
 
 // On Linux, a GPU whose Vulkan driver offers OpenGL ES 2.0 only (the Pi 5's
-// V3D) runs WebGL 2 on the OpenGL ES backend, which loads the system's EGL
-// driver. Under OXGL_BACKEND=gles every soak test runs there.
+// V3D) runs on the OpenGL ES backend, which loads the system's EGL driver, so
+// both of these tests run there, and nothing soaks Vulkan on that GPU. Under
+// OXGL_BACKEND=gles every soak test runs there.
 test('GPU soak test (WebGL 2)', { skip: gpuSkip }, (t) => {
   soak(t, 'gpu', true);
 });

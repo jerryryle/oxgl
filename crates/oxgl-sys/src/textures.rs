@@ -213,6 +213,19 @@ impl Current<'_> {
         }
     }
 
+    /// `glGetTexLevelParameterivANGLE`, for one value (requires
+    /// `GL_ANGLE_get_tex_level_parameter`, see [`Current::request_extension`]).
+    #[must_use]
+    pub fn tex_level_parameter(&self, target: GLenum, level: GLint, pname: GLenum) -> GLint {
+        let mut value = 0;
+        // SAFETY: a context is current; `value` outlives the call, and every
+        // parameter this writes is a single integer.
+        unsafe {
+            (self.fns().glGetTexLevelParameterivANGLE)(target, level, pname, &raw mut value);
+        };
+        value
+    }
+
     /// `glGetTexParameter{i,f}vRobustANGLE` (`float` selects the float
     /// query) for one value, as `f64`.
     #[must_use]

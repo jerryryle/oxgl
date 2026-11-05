@@ -105,7 +105,8 @@ rechecks it.
 Khronos conformance pages that fail because of ANGLE, or of the SwiftShader it
 bundles. Each is an expected failure in
 `conformance/expectations.txt`, tagged `ANGLE:` or `SwiftShader:`. Last checked
-against `angle_commit` `751417514a52` (`chromium/8103`).
+against `angle_commit` `127e783de334` (`chromium/8078`); on `751417514a52`
+(`chromium/8103`), only through the OpenGL ES backend.
 
 | Page (suites) | Cause | Where |
 | --- | --- | --- |
@@ -149,3 +150,14 @@ against `angle_commit` `127e783de334`; still present on `chromium/8127` and
 After changing `angle_commit`, check that the code above is still in the new
 commit's sources. For the leak, also run the `asan` job without its
 suppression: it reports the 72-byte allocations for as long as ANGLE makes them.
+
+### Upstream issues oxgl works around
+
+Defects oxgl avoids, listed so that an ANGLE or Mesa update can remove the
+workaround.
+
+| Defect | Workaround | Where |
+| --- | --- | --- |
+| On the OpenGL ES backend, ANGLE passes WebGL 1's `generateMipmap` on an unsized float texture to the driver, which refuses it without linear float filtering, and the error loses the context. | `Context::generate_mipmap` generates `INVALID_OPERATION` | ANGLE: `ValidateGenerateMipmapBase`, `src/libANGLE/validationES.cpp` |
+| ANGLE's OpenGL ES backend passes `drawRangeElements`' range to the driver, which may trust it. llvmpipe reads outside its vertex data when an index is outside the range. | oxgl calls `drawElements`, as WebGL 2.0, "Writing to the drawing buffer", allows | ANGLE: `ContextGL::drawRangeElements`, `src/libANGLE/renderer/gl/ContextGL.cpp` |
+| ANGLE emits a dynamic sampler array index on a device with `shaderSampledImageArrayDynamicIndexing = false`, and V3DV keeps one descriptor for the array, so a WebGL 1 loop over a sampler array segfaults at the draw. | On a Vulkan GPU with OpenGL ES 2.0 only, no context uses Vulkan: `Backends::opened` refuses the display, and the OpenGL ES backend or SwiftShader serves it | Mesa: `lower_tex_src`, `src/broadcom/vulkan/v3dv_pipeline.c` |

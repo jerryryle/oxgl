@@ -91,8 +91,10 @@ impl Runtime {
         request: &ContextRequest,
     ) -> Result<ContextKey, CoreError> {
         self.drain();
-        let (_, buffer) = backend::create_drawing_buffer(&self.lib_dir, requested, request)?;
-        Ok(self.contexts.insert(Context::new(buffer, request.webgl2)))
+        let (backend, buffer) = backend::create_drawing_buffer(&self.lib_dir, requested, request)?;
+        Ok(self
+            .contexts
+            .insert(Context::new(buffer, request.webgl2, backend)))
     }
 
     /// The live context for `key`; `None` for a destroyed or unknown key,

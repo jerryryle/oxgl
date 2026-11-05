@@ -28,8 +28,8 @@ libraries. To build from source, see Prerequisites below and
 
 | Platform | Package | GPU backend |
 |---|---|---|
-| Linux x64 (glibc) | `@oxgl-js/linux-x64-gnu` | Vulkan, or OpenGL ES for WebGL 2 (see Backends) |
-| Linux arm64 (glibc) | `@oxgl-js/linux-arm64-gnu` | Vulkan, or OpenGL ES for WebGL 2 (see Backends) |
+| Linux x64 (glibc) | `@oxgl-js/linux-x64-gnu` | Vulkan, or OpenGL ES (see Backends) |
+| Linux arm64 (glibc) | `@oxgl-js/linux-arm64-gnu` | Vulkan, or OpenGL ES (see Backends) |
 | macOS arm64 | `@oxgl-js/darwin-arm64` | Metal |
 | Windows x64 | `@oxgl-js/win32-x64-msvc` | Direct3D 11 |
 | Windows arm64 | `@oxgl-js/win32-arm64-msvc` | Direct3D 11 |
@@ -77,19 +77,17 @@ below.
   the first to open holds it for the process. After a `'gpu'` context on a
   Vulkan GPU, `'software'` throws `OXGL_CONTEXT_CREATION_FAILED`. After a
   `'software'` context, `'gpu'` throws `OXGL_GPU_UNAVAILABLE` and `'auto'` uses
-  SwiftShader. Both messages name the backend in use. This applies even when
-  WebGL 2 runs on the OpenGL ES backend, since selecting it opens the Vulkan
-  GPU first. On a Pi without Mesa's EGL, WebGL 2 `'auto'` therefore fails
-  rather than falling back to SwiftShader. Other platforms are unaffected:
-  their GPU backend is Metal or Direct3D 11. To use both on Linux, create the
+  SwiftShader. Both messages name the backend in use. On a GPU that uses the
+  OpenGL ES backend, such as a Raspberry Pi 5, a process can use both if its
+  first `'gpu'` context comes before SwiftShader. Other platforms are unaffected: their GPU backend is
+  Metal or Direct3D 11. To use both on Linux, create the
   other kind in a child process.
 - **WebGL 2 on a Raspberry Pi 5 passes all but a few conformance pages.** On
   V3D through the OpenGL ES backend, 2851 of 2865 WebGL 2 pages pass. Four
   failures are V3D's own: sRGB mipmap generation, a large instance divisor,
   invalidating the default framebuffer's depth and stencil, and transform
   feedback into too-small buffers. The others are shared with the backend on
-  llvmpipe. WebGL 1 runs on Vulkan (V3DV), whose texture limit of 7680 is not a
-  power of two, which one page expects.
+  llvmpipe.
 - **SwiftShader can get the depth of a near-clipped triangle wrong.** With the
   software backend, a large triangle that the near plane clips can be drawn
   with depths that are too near, hiding geometry in front of it. A typical
@@ -306,13 +304,14 @@ destroyed context the promise rejects with `OXGL_CONTEXT_LOST`.
 On Linux, a WebGL 2 context uses ANGLE's OpenGL ES backend on the system's
 EGL driver when the Vulkan GPU offers only OpenGL ES 2.0, as on a Raspberry Pi
 5, whose V3D GPU gets OpenGL ES 3.1 from Mesa's GL driver. This applies to
-`'auto'` and `'gpu'` alike; WebGL 1 contexts stay on Vulkan, and nothing changes
-where Vulkan gives OpenGL ES 3.0. It needs Mesa's EGL (`libegl1` and
+`'auto'` and `'gpu'` alike, and nothing changes where Vulkan gives OpenGL ES 3.0.
+WebGL 1 contexts on such a GPU use the same backend, since Vulkan can crash the
+process there. It needs Mesa's EGL (`libegl1` and
 `libegl-mesa0` on Debian and Ubuntu), opened only when such a context is first
 created; without it, `'gpu'` throws `OXGL_GPU_UNAVAILABLE`, whose message says
-the backend needs `libEGL.so.1`, and `'auto'` uses SwiftShader. The user needs access to the GPU
-(on Raspberry Pi OS, membership of the `render` group); otherwise Mesa falls
-back to llvmpipe, which `'gpu'` refuses.
+the backend needs `libEGL.so.1`, and `'auto'` uses SwiftShader. The user needs access to the GPU (on Raspberry Pi OS,
+membership of the `render` group); otherwise Mesa falls back to llvmpipe, which
+is refused the same way.
 
 A CPU driver (SwiftShader, llvmpipe, lavapipe, softpipe, WARP) never counts as a
 GPU. If a GPU backend fails to initialize, it is not retried until the process

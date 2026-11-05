@@ -1,5 +1,6 @@
 // textures spec scenarios.
 import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
 import { test } from 'node:test';
 import { runInNewContext } from 'node:vm';
 
@@ -72,6 +73,69 @@ test('target mismatch and deletion', () => {
   assert.equal(gl.isTexture(texture), false);
   gl.destroy();
 });
+
+// A driver without linear filtering of float refuses this, which must stay an
+// error and not lose the context (OES_texture_float_linear).
+test('mipmaps of a float texture', (t) => {
+  const gl = createContext({ width: 1, height: 1 });
+  if (!gl.getExtension('OES_texture_float')) {
+    gl.destroy();
+    return t.skip('no OES_texture_float');
+  }
+  const info = gl.getExtension('WEBGL_debug_renderer_info');
+  const refused =
+    !gl.getSupportedExtensions().includes('OES_texture_float_linear') &&
+    gl.getParameter(info.UNMASKED_RENDERER_WEBGL).includes('OpenGL ES');
+  for (const [target, face] of [[gl.TEXTURE_2D, gl.TEXTURE_2D], [gl.TEXTURE_CUBE_MAP, gl.TEXTURE_CUBE_MAP_POSITIVE_X]]) {
+    gl.bindTexture(target, gl.createTexture());
+    gl.texImage2D(face, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.FLOAT, new Float32Array(4));
+    if (target === gl.TEXTURE_CUBE_MAP) {
+      for (let i = 1; i < 6; i++) gl.texImage2D(face + i, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.FLOAT, new Float32Array(4));
+    }
+    gl.generateMipmap(target);
+    assert.equal(gl.getError(), refused ? gl.INVALID_OPERATION : gl.NO_ERROR);
+    assert.equal(gl.isContextLost(), false);
+  }
+  // The other float formats. LUMINANCE has no channel size to read, and
+  // V3D's driver accepts it.
+  for (const format of [gl.RGB, gl.ALPHA, gl.LUMINANCE, gl.LUMINANCE_ALPHA]) {
+    const channels = { [gl.RGB]: 3, [gl.LUMINANCE_ALPHA]: 2 }[format] ?? 1;
+    gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
+    gl.texImage2D(gl.TEXTURE_2D, 0, format, 1, 1, 0, format, gl.FLOAT, new Float32Array(channels));
+    gl.generateMipmap(gl.TEXTURE_2D);
+    const error = gl.getError();
+    if (format !== gl.LUMINANCE) assert.equal(error, refused ? gl.INVALID_OPERATION : gl.NO_ERROR, `format ${format}`);
+    assert.equal(gl.isContextLost(), false, `format ${format}`);
+  }
+  gl.destroy();
+});
+
+// The same refusal on a driver without linear filtering of float, which Mesa's
+// llvmpipe is when told to hide it. V3D is one, but CI has none.
+test(
+  'mipmaps of a float texture on a driver that refuses them',
+  { skip: process.env.OXGL_BACKEND !== 'gles' && 'needs a test-gles build with OXGL_BACKEND=gles' },
+  () => {
+    const script = `
+      import { createContext } from '@oxgl-js/oxgl';
+      const gl = createContext({ width: 1, height: 1 });
+      gl.getExtension('OES_texture_float');
+      gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
+      gl.texImage2D(gl.TEXTURE_2D, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.FLOAT, new Float32Array(4));
+      gl.generateMipmap(gl.TEXTURE_2D);
+      console.log(JSON.stringify({
+        linear: gl.getSupportedExtensions().includes('OES_texture_float_linear'),
+        invalidOperation: gl.getError() === gl.INVALID_OPERATION,
+        lost: gl.isContextLost(),
+      }));
+    `;
+    const env = { ...process.env, MESA_EXTENSION_OVERRIDE: '-GL_OES_texture_float_linear' };
+    const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], { env, encoding: 'utf8' });
+    assert.equal(result.status, 0, result.stderr);
+    const report = JSON.parse(result.stdout.trim().split('\n').at(-1));
+    assert.deepEqual(report, { linear: false, invalidOperation: true, lost: false });
+  },
+);
 
 test('parameters', () => {
   const gl = createContext({ width: 1, height: 1, webgl2: true });

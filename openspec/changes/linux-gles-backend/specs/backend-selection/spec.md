@@ -1,7 +1,7 @@
 ## MODIFIED Requirements
 
 ### Requirement: Platform GPU backends
-A GPU backend SHALL be the ANGLE backend native to the platform, using a hardware device: Vulkan on Linux, Metal on macOS, D3D11 on Windows. On Linux, a WebGL 2 request SHALL instead use ANGLE's OpenGL ES backend on the system's EGL driver, through EGL's surfaceless platform (`EGL_MESA_platform_surfaceless`), when the Vulkan display opened, was not rejected as a CPU, and offers no OpenGL ES 3.0 config. A CPU-based driver SHALL NOT count as a GPU backend under either. That includes a software Vulkan implementation, and a GL driver whose renderer names llvmpipe, softpipe, swrast or a software rasterizer.
+A GPU backend SHALL be the ANGLE backend native to the platform, using a hardware device: Vulkan on Linux, Metal on macOS, D3D11 on Windows. On Linux, a request SHALL instead use ANGLE's OpenGL ES backend on the system's EGL driver, through EGL's surfaceless platform (`EGL_MESA_platform_surfaceless`), when the Vulkan display opened, was not rejected as a CPU, and offers no OpenGL ES 3.0 config. The Vulkan display SHALL then serve no context. A CPU-based driver SHALL NOT count as a GPU backend under either. That includes a software Vulkan implementation, and a GL driver whose renderer names llvmpipe, softpipe, swrast or a software rasterizer.
 
 #### Scenario: GPU backend uses hardware
 - **WHEN** a context is created with `backend: 'gpu'` on a machine with a supported GPU
@@ -19,9 +19,17 @@ A GPU backend SHALL be the ANGLE backend native to the platform, using a hardwar
 - **WHEN** the same call is made with `antialias: true`
 - **THEN** `getParameter(SAMPLES)` is `4` and `getContextAttributes().antialias` is `true`
 
-#### Scenario: WebGL 1 keeps Vulkan
+#### Scenario: WebGL 1 on a GPU whose Vulkan driver gives OpenGL ES 2.0 only
 - **WHEN** `createContext({ width: 4, height: 4, backend: 'gpu' })` runs on the same machine
-- **THEN** the context's `GL_RENDERER` names Vulkan
+- **THEN** the context's `GL_RENDERER` names V3D and does not name Vulkan
+
+#### Scenario: WebGL 1 without the OpenGL ES backend
+- **WHEN** the same call runs on the same machine without Mesa's EGL, or with Mesa's GL driver falling back to llvmpipe
+- **THEN** `OXGL_GPU_UNAVAILABLE` is thrown, and with `backend: 'auto'` the context's `GL_RENDERER` names SwiftShader
+
+#### Scenario: Sampler array indexed by a loop variable
+- **WHEN** a WebGL 1 fragment shader on the same machine with Mesa's EGL samples `uniform sampler2D uni[2]` as `uni[i]` in a `for` loop over `i`
+- **THEN** it renders the sampled colors and the process is unaffected (cf. Khronos `conformance/glsl/bugs/sampler-array-using-loop-index.html`)
 
 #### Scenario: Vulkan with OpenGL ES 3.0 keeps Vulkan
 - **WHEN** a WebGL 2 context is created with `backend: 'gpu'` on a Linux machine whose Vulkan display offers an OpenGL ES 3.0 config
@@ -91,8 +99,12 @@ Accepted trade-off: after a transient initialization failure such as a driver re
 - **THEN** the GPU backend is tried again for the new context
 
 #### Scenario: OpenGL ES display failure remembered
-- **WHEN** the OpenGL ES display has failed to initialize once, and another WebGL 2 context is requested with `backend: 'auto'` on a machine whose Vulkan display offers OpenGL ES 2.0 only
+- **WHEN** the OpenGL ES display has failed to initialize once, and another WebGL 2 context is requested with `backend: 'auto'` on a Linux machine whose Vulkan display offers OpenGL ES 2.0 only
 - **THEN** a SwiftShader context is returned, and neither display is opened again
+
+#### Scenario: Context failure on OpenGL ES does not divert to Vulkan
+- **WHEN** the OpenGL ES display opened on a GPU, and creating a WebGL 1 context on it fails (for example out of GPU memory)
+- **THEN** the call fails, naming `OpenGL ES`, and no context is created on Vulkan
 
 #### Scenario: Out of memory on Vulkan does not divert to OpenGL ES
 - **WHEN** the Vulkan display offers OpenGL ES 3.0 and creating a WebGL 2 context on it fails
@@ -128,7 +140,7 @@ On Linux, where the Vulkan GPU and SwiftShader share one ANGLE display, the firs
 Accepted trade-off: a Linux process cannot render on a Vulkan GPU and on SwiftShader at once.
 
 #### Scenario: Software after a Vulkan GPU context
-- **WHEN** a WebGL 1 context has been created with `backend: 'gpu'` on a Linux machine with a Vulkan GPU, and `createContext({ width: 4, height: 4, backend: 'software' })` is called
+- **WHEN** a context has been created with `backend: 'gpu'` on a Linux machine whose Vulkan GPU offers OpenGL ES 3.0, and `createContext({ width: 4, height: 4, backend: 'software' })` is called
 - **THEN** an `Error` with `code === 'OXGL_CONTEXT_CREATION_FAILED'` is thrown whose message names the Vulkan GPU in use, and no context is returned
 
 #### Scenario: GPU after a software context
@@ -137,10 +149,14 @@ Accepted trade-off: a Linux process cannot render on a Vulkan GPU and on SwiftSh
 
 #### Scenario: WebGL 2 without Mesa's EGL on the Pi
 - **WHEN** Mesa's EGL is not installed on the Pi and `createContext({ width: 4, height: 4, webgl2: true })` is called
-- **THEN** an `Error` with `code === 'OXGL_CONTEXT_CREATION_FAILED'` is thrown whose message names the OpenGL ES failure with its `libEGL.so.1` cause, and the Vulkan GPU in use as the reason SwiftShader was not used
+- **THEN** the context's `GL_RENDERER` names SwiftShader
 
 ### Requirement: A GPU display rejected as a CPU holds nothing
-A GPU display whose renderer is rejected as a CPU SHALL be terminated once the rejection is recorded, so that it holds no device and SwiftShader can initialize afterwards.
+A platform GPU display (Vulkan, Metal or D3D11) whose renderer is rejected as a CPU, or a Vulkan display offering OpenGL ES 2.0 only, SHALL be terminated once that is recorded, so that it holds no device and SwiftShader can initialize afterwards. An OpenGL ES display with a CPU renderer shares no device with SwiftShader and MAY be kept.
+
+#### Scenario: Software after an OpenGL ES backend context
+- **WHEN** a context has been created with `backend: 'gpu'` on a Raspberry Pi 5, through the OpenGL ES backend, and `createContext({ width: 4, height: 4, backend: 'software' })` is called
+- **THEN** the second context's `GL_RENDERER` names SwiftShader
 
 #### Scenario: Software after a Vulkan device rejected as a CPU
 - **WHEN** the only Vulkan device on a Linux machine is Mesa's lavapipe, a context is created with `backend: 'auto'`, and then another with `backend: 'software'`

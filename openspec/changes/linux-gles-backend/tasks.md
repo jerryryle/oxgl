@@ -22,9 +22,13 @@
   - run the CPU-renderer check on the GLES display, adding `swrast` and `software rasterizer` to `CPU_RENDERERS`;
   - name both backends in `'gpu'` and `'auto'` messages.
 
-  Verify with `FakeProbe` unit tests for each backend-selection scenario: WebGL 2 on ES 2-only Vulkan goes to GLES under `'gpu'` and `'auto'`; WebGL 1 stays on Vulkan; Vulkan with ES 3 never opens GLES; a failed or CPU Vulkan display never opens GLES; a CPU GLES renderer is refused with its string in the message; both causes are named; the GLES display failure is remembered; a Vulkan ES 3 context failure doesn't divert; displays still open once.
+  Verify with `FakeProbe` unit tests for each backend-selection scenario: WebGL 2 on ES 2-only Vulkan goes to GLES under `'gpu'` and `'auto'`; WebGL 1 stays on Vulkan; Vulkan with ES 3 never opens GLES; a failed or CPU Vulkan display never opens GLES; a CPU GLES renderer is refused with its string in the message; both causes are named; the GLES display failure is remembered; a Vulkan ES 3 context failure doesn't divert; displays still open once. (Task 2.5 later moved WebGL 1 to the OpenGL ES backend on these GPUs.)
 - [x] 2.3 Add the `test-gles` Cargo feature to `oxgl-node`, forwarded to `oxgl-core`. With it, the native module exports `testBackends = ['gles']`, and the `gles` requested backend uses only the GLES display, with no CPU check and no fallback. Gate the feature's code on Linux as design.md says. In `src/context.ts`, accept `OXGL_BACKEND=gles` only when `testBackends` lists it, and keep `gles` in the context's creation parameters, so a restore uses the GLES display again. Verify with a Rust unit test of the `gles` path, a Node test that a release build rejects `gles` with `OXGL_INVALID_BACKEND`, and `cargo clippy --workspace --all-targets --all-features -- -D warnings`.
 - [x] 2.4 One Vulkan device per process on Linux (design.md Decisions). Add `eglTerminate` to `oxgl-sys` and a `Display::terminate`. Add `release` to `BackendProbe`, and in `Backends` terminate a GPU display rejected as a CPU. On Linux, refuse the GPU display while SwiftShader holds Vulkan, and the reverse, naming the holder. Make `gpuSkipReason` probe in a child process, so that probing doesn't claim Vulkan for a test file, and keep tests that mix `'gpu'` and `'software'` in one process from doing so on Linux. Verify with `FakeProbe` unit tests for each new scenario, in a `linux/arm64` container with and without `mesa-vulkan-drivers` (`'auto'` then `'software'` both render on SwiftShader), and on the Pi: the first two scenarios, `npm test` with no `OXGL_BACKEND` and with `gpu`, and WebGL 2 `'auto'` without Mesa's EGL. In CI's Linux x64 `node-test` leg, install `mesa-vulkan-drivers` and run the backend-selection tests without `OXGL_BACKEND`, so the release of a lavapipe GPU display runs in CI.
+- [x] 2.5 For a WebGL 1 request on Linux, try the OpenGL ES backend under the WebGL 2 trigger, and use Vulkan when its display fails or renders on a CPU. A context failure on that display fails the call. Verify with `FakeProbe` tests for each path, and that an error names each backend tried. (Task 2.8 later removed this fallback.)
+- [x] 2.6 Make `drawRangeElements` draw as `drawElements` after generating `INVALID_VALUE` for `end < start`, and drop `glDrawRangeElements` from `oxgl-sys`. Verify with a Node test of indices outside the range and of `end < start`.
+- [x] 2.7 In `oxgl-core`, generate `INVALID_OPERATION` from WebGL 1's `generateMipmap` on a float texture on the OpenGL ES backend when `OES_texture_float_linear` isn't supported, reading the format with `GL_ANGLE_get_tex_level_parameter`. Verify with a Node test, on llvmpipe with `MESA_EXTENSION_OVERRIDE` hiding the extension, and with `oes-texture-float-linear.html` on the Pi.
+- [x] 2.8 Terminate a Vulkan display that offers OpenGL ES 2.0 only and use it for no context, in place of task 2.5's Vulkan fallback for WebGL 1: without the OpenGL ES backend, `'gpu'` throws and `'auto'` uses SwiftShader. Verify with `FakeProbe` tests, and on the Pi with `LIBGL_ALWAYS_SOFTWARE=1`.
 
 ## 3. Linux verification of the code path (Docker, CI image)
 
@@ -51,11 +55,11 @@ Each check names its architecture, and its result stands only for that architect
 
 ## 5. On the Pi (Raspberry Pi 5, V3D)
 
-- [x] 5.1 Install the build on the Pi with Mesa's `libegl1 libegl-mesa0`, checking whether `libgles2` is needed, and correct the README if so. Verify the first two backend-selection Pi scenarios: WebGL 2 `'gpu'` gives a renderer naming V3D (not Vulkan, not llvmpipe), RGBA bits 8/8/8/8, and `SAMPLES` 4 with `antialias: true`. Also check that WebGL 1 stays on Vulkan.
+- [x] 5.1 Install the build on the Pi with Mesa's `libegl1 libegl-mesa0`, checking whether `libgles2` is needed, and correct the README if so. Verify the first two backend-selection Pi scenarios: WebGL 2 `'gpu'` gives a renderer naming V3D (not Vulkan, not llvmpipe), RGBA bits 8/8/8/8, and `SAMPLES` 4 with `antialias: true`. Also check that WebGL 1 stays on Vulkan. (Task 2.5 later moved WebGL 1 to the OpenGL ES backend on these GPUs.)
 - [x] 5.2 Verify the refusals: as `oxglnorender` (outside `render`), and as `baton` with `LIBGL_ALWAYS_SOFTWARE=1`, `'gpu'` WebGL 2 throws `OXGL_GPU_UNAVAILABLE` naming the refused CPU renderer and returns no context.
 - [x] 5.3 Verify done-when 5 for Vulkan on the Pi. Remove Mesa's EGL and GL libraries (`sudo apt-get remove libegl1 libegl-mesa0`, recording what apt removes with them), then confirm that `/usr/lib/aarch64-linux-gnu/libEGL.so.1` is gone. Then:
   - import oxgl;
-  - create a WebGL 1 `'gpu'` context, which must render with a renderer naming V3DV, and a `'software'` context;
+  - create a WebGL 1 `'gpu'` context, which must render with a renderer naming V3DV, and a `'software'` context; (Since task 2.8, this context throws, and `'auto'` uses SwiftShader.)
   - check that a WebGL 2 `'gpu'` request throws `OXGL_GPU_UNAVAILABLE`, naming `OpenGL ES` with a cause about `libEGL.so.1`;
   - reinstall the packages afterwards.
 
@@ -63,6 +67,7 @@ Each check names its architecture, and its result stands only for that architect
 - [x] 5.4 Run `npm test` on the Pi with no `OXGL_BACKEND` (WebGL 2 tests on GLES, WebGL 1 on Vulkan), and with `OXGL_BACKEND=gpu`. Fix oxgl defects.
 - [x] 5.5 Run both conformance suites and `npm run threejs` on the Pi with `OXGL_BACKEND=gpu`, so WebGL 2 runs on GLES. Record every failing page and example in design.md's "Results on the Pi" with its reason, marking which are V3D's (they also fail with Mesa's GL directly, or with a V3D-specific cause) and which are oxgl's. Fix oxgl's, or bring them back as findings. Add V3D failures to the README's known issues.
 - [x] 5.6 Add `--webgl1` to `bench/run.mjs`. Run `npm run bench` on the Pi on GLES (WebGL 2, default) and on Vulkan (`--webgl1`), with `OXGL_BACKEND=gpu`, and record both side by side in design.md.
+- [ ] 5.7 Rerun `npm test`, both conformance suites and `npm run threejs` on the Pi with `OXGL_BACKEND=gpu`, and record the results. Verify that `sampler-array-using-loop-index.html` passes, that WebGL 1 under `LIBGL_ALWAYS_SOFTWARE=1` is refused by `'gpu'` and renders on SwiftShader under `'auto'`. Rerun `npm run bench -- --webgl1`.
 
 ## 6. Expectations and CI
 
@@ -74,6 +79,7 @@ Each check names its architecture, and its result stands only for that architect
 
   Update `CONTRIBUTING.md`'s job table. Verify with actionlint and zizmor as the workflow lint job runs them.
 - [ ] 6.3 Record the `linux-x64-gles` entries in `conformance/expectations.txt` and `threejs/expectations.txt`. `--update` writes only the host's own platform and CI never runs it, so run it in a `--platform linux/amd64` `ubuntu:24.04` container. Install the CI job's Mesa packages there, with the run's Linux x64 packages and `addon-linux-x64-gles` unpacked into `dist/`, `export OXGL_BACKEND=gles`, and run `npm run conformance -- --update` and `npm run threejs -- --update` in that shell, so both runs judge and write the `linux-x64-gles` platform. Give each new entry its reason. Emulation can turn slow pages into `TIMEOUT`s that native x64 doesn't have, so check every entry against the CI job's downloaded reports (`gh run download`) and keep only outcomes the CI run shows. Verify that a rerun of the `gles` job passes with no stale entries.
+- [x] 6.4 Remove the `linux-x64-gles` expectation of `draw_range_elements.html`, and confirm that the page passes on `linux/amd64` and `linux/arm64`.
 
 ## 7. Docs
 
@@ -84,6 +90,7 @@ Each check names its architecture, and its result stands only for that architect
   - the Platforms table and Known issues carry the Pi results.
 
   Verify by reading the README against the specs.
+- [ ] 7.2 Update the README's backend text, known issues and Pi conformance counts for WebGL 1 on the OpenGL ES backend.
 
 ## 8. Verification
 

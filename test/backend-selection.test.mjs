@@ -109,9 +109,9 @@ test('environment untouched', async () => {
   }
   assert.equal(JSON.stringify(process.env), before);
   assert.equal(process.cwd(), cwd);
-  // On Linux, the GPU and its WebGL 2 path (the OpenGL ES backend on a GPU
-  // whose Vulkan driver gives OpenGL ES 2.0 only) need a process of their own.
-  // A Pi without Mesa's EGL fails here, with the backend's install hint.
+  // On Linux, the GPU and the OpenGL ES backend, used on a GPU whose Vulkan
+  // driver gives OpenGL ES 2.0 only, need a process that hasn't used 'software'.
+  // A Pi without Mesa's EGL has no usable GPU, so this doesn't run there.
   if (reason === undefined && oneVulkanDevice) {
     const child = inChild(`
       import { createContext } from '@oxgl-js/oxgl';
@@ -161,9 +161,14 @@ test('a Linux process uses one Vulkan device', { timeout: 60_000 }, async (t) =>
   const reason = await gpuSkipReason();
   if (reason !== undefined) return t.skip(reason);
   if (!oneVulkanDevice) return t.skip('only Linux shares one Vulkan display between the GPU and SwiftShader');
-  const [, software] = inChild(contextsScript(['gpu', 'software']));
-  assert.equal(software.code, 'OXGL_CONTEXT_CREATION_FAILED', software.message ?? software.renderer);
-  assert.match(software.message, /the Vulkan GPU is in use, and a Linux process uses one Vulkan device/);
+  const [first, software] = inChild(contextsScript(['gpu', 'software']));
+  if (/Vulkan/.test(first.renderer)) {
+    assert.equal(software.code, 'OXGL_CONTEXT_CREATION_FAILED', software.message ?? software.renderer);
+    assert.match(software.message, /the Vulkan GPU is in use, and a Linux process uses one Vulkan device/);
+  } else {
+    // The OpenGL ES backend released the Vulkan display it was chosen over.
+    assert.match(software.renderer, /SwiftShader/);
+  }
   const [, gpu, auto] = inChild(contextsScript(['software', 'gpu', 'auto']));
   assert.equal(gpu.code, 'OXGL_GPU_UNAVAILABLE', gpu.message ?? gpu.renderer);
   assert.match(gpu.message, /SwiftShader is in use/);
