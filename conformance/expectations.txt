@@ -2,7 +2,6 @@
 # An entry without platforms applies everywhere. A page without an entry that applies is expected to
 # PASS. See CONTRIBUTING.md; `npm run conformance -- --update` rewrites this file.
 
-webgl1 conformance/extensions/ext-color-buffer-half-float.html FAIL [linux-x64-gles] # ANGLE: its OpenGL ES backend passes WebGL 1's copyTexImage2D from a half-float framebuffer to the driver, which refuses a float-to-fixed-point copy (ES 3.0 §3.8.5), and the error loses the context
 webgl1 conformance/extensions/khr-parallel-shader-compile.html TIMEOUT [linux-x64-gles] # OpenGL ES backend: also times out on the Pi's V3D; not yet diagnosed
 webgl1 conformance/glsl/misc/shader-with-double-underscore.html FAIL # ANGLE: rejects identifiers containing __ in WebGL shaders (TParseContext::checkIsNotReserved), which the test expects to compile; see angle/README.md
 webgl1 conformance/offscreencanvas/offscreencanvas-transfer-image-bitmap.html TIMEOUT [linux-x64-gles] # OpenGL ES backend: also times out on the Pi's V3D; not yet diagnosed
@@ -21,7 +20,6 @@ webgl2 conformance2/extensions/ext-texture-norm16.html FAIL [linux-x64-gles] # O
 webgl2 conformance2/extensions/webgl-clip-cull-distance.html FAIL [linux-x64-gles] # llvmpipe: clip distances not applied (should be red); V3D doesn't expose the extension
 webgl2 conformance2/offscreencanvas/offscreencanvas-transfer-image-bitmap.html TIMEOUT [linux-x64-gles] # OpenGL ES backend: also times out on the Pi's V3D; not yet diagnosed
 webgl2 conformance2/query/occlusion-query-scissor.html FAIL [linux-x64-gles] # llvmpipe: occlusion query ignores the scissor; passes on the Pi's V3D
-webgl2 conformance2/reading/read-pixels-from-fbo-test.html FAIL [linux-x64-gles] # ANGLE: its OpenGL ES backend advertises RGBA_INTEGER/UNSIGNED_SHORT as the read format of RGBA16UI, which an OpenGL ES driver may refuse, and the error loses the context; also on the Pi's V3D
 webgl2 conformance2/rendering/blitframebuffer-filter-outofbounds.html FAIL [linux-x64-gles] # llvmpipe: a blit from outside the source writes the destination; passes on the Pi's V3D
 webgl2 conformance2/rendering/texture-switch-performance.html SKIP # timing: needs the frame rate while switching textures to stay within 80% of the rate without; SwiftShader renders only a few frames in each 2 s window, so other pages sharing the CPU can impact the result, making this a flaky test
 webgl2 conformance2/textures/misc/immutable-tex-render-feedback.html FAIL # ANGLE: reports a mutable texture level outside an empty [base, max] range (base 1, max 0) as a complete attachment; fails on Metal too; see angle/README.md

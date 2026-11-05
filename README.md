@@ -83,16 +83,8 @@ below.
   rather than falling back to SwiftShader. Other platforms are unaffected:
   their GPU backend is Metal or Direct3D 11. To use both on Linux, create the
   other kind in a child process.
-- **On the OpenGL ES backend, two calls lose the context.** Over Mesa's
-  drivers (V3D, llvmpipe), ANGLE passes these to the driver, which refuses
-  them, and a WebGL context then reports itself lost:
-  - `readPixels` from an `RGBA16UI` color buffer in its advertised
-    implementation format;
-  - WebGL 1's `copyTexImage2D` from a half-float framebuffer.
-
-  Tracked in `angle/README.md`, "Known upstream issues".
 - **WebGL 2 on a Raspberry Pi 5 passes all but a few conformance pages.** On
-  V3D through the OpenGL ES backend, 2850 of 2865 WebGL 2 pages pass. Four
+  V3D through the OpenGL ES backend, 2851 of 2865 WebGL 2 pages pass. Four
   failures are V3D's own: sRGB mipmap generation, a large instance divisor,
   invalidating the default framebuffer's depth and stencil, and transform
   feedback into too-small buffers. The others are shared with the backend on
