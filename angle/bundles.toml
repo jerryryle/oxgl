@@ -3,30 +3,30 @@
 # https://github.com/oxgl-js/oxgl-angle; this file is filled from its release
 # run, and changing it does not rebuild ANGLE.
 
-bundle_version = "angle-8103.1"     # the oxgl-angle release these come from
+bundle_version = "angle-8103.2"     # the oxgl-angle release these come from
 
 [platform.linux-x64]
-url = "https://github.com/oxgl-js/oxgl-angle/releases/download/angle-8103.1/angle-linux-x64.tar.xz"
-sha256 = "dd61a3d5271e32826f70f6ebae0d6e19f0293fdb6b5872d3220a3d4d2321ed98"
+url = "https://github.com/oxgl-js/oxgl-angle/releases/download/angle-8103.2/angle-linux-x64.tar.xz"
+sha256 = "3fa6c186cc536e0455280b965c6d1188ab280addcd483d1d24512017da882d83"
 # Unstripped libraries for the ASan job's leak suppressions (OXGL_ANGLE_SYMBOLS).
-symbols_url = "https://github.com/oxgl-js/oxgl-angle/releases/download/angle-8103.1/angle-linux-x64-symbols.tar.xz"
-symbols_sha256 = "add48d7fa7b0cd481a6aa256e6cd57b30598f2b229cbc7d90aa44ccfa29d43f2"
+symbols_url = "https://github.com/oxgl-js/oxgl-angle/releases/download/angle-8103.2/angle-linux-x64-symbols.tar.xz"
+symbols_sha256 = "d159a5eaa1a2591c98f85bff990cfac9c2812fb1935fa97c2cd8dbfe258f2c87"
 
 [platform.linux-arm64]
-url = "https://github.com/oxgl-js/oxgl-angle/releases/download/angle-8103.1/angle-linux-arm64.tar.xz"
-sha256 = "873d4a8408fddc203ba873ef4fa8a62f66da691a77dee644a69830ed7ecee921"
+url = "https://github.com/oxgl-js/oxgl-angle/releases/download/angle-8103.2/angle-linux-arm64.tar.xz"
+sha256 = "586cf26be751c8e09660fec70eaa7fcffe5ee81873d64982b7ab8f5222e26c9d"
 # Unstripped libraries for the ASan job's leak suppressions (OXGL_ANGLE_SYMBOLS).
-symbols_url = "https://github.com/oxgl-js/oxgl-angle/releases/download/angle-8103.1/angle-linux-arm64-symbols.tar.xz"
-symbols_sha256 = "502a8ef52ba1967781762f6e1b8556f1be37fe77e063e79ba8092448bc9713b6"
+symbols_url = "https://github.com/oxgl-js/oxgl-angle/releases/download/angle-8103.2/angle-linux-arm64-symbols.tar.xz"
+symbols_sha256 = "b10632cb59defdc9883fa0d5fd573064bdcfcb04252fa756da53bd05f0e73e74"
 
 [platform.macos-arm64]
-url = "https://github.com/oxgl-js/oxgl-angle/releases/download/angle-8103.1/angle-macos-arm64.tar.xz"
-sha256 = "068887ead14480191ede37333d5109f56eabcbdd215e1b5ec61647fdd22dfa2e"
+url = "https://github.com/oxgl-js/oxgl-angle/releases/download/angle-8103.2/angle-macos-arm64.tar.xz"
+sha256 = "c2bbb01e39d182f0c1c2c267f58bd97304710bdac6316edb2c3b9e52ad171226"
 
 [platform.windows-x64]
-url = "https://github.com/oxgl-js/oxgl-angle/releases/download/angle-8103.1/angle-windows-x64.tar.xz"
-sha256 = "11bb9eedab50f9e4286a32d7bb41ed2e0c26652f95eacb74184aa3f84ee987b1"
+url = "https://github.com/oxgl-js/oxgl-angle/releases/download/angle-8103.2/angle-windows-x64.tar.xz"
+sha256 = "1626dffe43885989a179f91c98007e5e79184f54720d935de502aef55ccd1f1d"
 
 [platform.windows-arm64]
-url = "https://github.com/oxgl-js/oxgl-angle/releases/download/angle-8103.1/angle-windows-arm64.tar.xz"
-sha256 = "c54ae076c3910c0b2333192d4f16a24468e5c582c9ba5e6bad5454b35d6d7037"
+url = "https://github.com/oxgl-js/oxgl-angle/releases/download/angle-8103.2/angle-windows-arm64.tar.xz"
+sha256 = "685fd434d33e5a5f6301d54b8c07962a5e00b1a8eacfe017cdf41eced776b1e2"
