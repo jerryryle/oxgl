@@ -36,41 +36,46 @@ wildly wasteful work. The behaviour asked for is itself open to question when a 
 would serve. Surviving rare infrastructure failure is not a goal. A reviewer does not ask for
 handling of it, and machinery added only for it is complexity to remove.
 
-- **Correct means correct in normal operation.** Normal operation includes concurrent users
-  and boards, the retries the code makes itself, a request the user abandons, and every input
-  the interface admits. A defect there is always in scope.
+- **Correct means correct in normal operation.** Normal operation includes many contexts at
+  once, worker threads, garbage collection at any moment, context loss and restore, a process
+  that exits with live contexts, and every input the JavaScript API admits. A defect there is
+  always in scope.
 - **A rare failure matters only when it does visible, lasting damage.** A rare failure is one
-  that real use seldom produces: a lost Valkey lease, a crash between two writes, a task that
-  dies mid-request, an AWS or regional outage. It is in scope only when it silently loses or
-  corrupts a user's content, or leaves state the user can neither see nor repair from the UI,
-  and then the fix is the simplest one that prevents that damage. An error the user retries,
-  a cache that empties, a delay, or an inconsistency that the next write heals or the user can
-  fix from a page is accepted and needs no handling.
+  that real use seldom produces: a GPU driver reset, a lost device, a backend that fails once
+  and works later, a page fetch that dies during a test run. It is in scope only when it
+  silently produces wrong results, or leaves state the caller can neither detect nor recover
+  from, and then the fix is the simplest one that prevents that damage. An error the caller
+  retries, a lost context the application restores, a delay, or a backend that stays
+  unavailable until the process restarts is accepted and needs no handling.
 - **Cheap handling of a rare error is welcome.** Handling one is fine when it stays inside the
-  code path that already exists and adds no mechanism, stored field or new failure mode:
-  checking a reply the code already gets, choosing a safer order for two writes it already
-  makes, or folding two writes into the transaction it already uses. A reviewer neither asks
-  for such handling nor flags it for removal.
-- **Nothing has to stay up through an outage.** A request may fail while a dependency it needs
-  is down. Fallbacks, failover, extra retry layers, circuit breakers and duplicated state that
-  exist to ride out an outage are out of scope unless the user asks for them.
-- **Complexity is a cost the finding must pay for.** A fix that adds a mechanism, a stored
-  field or a new failure mode has to prevent damage that is likely or severe. Weigh a trigger
+  code path that already exists and adds no mechanism, stored state or new failure mode:
+  checking a result the code already gets, choosing a safer order for two calls it already
+  makes, or adding a step to the cleanup it already runs. A reviewer neither asks for such
+  handling nor flags it for removal.
+- **Nothing has to survive a broken dependency.** A call may fail while the driver, bundle or
+  system library it needs is missing or broken. Beyond the fallback `'auto'` specifies, extra
+  fallbacks, retry layers and duplicated state that exist to ride out such a failure are out of
+  scope unless the user asks for them.
+- **Complexity is a cost the finding must pay for.** A fix that adds a mechanism, stored state
+  or a new failure mode has to prevent damage that is likely or severe. Weigh a trigger
   by how often real use produces it, never by whether it can happen at all.
 - **Inefficient means wildly inefficient.** In scope is work that is wasteful by an order of
-  magnitude or that grows with data it does not need: reading every row to answer for one, a
-  round trip per item where one would do, unbounded growth. A redundant read on a rare path,
-  or a constant-factor saving nobody would notice, is below the bar.
+  magnitude or that grows with data it does not need: reading back a whole framebuffer to
+  answer for one pixel, a GL or native call per item where one would do, unbounded growth. A
+  redundant query on a rare path, or a constant-factor saving nobody would notice, is below
+  the bar.
 - **A simpler design is worth a small change to the requirement.** When a requirement drives
   much of the complexity and a nearby one would serve the same purpose with far less, say so:
   before building it, in the proposal or design discussion, and in a review of existing code,
   as an entry in the improvements list. Name the requirement to change, the complexity it
-  removes and what the user gives up. A byte quota per namespace, for example, needed counters
-  on every write, while a key limit and a per-value cap bound the same storage with neither.
+  removes and what the user gives up. A Linux process using a Vulkan GPU and SwiftShader at
+  once, for example, needed a large ANGLE patch whose thread safety would need proving, while
+  one Vulkan device per process, with a child process for the other, serves the same purpose.
   This is pushback, never a unilateral change: the user decides, and the work follows the
   requirement they choose.
-- **Security and privacy sit outside this bar.** An authorization gap, a data leak, an
-  injection or mishandled credentials is surfaced however unlikely its trigger.
+- **Security and privacy sit outside this bar.** A data leak, such as exposing uninitialized
+  or out-of-bounds memory to JavaScript, an injection or mishandled credentials is surfaced
+  however unlikely its trigger.
 - **What falls below the bar is left out.** A reviewer does not report it, not even as
   accepted, and a design adds no machinery for it. When a design accepts a rare failure, the
   spec's "Accepted trade-offs" names it once with the damage it accepts.
