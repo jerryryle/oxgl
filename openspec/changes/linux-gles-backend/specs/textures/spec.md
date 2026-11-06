@@ -16,5 +16,9 @@
 - **THEN** `getTexParameter(TEXTURE_2D, TEXTURE_MIN_FILTER)` is `NEAREST` (cf. Khronos `conformance/textures/misc/texture-mips.html`)
 
 #### Scenario: Mipmaps of a float texture without linear filtering
-- **WHEN** a WebGL 1 context on the OpenGL ES backend, on a driver without `OES_texture_float_linear`, enables `OES_texture_float` and calls `generateMipmap` on an `RGBA` float texture
+- **WHEN** a WebGL 1 context on the OpenGL ES backend, on a driver without `OES_texture_float_linear`, enables `OES_texture_float` and calls `generateMipmap` on a float texture with mipmap levels to generate, of any format
 - **THEN** `INVALID_OPERATION` is generated and the context is not lost (cf. Khronos `conformance/extensions/oes-texture-float-linear.html`)
+
+#### Scenario: Mipmaps of an RGB float texture with linear filtering
+- **WHEN** a WebGL 1 context on the OpenGL ES backend, on a driver with `OES_texture_float_linear`, enables `OES_texture_float` and calls `generateMipmap` on an `RGB` float texture
+- **THEN** `INVALID_OPERATION` is generated and the context is not lost, as the format can't be rendered to

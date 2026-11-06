@@ -44,20 +44,39 @@ static LIVE_CONTEXTS: AtomicUsize = AtomicUsize::new(0);
 #[cfg(target_os = "linux")]
 const EGL_FEATURE_OVERRIDES_DISABLED_ANGLE: EGLAttrib = 0x3467;
 
+/// `EGL_FEATURE_OVERRIDES_ENABLED_ANGLE`: as above, to enable.
+#[cfg(target_os = "linux")]
+const EGL_FEATURE_OVERRIDES_ENABLED_ANGLE: EGLAttrib = 0x3466;
+
 /// A null-terminated list of C strings.
 #[cfg(target_os = "linux")]
-struct FeatureNames([*const c_char; 2]);
+struct FeatureNames<const N: usize>([*const c_char; N]);
 
 // SAFETY: the pointers are to immutable static strings.
 #[cfg(target_os = "linux")]
-unsafe impl Sync for FeatureNames {}
+unsafe impl<const N: usize> Sync for FeatureNames<N> {}
 
 /// ANGLE features the OpenGL ES display disables. This one reads `RG16` as
 /// `RG`/`UNSIGNED_SHORT`, a driver bug's workaround that Mesa refuses, since
 /// Mesa's own read format for it is `RGBA`, and the error loses the context.
 #[cfg(target_os = "linux")]
-static GLES_DISABLED_FEATURES: FeatureNames = FeatureNames([
+static GLES_DISABLED_FEATURES: FeatureNames<2> = FeatureNames([
     c"readPixelsUsingImplementationColorReadFormatForNorm16".as_ptr(),
+    ptr::null(),
+]);
+
+/// ANGLE features the OpenGL ES display enables, for defects in Mesa or in
+/// this backend (`angle/upstream-reports.md`).
+#[cfg(target_os = "linux")]
+static GLES_ENABLED_FEATURES: FeatureNames<5> = FeatureNames([
+    // V3D filters sRGB mipmaps in encoded space.
+    c"decodeEncodeSRGBForGenerateMipmap".as_ptr(),
+    // Mesa compiles synchronously here, so the extension offers nothing.
+    c"disableNativeParallelCompile".as_ptr(),
+    // Mesa before 26 writes blit destinations from outside the source.
+    c"clipSrcRegionForBlitFramebuffer".as_ptr(),
+    // llvmpipe clips with clip distances even after they're disabled.
+    c"emulateClipDistanceState".as_ptr(),
     ptr::null(),
 ]);
 
@@ -210,11 +229,6 @@ pub struct Display {
     handles: Arc<()>,
     /// Which display this is.
     kind: DisplayKind,
-    /// Whether this is the OpenGL ES backend's display.
-    gles: bool,
-    /// Whether each thread needs a display of its own: Metal's are not safe
-    /// to share between threads (see [`Display::for_this_thread`]).
-    per_thread: bool,
     /// The key this display holds, shared by its clones, which goes back to
     /// the pool with the last of them; `None` for the key [`Display::open`]
     /// uses, which is never pooled.
@@ -265,12 +279,12 @@ impl Display {
             DisplayKind::Gpu => (
                 GPU_PLATFORM,
                 EGL_PLATFORM_ANGLE_DEVICE_TYPE_HARDWARE_ANGLE,
-                [none; 4],
+                [none; 6],
             ),
             DisplayKind::SwiftShader => (
                 EGL_PLATFORM_ANGLE_TYPE_VULKAN_ANGLE,
                 EGL_PLATFORM_ANGLE_DEVICE_TYPE_SWIFTSHADER_ANGLE,
-                [none; 4],
+                [none; 6],
             ),
             #[cfg(target_os = "linux")]
             DisplayKind::Gles => (
@@ -281,6 +295,12 @@ impl Display {
                     crate::bindings::EGL_PLATFORM_SURFACELESS_MESA as EGLAttrib,
                     EGL_FEATURE_OVERRIDES_DISABLED_ANGLE,
                     GLES_DISABLED_FEATURES
+                        .0
+                        .as_ptr()
+                        .expose_provenance()
+                        .cast_signed(),
+                    EGL_FEATURE_OVERRIDES_ENABLED_ANGLE,
+                    GLES_ENABLED_FEATURES
                         .0
                         .as_ptr()
                         .expose_provenance()
@@ -297,6 +317,8 @@ impl Display {
             extra[1],
             extra[2],
             extra[3],
+            extra[4],
+            extra[5],
             none,
         ];
         // SAFETY: the attribute list is EGL_NONE-terminated and outlives the
@@ -323,8 +345,6 @@ impl Display {
             angle: angle.clone(),
             raw,
             handles: Arc::new(()),
-            gles: is_gles(kind),
-            per_thread: cfg!(target_os = "macos") && matches!(kind, DisplayKind::Gpu),
             kind,
             _key: key,
         })
@@ -342,7 +362,8 @@ impl Display {
     ///
     /// Returns the failing EGL call and error code.
     pub fn for_this_thread(&self) -> Result<Self, EglError> {
-        if !self.per_thread {
+        // Metal's displays are not safe to share between threads.
+        if !(cfg!(target_os = "macos") && matches!(self.kind, DisplayKind::Gpu)) {
             return Ok(self.clone());
         }
         THREAD_DISPLAY.with(|slot| {
@@ -403,7 +424,7 @@ impl Display {
             EGL_FALSE,
             EGL_CONTEXT_CLIENT_ARRAYS_ENABLED_ANGLE,
             EGL_FALSE,
-            if self.gles {
+            if is_gles(self.kind) {
                 EGL_CONTEXT_VIRTUALIZATION_GROUP_ANGLE
             } else {
                 EGL_NONE

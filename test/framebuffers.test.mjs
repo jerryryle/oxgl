@@ -5,7 +5,7 @@ import { test } from 'node:test';
 
 import { createContext, WebGLFramebuffer, WebGLRenderbuffer } from '@oxgl-js/oxgl';
 
-import { program } from './gl-helpers.mjs';
+import { program, quad } from './gl-helpers.mjs';
 import { allPixels, readAll } from './helpers.mjs';
 
 const VS = 'attribute vec2 p; varying vec2 v; void main() { v = p * 0.5 + 0.5; gl_Position = vec4(p, 0.0, 1.0); }';
@@ -242,6 +242,37 @@ test('multisampled render target resolved by a blit', () => {
   gl.bindFramebuffer(gl.READ_FRAMEBUFFER, resolved);
   assert.equal(gl.getParameter(gl.READ_FRAMEBUFFER_BINDING), resolved);
   assert.deepEqual(pixel(gl), [255, 0, 0, 255]);
+  assert.equal(gl.getError(), gl.NO_ERROR);
+  gl.destroy();
+});
+
+test('a resolve leaves earlier draws that sample its destination alone', () => {
+  const gl = createContext({ width: 4, height: 4, webgl2: true });
+  const texture = colorTexture(gl, 4, 4);
+  const resolved = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, resolved);
+  gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, texture, 0);
+  const msaa = gl.createFramebuffer();
+  gl.bindFramebuffer(gl.FRAMEBUFFER, msaa);
+  gl.bindRenderbuffer(gl.RENDERBUFFER, gl.createRenderbuffer());
+  gl.renderbufferStorageMultisample(gl.RENDERBUFFER, 4, gl.RGBA8, 4, 4);
+  gl.framebufferRenderbuffer(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.RENDERBUFFER, gl.getParameter(gl.RENDERBUFFER_BINDING));
+  const resolve = (red, green) => {
+    gl.bindFramebuffer(gl.FRAMEBUFFER, msaa);
+    gl.clearColor(red, green, 0, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.bindFramebuffer(gl.DRAW_FRAMEBUFFER, resolved);
+    gl.blitFramebuffer(0, 0, 4, 4, 0, 0, 4, 4, gl.COLOR_BUFFER_BIT, gl.NEAREST);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+  };
+  resolve(0, 1);
+  const p = program(gl, VS, FS);
+  gl.useProgram(p);
+  quad(gl, p);
+  gl.bindTexture(gl.TEXTURE_2D, texture);
+  gl.drawArrays(gl.TRIANGLES, 0, 6);
+  resolve(1, 0);
+  assert.deepEqual(pixel(gl), [0, 255, 0, 255]);
   assert.equal(gl.getError(), gl.NO_ERROR);
   gl.destroy();
 });

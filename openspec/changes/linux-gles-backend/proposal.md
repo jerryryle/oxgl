@@ -47,7 +47,7 @@ None.
 
 ## Impact
 
-- **oxgl-angle**: `angle/args/*.gn`, `angle/scripts/bundle.py` (required GN args, and a check that no library links `libEGL.so.1`, `libGL*` or `libdrm`), `angle/pin.toml` (`bundle_version` → `angle-8078.8`, and `angle-8103.2` by the end of this change), `angle/README.md`.
+- **oxgl-angle**: `angle/args/*.gn`, `angle/scripts/bundle.py` (required GN args, and a check that no library links `libEGL.so.1`, `libGL*` or `libdrm`), `angle/pin.toml` (`bundle_version` → `angle-8078.8`, and `angle-8103.3` by the end of this change), `angle/README.md`.
 - **oxgl**: `angle/bundles.toml`; `crates/oxgl-sys/src/egl.rs` (a `DisplayKind::Gles`), `loader.rs` and `textures.rs` (adding `eglTerminate` and `glGetTexLevelParameterivANGLE`, removing `glDrawRangeElements`); `crates/oxgl-core/src/backend.rs`, `context.rs`, `runtime.rs`, `rendering.rs`, `textures.rs`, `drawing_buffer.rs`; `crates/oxgl-node` (the `test-gles` feature); `src/context.ts` (`resolveBackend`); `conformance/expectations.mjs`, `conformance/expectations.txt`, `threejs/expectations.txt`; `scripts/results-page.mjs`; `bench/run.mjs`; `.github/workflows/ci.yml`; `README.md`, `CONTRIBUTING.md`; new tests.
 - **Package size**: the Linux `libGLESv2.so` grows by the OpenGL ES backend and the GLSL ES translator output, measured in task 1.3.
 - **Runtime**: a process on an ES 2.0-only Vulkan GPU loads Mesa's GL driver once and keeps its display until exit, as displays are never terminated today.

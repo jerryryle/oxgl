@@ -313,6 +313,17 @@ impl Context {
             self.errors.synthesize(GL_INVALID_VALUE);
             return;
         }
+        let most = counts
+            .iter()
+            .zip(instances)
+            .filter(|&(&count, _)| count > 0)
+            .map(|(_, &instances)| instances)
+            .max()
+            .unwrap_or(0);
+        if self.instanced_draw_out_of_range(&current, most) {
+            self.errors.synthesize(GL_INVALID_OPERATION);
+            return;
+        }
         match elements {
             None => {
                 let firsts: Option<Vec<i32>> = firsts_or_offsets

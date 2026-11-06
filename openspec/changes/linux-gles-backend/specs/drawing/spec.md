@@ -26,3 +26,18 @@
 #### Scenario: End before start
 - **WHEN** `drawRangeElements(TRIANGLES, 5, 0, 6, UNSIGNED_SHORT, 0)` is called
 - **THEN** `INVALID_VALUE` is generated and nothing is drawn
+
+### Requirement: Instanced attribute range on WebGL 1
+On WebGL 1, `drawArraysInstancedANGLE`, `drawElementsInstancedANGLE` and the instanced forms of `WEBGL_multi_draw` SHALL generate `INVALID_OPERATION` and draw nothing when an enabled attribute with a nonzero divisor, read by the current program, would be fetched past the end of its buffer for the requested instance count (WebGL 1.0 §6.6), whatever the backend's robust buffer access. A multi-draw is checked against its largest instance count.
+
+#### Scenario: Instance count past the buffer
+- **WHEN** an instanced attribute with divisor 1 has data for two instances and a draw asks for three
+- **THEN** `INVALID_OPERATION` is generated (cf. Khronos `conformance/extensions/angle-instanced-arrays-out-of-bounds.html`)
+
+#### Scenario: Multi-draw past the buffer
+- **WHEN** the same attribute is used by `multiDrawArraysInstancedWEBGL` with instance counts `[2, 3]`
+- **THEN** `INVALID_OPERATION` is generated and neither draw runs
+
+#### Scenario: Attribute the program does not read
+- **WHEN** the same attribute is enabled but the current program does not read its location
+- **THEN** the draw generates no error

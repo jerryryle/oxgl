@@ -8,8 +8,9 @@
     reason = "this module names many GL_ constants"
 )]
 use oxgl_sys::bindings::*;
-use oxgl_sys::{ClearValues, Current, ReadPixels};
+use oxgl_sys::{ClearValues, Current, ReadPixels, StateCall};
 
+use crate::backend::Backend;
 use crate::context::{Context, Object, ObjectKey, accepted, current};
 use crate::drawing_buffer::integers;
 use crate::parameters::Parameter;
@@ -540,6 +541,12 @@ impl Context {
         };
         let resolved = self.buffer.begin_read(&current);
         let ([sx0, sy0, sx1, sy1], [dx0, dy0, dx1, dy1]) = (src, dst);
+        // V3D's multisample resolve doesn't wait for queued draws that read
+        // its destination, so they would sample the new contents
+        // (`angle/upstream-reports.md`).
+        if self.backend == Backend::Gles {
+            current.apply(StateCall::Flush);
+        }
         current.blit_framebuffer(sx0, sy0, sx1, sy1, dx0, dy0, dx1, dy1, mask, filter);
         if resolved {
             self.buffer.end_read(&current);
@@ -603,7 +610,11 @@ impl Context {
             return;
         }
         if !self.default_bound(&current, target) {
-            current.invalidate_framebuffer(target, attachments, region);
+            current.invalidate_framebuffer(
+                target,
+                &self.invalidated(&current, attachments),
+                region,
+            );
             return;
         }
         let mapped: Option<Vec<u32>> = attachments
@@ -611,9 +622,28 @@ impl Context {
             .map(|&a| default_attachment(a).filter(|_| a != GL_BACK))
             .collect();
         match mapped {
-            Some(mapped) => current.invalidate_framebuffer(target, &mapped, region),
+            Some(mapped) => {
+                let mapped = self.invalidated(&current, &mapped);
+                current.invalidate_framebuffer(target, &mapped, region);
+            }
             None => self.errors.synthesize(GL_INVALID_ENUM),
         }
+    }
+
+    /// The attachments to pass on to `glInvalidateFramebuffer`. It's only a
+    /// hint, and on the OpenGL ES backend valid color attachments are dropped:
+    /// V3D can lose a color buffer frames after one is invalidated
+    /// (`angle/upstream-reports.md`). ANGLE still validates the others.
+    fn invalidated(&self, current: &Current<'_>, attachments: &[u32]) -> Vec<u32> {
+        if self.backend != Backend::Gles {
+            return attachments.to_vec();
+        }
+        let max = integers(current, GL_MAX_COLOR_ATTACHMENTS).map_or(0, |[n, _]| n.cast_unsigned());
+        attachments
+            .iter()
+            .copied()
+            .filter(|a| !(GL_COLOR_ATTACHMENT0..GL_COLOR_ATTACHMENT0 + max).contains(a))
+            .collect()
     }
 
     /// `clearBuffer{fv,iv,uiv}` (WebGL 2), with at least 4 values for

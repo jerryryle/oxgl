@@ -15,11 +15,11 @@ misc_controls_arcball FAIL # runner: the page's CSS gradient background is not c
 misc_controls_fly DIFF 1% # rasterization: 0.17% of pixels differ
 misc_controls_pointerlock FAIL # runner: the HTML start overlay is not composited (99.76% of pixels differ)
 misc_exporter_draco FAIL # runner: loads a remote asset, refused: https://cdn.jsdelivr.net/gh/google/draco@1.5.7/javascript/draco_encoder.js
-misc_exporter_exr DIFF 2% [linux-x64-gles] # llvmpipe: rasterization (1.04% of pixels differ)
+misc_exporter_exr DIFF 2% [linux-x64-gles] # llvmpipe: the PMREM background differs at high-contrast edges, on Mesa 26.2.2 too; not antialiasing or filtering shortcuts, cause unknown; passes on V3D (1.04% of pixels differ)
 misc_exporter_gcode FAIL # runner: loads a remote asset, refused: https://cdn.jsdelivr.net/npm/@jgphilpott/polyslice@26.4.0/dist/index.browser.esm.js
 misc_exporter_gltf DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 0.33% of pixels differ
-misc_exporter_gltf FAIL [linux-x64-gles] # llvmpipe: rasterization (1.99% of pixels differ, tolerance 1%)
-misc_exporter_ktx2 DIFF 1% [linux-x64-gles] # llvmpipe: rasterization (0.21% of pixels differ)
+misc_exporter_gltf FAIL [linux-x64-gles] # llvmpipe before Mesa 26.2: tile-sized blocks along triangle edges; passes on 26.2.2's llvmpipe and on V3D (1.99% of pixels differ)
+misc_exporter_ktx2 DIFF 1% [linux-x64-gles] # llvmpipe: the PMREM background differs at high-contrast edges, on Mesa 26.2.2 too; not antialiasing or filtering shortcuts, cause unknown; passes on V3D (0.21% of pixels differ)
 misc_exporter_ply DIFF 1% # rasterization: 0.36% of pixels differ
 misc_exporter_stl DIFF 1% # rasterization: 0.19% of pixels differ
 misc_raycaster_helper FAIL # runner: loads a remote asset, refused: https://cdn.jsdelivr.net/npm/@gsimone/three-raycaster-helper@0.1.0/dist/gsimone-three-raycaster-helper.esm.js
@@ -45,7 +45,7 @@ webaudio_timing FAIL # runner: jsdom has no AudioContext
 webaudio_visualizer SKIP # upstream: timing issues
 webgl_animation_keyframes DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 0.26% of pixels differ
 webgl_animation_skinning_morph DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 0.86% of pixels differ
-webgl_animation_skinning_morph FAIL [linux-x64-gles] # llvmpipe: rasterization (5.94% of pixels differ)
+webgl_animation_skinning_morph FAIL [linux-x64-gles] # llvmpipe before Mesa 26.2: tile-sized blocks along triangle edges; passes on 26.2.2's llvmpipe and on V3D (5.94% of pixels differ)
 webgl_batch_lod_bvh FAIL # runner: loads a remote asset, refused: https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.9.10/build/index.module.js
 webgl_buffergeometry_custom_attributes_particles DIFF 2% # rasterization: 1.23% of pixels differ
 webgl_buffergeometry_glbufferattribute FAIL [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # timing: swaps its positions on a 2 s wall-clock interval, so the frame depends on how long the runner waits (0.104% of pixels differ)
@@ -100,7 +100,7 @@ webgl_materials_alphahash FAIL [linux-x64 linux-arm64 macos-arm64 windows-x64 wi
 webgl_materials_blending DIFF 1% # rasterization: 0.91% of pixels differ
 webgl_materials_blending_custom DIFF 1% # rasterization: label text drawn by the canvas package (0.37% of pixels differ)
 webgl_materials_car DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 0.18% of pixels differ
-webgl_materials_car FAIL [linux-x64-gles] # llvmpipe: rendering differs (11.56% of pixels differ)
+webgl_materials_car FAIL [linux-x64-gles] # llvmpipe before Mesa 26.2: tile-sized blocks along triangle edges; passes on 26.2.2's llvmpipe and on V3D (11.56% of pixels differ)
 webgl_materials_cubemap_dynamic SKIP # upstream: takes too long (1 min)
 webgl_materials_cubemap_render_to_mipmaps DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 0.47% of pixels differ
 webgl_materials_displacementmap SKIP # upstream: takes too long (1 min)

@@ -5,7 +5,7 @@ import { test } from 'node:test';
 import { createContext } from '@oxgl-js/oxgl';
 
 import { program, quad, shader } from './gl-helpers.mjs';
-import { readAll } from './helpers.mjs';
+import { allPixels, readAll } from './helpers.mjs';
 
 function pixel(gl, x, y) {
   const out = new Uint8Array(4);
@@ -274,6 +274,80 @@ test('extension methods do nothing once lost', () => {
   gl.destroy();
 });
 
+/** A used WebGL 2 program drawing one point in its `color` attribute's color. */
+function instancedColorProgram(gl) {
+  const p = program(
+    gl,
+    `#version 300 es
+    in vec4 color; flat out vec4 v;
+    void main() { gl_Position = vec4(0., 0., 0., 1.); gl_PointSize = 1.; v = color; }`,
+    `#version 300 es
+    precision mediump float; flat in vec4 v; out vec4 o;
+    void main() { o = v; }`,
+  );
+  gl.useProgram(p);
+  return p;
+}
+
+// V3D caps divisors at 65535 in hardware, which must not turn into a read past
+// the buffer that passed validation.
+test('a large divisor reads only its buffer', () => {
+  const gl = createContext({ width: 1, height: 1, webgl2: true });
+  const p = instancedColorProgram(gl);
+  gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+  gl.bufferData(gl.ARRAY_BUFFER, new Uint8Array([255, 0, 0, 255]), gl.STATIC_DRAW);
+  const location = gl.getAttribLocation(p, 'color');
+  gl.enableVertexAttribArray(location);
+  gl.vertexAttribPointer(location, 4, gl.UNSIGNED_BYTE, true, 0, 0);
+  gl.vertexAttribDivisor(location, 65536);
+  assert.equal(gl.getVertexAttrib(location, gl.VERTEX_ATTRIB_ARRAY_DIVISOR), 65536);
+  const multiDraw = gl.getExtension('WEBGL_multi_draw');
+  const draws = [() => gl.drawArraysInstanced(gl.POINTS, 0, 1, 65536)];
+  if (multiDraw) {
+    draws.push(() => multiDraw.multiDrawArraysInstancedWEBGL(gl.POINTS, [0], 0, [1], 0, [65536], 0, 1));
+  }
+  const errors = draws.map((draw) => {
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    draw();
+    const error = gl.getError();
+    assert.ok(error === gl.NO_ERROR || error === gl.INVALID_OPERATION, `error ${error}`);
+    if (error === gl.NO_ERROR) assert.ok(allPixels(readAll(gl), [255, 0, 0, 255]));
+    return error;
+  });
+  assert.equal(new Set(errors).size, 1, 'every instanced draw checks the same way');
+  gl.destroy();
+});
+
+test('a large draw accepts half-float and packed attributes that fit their buffers', () => {
+  const gl = createContext({ width: 1, height: 1, webgl2: true });
+  const p = instancedColorProgram(gl);
+  const location = gl.getAttribLocation(p, 'color');
+  gl.enableVertexAttribArray(location);
+  gl.vertexAttribDivisor(location, 1);
+  const instances = 65536;
+  const attributes = [
+    [gl.HALF_FLOAT, new Uint16Array(instances * 4).fill(0x3c00)],
+    [gl.UNSIGNED_INT_2_10_10_10_REV, new Uint32Array(instances).fill(0xffffffff)],
+  ];
+  for (const [type, data] of attributes) {
+    gl.bindBuffer(gl.ARRAY_BUFFER, gl.createBuffer());
+    gl.bufferData(gl.ARRAY_BUFFER, data, gl.STATIC_DRAW);
+    gl.vertexAttribPointer(location, 4, type, type !== gl.HALF_FLOAT, 0, 0);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    gl.drawArraysInstanced(gl.POINTS, 0, 1, instances);
+    assert.equal(gl.getError(), gl.NO_ERROR, `type ${type}`);
+    assert.ok(allPixels(readAll(gl), [255, 255, 255, 255]), `type ${type}`);
+  }
+  gl.destroy();
+});
+
+test('getVertexAttrib reports a divisor as the unsigned value it is', () => {
+  const gl = createContext({ width: 1, height: 1, webgl2: true });
+  gl.vertexAttribDivisor(0, 0xffffffff);
+  assert.equal(gl.getVertexAttrib(0, gl.VERTEX_ATTRIB_ARRAY_DIVISOR), 0xffffffff);
+  gl.destroy();
+});
+
 test('WebGL 1 instanced attributes past their buffer are INVALID_OPERATION', () => {
   const gl = createContext({ width: 1, height: 1 });
   const ext = gl.getExtension('ANGLE_instanced_arrays');
@@ -300,6 +374,18 @@ test('WebGL 1 instanced attributes past their buffer are INVALID_OPERATION', () 
   assert.equal(gl.getError(), gl.NO_ERROR);
   ext.drawArraysInstancedANGLE(gl.TRIANGLES, 0, 3, 3);
   assert.equal(gl.getError(), gl.INVALID_OPERATION);
+  const multiDraw = gl.getExtension('WEBGL_multi_draw');
+  if (multiDraw) {
+    multiDraw.multiDrawArraysInstancedWEBGL(gl.TRIANGLES, [0, 0], 0, [3, 3], 0, [2, 3], 0, 2);
+    assert.equal(gl.getError(), gl.INVALID_OPERATION);
+    multiDraw.multiDrawArraysInstancedWEBGL(gl.TRIANGLES, [0, 0], 0, [3, 3], 0, [2, 2], 0, 2);
+    assert.equal(gl.getError(), gl.NO_ERROR);
+    // A draw of no vertices reads nothing.
+    multiDraw.multiDrawArraysInstancedWEBGL(gl.TRIANGLES, [0, 0], 0, [3, 0], 0, [2, 3], 0, 2);
+    assert.equal(gl.getError(), gl.NO_ERROR);
+  }
+  ext.drawArraysInstancedANGLE(gl.TRIANGLES, 0, 0, 3);
+  assert.equal(gl.getError(), gl.NO_ERROR);
   ext.vertexAttribDivisorANGLE(1, 2);
   ext.drawArraysInstancedANGLE(gl.TRIANGLES, 0, 3, 4);
   assert.equal(gl.getError(), gl.NO_ERROR);

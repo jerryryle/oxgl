@@ -32,6 +32,7 @@
 - [x] 2.9 On the OpenGL ES display, disable ANGLE's `readPixelsUsingImplementationColorReadFormatForNorm16`, moving `Display::open` to `eglGetPlatformDisplay`, which takes pointer attributes. Verify with a Node test, and with `ext-texture-norm16.html` on the Pi and on `linux/amd64`.
 - [x] 2.10 Give each thread its own `EGL_CONTEXT_VIRTUALIZATION_GROUP_ANGLE` on the OpenGL ES display, so workers can hold contexts beside the main thread. Verify with a Node test, and with both `offscreencanvas-transfer-image-bitmap.html` pages on the Pi and on `linux/amd64`, removing their expectations.
 - [x] 2.11 On macOS, give each thread its own Metal display, through a pool of native display keys. Verify with a Node test of threads drawing at once, a repeated four-thread stress run with no stale read or crash, and flat memory across short-lived workers.
+- [x] 2.12 On the OpenGL ES display, enable `decodeEncodeSRGBForGenerateMipmap`, `disableNativeParallelCompile`, `clipSrcRegionForBlitFramebuffer` and `emulateClipDistanceState`. Drop color attachments from `invalidateFramebuffer` there, and on V3D range-check instanced draws, multi-draws included, past the divisor limit, with the divisor the hardware applies, and check WebGL 1's instanced multi-draws on every backend. Verify each page on the Pi and on `linux/amd64`, removing expectations that pass.
 
 ## 3. Linux verification of the code path (Docker, CI image)
 

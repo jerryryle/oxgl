@@ -83,12 +83,9 @@ below.
   Metal or Direct3D 11. To use both on Linux, create the
   other kind in a child process.
 - **WebGL on a Raspberry Pi 5 passes all but a few conformance pages.** On V3D
-  through the OpenGL ES backend, 966 of 971 WebGL 1 pages and 2852 of 2865
-  WebGL 2 pages pass. Four
-  failures are V3D's own: sRGB mipmap generation, a large instance divisor,
-  invalidating the default framebuffer's depth and stencil, and transform
-  feedback into too-small buffers. The others are shared with the backend on
-  llvmpipe.
+  through the OpenGL ES backend, 968 of 971 WebGL 1 pages and 2858 of 2865
+  WebGL 2 pages pass. Two failures are V3D's own: a large instance divisor, and
+  transform feedback into too-small buffers. The others fail on every platform.
 - **SwiftShader can get the depth of a near-clipped triangle wrong.** With the
   software backend, a large triangle that the near plane clips can be drawn
   with depths that are too near, hiding geometry in front of it. A typical

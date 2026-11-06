@@ -19,15 +19,16 @@ Environment for every entry unless it says otherwise:
 | [`generateMipmap` on float](#angle-generatemipmap-on-an-unsized-float-texture-loses-the-context) | ANGLE | Context loss | Worked around |
 | [norm16 read workaround](#angle-norm16-read-workaround-loses-the-context-on-mesa) | ANGLE | Context loss | Feature disabled |
 | [`drawRangeElements` range](#angle-drawrangeelements-passes-an-untrusted-range-to-the-driver) | ANGLE | Out-of-bounds read | Worked around |
-| [V3D instance divisor clamp](#mesa-v3d-instance-divisors-above-65535-read-out-of-bounds) | Mesa, ANGLE | Out-of-bounds read | Open |
-| [V3D stale invalidate flag](#mesa-v3d-drops-a-color-buffer-after-an-invalidate) | Mesa | Wrong rendering | Open |
-| [V3D sRGB mipmaps](#mesa-v3d-filters-srgb-mipmaps-in-encoded-space) | Mesa | Wrong colors | Open |
+| [V3D instance divisor clamp](#mesa-v3d-instance-divisors-above-65535-read-out-of-bounds) | Mesa | Out-of-bounds read | Read closed; page still fails |
+| [V3D stale invalidate flag](#mesa-v3d-drops-a-color-buffer-after-an-invalidate) | Mesa | Wrong rendering | Worked around |
+| [V3D sRGB mipmaps](#mesa-v3d-filters-srgb-mipmaps-in-encoded-space) | Mesa | Wrong colors | Worked around for 2D textures; the spec allows the rest |
+| [V3D resolve ignores readers](#mesa-v3d-multisample-resolve-overtakes-draws-that-read-its-destination) | Mesa | Wrong rendering | Worked around |
 | [Native context per thread](#angle-the-gl-backend-allows-contexts-on-one-thread-only) | ANGLE | Second thread can't create a context | Worked around |
-| [Native context leak](#angle-a-native-context-leaks-when-its-last-thread-exits) | ANGLE | Leak in the workaround above | Open: needs an ANGLE change |
+| [Native context leak](#angle-a-native-context-leaks-when-its-last-thread-exits) | ANGLE | Leak in the workaround above | Patched in `angle-8103.3`; fixed upstream, not in a Chrome release yet |
 | [Metal stale reads across threads](#angle-metal-reads-stale-pixels-when-threads-share-a-display) | ANGLE | Wrong pixels | Avoided: a display per thread |
 | [Metal crash across threads](#angle-metal-crashes-when-threads-share-a-display) | ANGLE | Process crash | Avoided: a display per thread |
-| [Parallel compile extension](#angle-khr_parallel_shader_compile-is-exposed-without-parallelism) | ANGLE | Extension does nothing | Open |
-| [llvmpipe clip distances](#mesa-llvmpipe-clips-with-disabled-clip-distances) | Mesa | Wrong rendering, llvmpipe only | Expected failure |
+| [Parallel compile extension](#angle-khr_parallel_shader_compile-is-exposed-without-parallelism) | ANGLE | Extension does nothing | Worked around |
+| [llvmpipe clip distances](#mesa-llvmpipe-clips-with-disabled-clip-distances) | Mesa | Wrong rendering, llvmpipe only | Worked around |
 
 ## Mesa: V3D overlapping instanced transform feedback
 
@@ -154,8 +155,10 @@ filterable form. A plain check of `filterable` isn't enough: it follows the
 WebGL extension state, and other backends generate these mipmaps themselves.
 
 **In oxgl:** `Context::generate_mipmap` generates `INVALID_OPERATION` on this
-backend. `LUMINANCE` float has no channel size to read, so it isn't refused; V3D
-accepts it, and a driver that refuses it would still lose the context.
+backend. `LUMINANCE` float has no channel size to read, so it is told by its
+memory size, through `GL_ANGLE_memory_size`. `RGB` float is refused even on a
+driver with `OES_texture_float_linear`, as llvmpipe refuses it, not being
+color-renderable.
 
 ## ANGLE: norm16 read workaround loses the context on Mesa
 
@@ -233,8 +236,8 @@ consider a private report first, since the reach below isn't established.
 **Summary:** `v3dx_state.c` clamps `instance_divisor` to
 `V3D_MAX_VERTEX_ATTRIB_DIVISOR` (0xffff) without any error. The attribute index
 then advances every 65535 instances, not every N, so a draw reads attributes the
-application never asked for. ANGLE validates the buffer with the true divisor,
-and `attr.maximum_index` is 0xffffff, so nothing bounds the fetch.
+application never asked for. ANGLE doesn't range-check a robust context, and
+`attr.maximum_index` is 0xffffff, so nothing bounds the fetch.
 
 **Expected and actual,** through WebGL 2 on V3D, with a 4-byte attribute buffer
 holding red, and the last instance read back:
@@ -256,7 +259,9 @@ returned only zeros, so crossing into another buffer object wasn't shown. Larger
 offsets weren't tried, to avoid a GPU reset. Whether they reach other objects, or
 other processes' objects, is open.
 
-**In oxgl:** open. WebGL has no way to report a lower divisor limit.
+**In oxgl:** WebGL 2 draws of more than 65535 instances, including multi-draws,
+are range-checked with the divisor V3D applies, so the read is closed. A large
+enough buffer still advances early, so the Khronos page keeps failing.
 
 ## Mesa: V3D drops a color buffer after an invalidate
 
@@ -297,7 +302,7 @@ scratch framebuffer.
 **Suggested fix:** clear `rsc->invalidated` when a job writes the resource.
 The driconf `ignore_discard_framebuffer=true` passes the page.
 
-**In oxgl:** open. Making `invalidateFramebuffer` a no-op on this backend is cheap.
+**In oxgl:** `invalidateFramebuffer` drops valid color attachments on this backend.
 
 ## Mesa: V3D filters sRGB mipmaps in encoded space
 
@@ -317,7 +322,37 @@ checkerboard, `glGenerateMipmap`, then level 1 read through an FBO, gives encode
 **Suggested fix:** have `v3d_generate_mipmap` return false for sRGB formats.
 ANGLE's `decodeEncodeSRGBForGenerateMipmap` passes the page, for 2D textures only.
 
-**In oxgl:** open.
+**In oxgl:** that feature is enabled on this backend, so cube maps and 2D arrays
+still filter in encoded space on V3D. ES 3.0.6 §3.8.10.5 requires no particular
+filter, so that stays.
+
+## Mesa: V3D multisample resolve overtakes draws that read its destination
+
+**Where to file:** Mesa, `broadcom` label.
+
+**Summary:** `v3d_blit` flushes the jobs that write the blit's destination, not
+the jobs that read it. A queued draw that samples a texture, followed by a
+multisample resolve into that texture, samples the new contents. Blits and
+copies between single-sampled surfaces aren't affected. The cause is read from
+the source; the failure is reproduced below.
+
+**Reproducer,** through WebGL 2 on V3D, for `RGBA8` and `RGBA16F`:
+
+```js
+resolve(green);                 // clear a 4x framebuffer, blit it into texture t
+gl.bindFramebuffer(gl.FRAMEBUFFER, null);
+draw(sampling(t));              // queued, not flushed
+resolve(red);                   // the same blit, now with red
+gl.readPixels(...);             // V3D: 255,0,0,255. Expected 0,255,0,255.
+```
+
+A `gl.flush()` before the second resolve gives the expected result. three.js's
+`webgl_mirror` shows it: a `Reflector` rendered twice in a frame shows the second
+rendering in the first one's draws.
+
+**Suggested fix:** have `v3d_blit` also flush the jobs that read the destination.
+
+**In oxgl:** `blitFramebuffer` flushes first on this backend.
 
 ## ANGLE: the GL backend allows contexts on one thread only
 
@@ -336,7 +371,9 @@ main thread plus one in a worker reproduces it.
 
 ## ANGLE: a native context leaks when its last thread exits
 
-**Where to file:** ANGLE, GL backend.
+**Don't file this.** ANGLE commit 6b3dcfc640 ("Move makeCurrent before
+destroyContext to GL backend", landed 2026-11-05) fixes it upstream, as part of a
+refactor. As of 2026-11-06, Chrome stable, beta and dev don't include that commit.
 
 **Summary:** with a virtualization group per thread, a thread that ends after
 destroying its last context leaks one Mesa context, about 2 MB. ANGLE makes the
@@ -345,13 +382,9 @@ native context current to tear it down, then `destroyNativeContext` calls
 and the thread exits instead. 100 thread cycles took the heap from 3.6 MB to
 102 MB, and plain Mesa with threads stays flat.
 
-**Suggested fix:** in `DisplayEGL::destroyNativeContext`, if the context is
-current on the calling thread, unbind it first.
-
-**Check before filing:** ANGLE `main` already changed `destroyNativeContext` to
-release the context through `afterDestroyContext`. That looks like the same fix,
-though it was only read, not tested. Tested on the Pi at this pin, unbinding first
-cut the loss from 1.97 MB to 0.014 MB per worker cycle.
+**In oxgl:** `angle-8103.3` carries `angle-gl-destroy-native-context.patch`, which
+unbinds the context first, until a pin includes the upstream commit. On the Pi it
+cut the loss from 1.97 MB per worker cycle to 0.037 MB of RSS growth.
 
 ## ANGLE: KHR_parallel_shader_compile is exposed without parallelism
 
@@ -365,7 +398,7 @@ past the harness's 60 s idle limit.
 
 **Khronos test:** `conformance/extensions/khr-parallel-shader-compile.html`.
 
-**In oxgl:** open. `disableNativeParallelCompile` hides the extension, and the page passes.
+**In oxgl:** `disableNativeParallelCompile` hides the extension, and the page passes.
 
 ## Mesa: llvmpipe clips with disabled clip distances
 
@@ -384,7 +417,8 @@ if (num_written_clipdistance && !clip_user) {
 
 **Khronos test:** `conformance2/extensions/webgl-clip-cull-distance.html`.
 
-**In oxgl:** an expected failure. oxgl never uses llvmpipe outside its test job.
+**In oxgl:** `emulateClipDistanceState` is enabled, and oxgl uses llvmpipe only in
+its test job.
 
 ## ANGLE: Metal reads stale pixels when threads share a display
 
@@ -423,7 +457,8 @@ hasn't been audited.
 
 `gl-scissor-test.html` (a scissored multisampled draw) and
 `blitframebuffer-filter-outofbounds.html` fail on llvmpipe in Mesa 25.2.8, and
-pass in 26.2.2. CI's Ubuntu 24.04 has the older one.
+pass in 26.2.2. CI's Ubuntu 24.04 has the older one. oxgl enables
+`clipSrcRegionForBlitFramebuffer` for the blit.
 
 ## Not understood
 

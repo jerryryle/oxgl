@@ -1144,9 +1144,15 @@ impl Context {
             | GL_VERTEX_ATTRIB_ARRAY_TYPE => Some(Parameter::Number(f64::from(
                 read(AttribQuery::Int)?.bits[0].cast_signed(),
             ))),
-            GL_VERTEX_ATTRIB_ARRAY_DIVISOR if webgl2 || instanced => Some(Parameter::Number(
-                f64::from(read(AttribQuery::Int)?.bits[0].cast_signed()),
-            )),
+            GL_VERTEX_ATTRIB_ARRAY_DIVISOR if webgl2 => {
+                // The `Int` query clamps a divisor to `i32::MAX`.
+                Some(Parameter::Number(f64::from(
+                    read(AttribQuery::IntegerUint)?.bits[0],
+                )))
+            }
+            GL_VERTEX_ATTRIB_ARRAY_DIVISOR if instanced => Some(Parameter::Number(f64::from(
+                read(AttribQuery::Int)?.bits[0],
+            ))),
             _ => {
                 self.errors.synthesize(GL_INVALID_ENUM);
                 None

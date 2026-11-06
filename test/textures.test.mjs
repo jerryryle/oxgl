@@ -83,9 +83,8 @@ test('mipmaps of a float texture', (t) => {
     return t.skip('no OES_texture_float');
   }
   const info = gl.getExtension('WEBGL_debug_renderer_info');
-  const refused =
-    !gl.getSupportedExtensions().includes('OES_texture_float_linear') &&
-    gl.getParameter(info.UNMASKED_RENDERER_WEBGL).includes('OpenGL ES');
+  const gles = gl.getParameter(info.UNMASKED_RENDERER_WEBGL).includes('OpenGL ES');
+  const refused = gles && !gl.getSupportedExtensions().includes('OES_texture_float_linear');
   for (const [target, face] of [[gl.TEXTURE_2D, gl.TEXTURE_2D], [gl.TEXTURE_CUBE_MAP, gl.TEXTURE_CUBE_MAP_POSITIVE_X]]) {
     gl.bindTexture(target, gl.createTexture());
     gl.texImage2D(face, 0, gl.RGBA, 1, 1, 0, gl.RGBA, gl.FLOAT, new Float32Array(4));
@@ -96,17 +95,23 @@ test('mipmaps of a float texture', (t) => {
     assert.equal(gl.getError(), refused ? gl.INVALID_OPERATION : gl.NO_ERROR);
     assert.equal(gl.isContextLost(), false);
   }
-  // The other float formats. LUMINANCE has no channel size to read, and
-  // V3D's driver accepts it.
+  // The other float formats, big enough to have levels: a driver accepts a
+  // 1x1 texture, which has nothing to generate.
   for (const format of [gl.RGB, gl.ALPHA, gl.LUMINANCE, gl.LUMINANCE_ALPHA]) {
     const channels = { [gl.RGB]: 3, [gl.LUMINANCE_ALPHA]: 2 }[format] ?? 1;
     gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
-    gl.texImage2D(gl.TEXTURE_2D, 0, format, 1, 1, 0, format, gl.FLOAT, new Float32Array(channels));
+    gl.texImage2D(gl.TEXTURE_2D, 0, format, 2, 2, 0, format, gl.FLOAT, new Float32Array(channels * 4));
     gl.generateMipmap(gl.TEXTURE_2D);
-    const error = gl.getError();
-    if (format !== gl.LUMINANCE) assert.equal(error, refused ? gl.INVALID_OPERATION : gl.NO_ERROR, `format ${format}`);
+    // A driver can't render to RGB float, so can't generate its mipmaps.
+    const refusedHere = refused || (gles && format === gl.RGB);
+    assert.equal(gl.getError(), refusedHere ? gl.INVALID_OPERATION : gl.NO_ERROR, `format ${format}`);
     assert.equal(gl.isContextLost(), false, `format ${format}`);
   }
+  // A format the driver can filter is left alone.
+  gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
+  gl.texImage2D(gl.TEXTURE_2D, 0, gl.LUMINANCE, 4, 1, 0, gl.LUMINANCE, gl.UNSIGNED_BYTE, new Uint8Array(4));
+  gl.generateMipmap(gl.TEXTURE_2D);
+  assert.equal(gl.getError(), gl.NO_ERROR);
   gl.destroy();
 });
 

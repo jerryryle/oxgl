@@ -127,7 +127,8 @@ const OPENGL_ES_2_ONLY: &str = "offers OpenGL ES 2.0 only";
 /// the display is terminated and only the rejection kept. The same goes for a
 /// Vulkan display offering OpenGL ES 2.0 only, which serves no context: V3DV
 /// crashes on a sampler array indexed by a loop variable, and the OpenGL ES
-/// backend serves those GPUs instead. An OpenGL ES display with a CPU renderer is kept, and every use but the test-only
+/// backend serves those GPUs instead. An OpenGL ES display with a CPU
+/// renderer is kept, and every use but the test-only
 /// [`RequestedBackend::Gles`] refuses it.
 ///
 /// On Linux, the GPU and `SwiftShader` displays are one ANGLE display (its

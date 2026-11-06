@@ -123,6 +123,10 @@ A context on the Linux OpenGL ES backend SHALL behave as on the other backends: 
 - **WHEN** a context on the OpenGL ES backend is in use on the main thread, and a worker creates a context with the same `backend`
 - **THEN** the worker's context renders on the same backend, and neither context is lost (cf. Khronos `conformance/offscreencanvas/offscreencanvas-transfer-image-bitmap.html`)
 
+#### Scenario: Instance divisors past V3D's limit
+- **WHEN** a WebGL 2 draw on V3D through this backend, instanced or through `WEBGL_multi_draw`, uses an attribute with a divisor above 65535 and 65536 or more instances, and that fetch would pass the end of its buffer
+- **THEN** `INVALID_OPERATION` is generated, nothing is read past the buffer, and `getVertexAttrib` reports the divisor that was set (cf. Khronos `conformance2/rendering/instanced-rendering-large-divisor.html`, which stays failing, as V3D applies a divisor of at most 65535)
+
 #### Scenario: Reading a norm16 color buffer
 - **WHEN** a context on the OpenGL ES backend calls `readPixels(0, 0, 1, 1, RGBA, UNSIGNED_SHORT, pixels)` with an `RG16_EXT` framebuffer bound
 - **THEN** the color is returned, no error is generated and the context is not lost (cf. Khronos `conformance2/extensions/ext-texture-norm16.html`)
