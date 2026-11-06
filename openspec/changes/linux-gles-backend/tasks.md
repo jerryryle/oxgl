@@ -29,6 +29,7 @@
 - [x] 2.6 Make `drawRangeElements` draw as `drawElements` after generating `INVALID_VALUE` for `end < start`, and drop `glDrawRangeElements` from `oxgl-sys`. Verify with a Node test of indices outside the range and of `end < start`.
 - [x] 2.7 In `oxgl-core`, generate `INVALID_OPERATION` from WebGL 1's `generateMipmap` on a float texture on the OpenGL ES backend when `OES_texture_float_linear` isn't supported, reading the format with `GL_ANGLE_get_tex_level_parameter`. Verify with a Node test, on llvmpipe with `MESA_EXTENSION_OVERRIDE` hiding the extension, and with `oes-texture-float-linear.html` on the Pi.
 - [x] 2.8 Terminate a Vulkan display that offers OpenGL ES 2.0 only and use it for no context, in place of task 2.5's Vulkan fallback for WebGL 1: without the OpenGL ES backend, `'gpu'` throws and `'auto'` uses SwiftShader. Verify with `FakeProbe` tests, and on the Pi with `LIBGL_ALWAYS_SOFTWARE=1`.
+- [x] 2.9 On the OpenGL ES display, disable ANGLE's `readPixelsUsingImplementationColorReadFormatForNorm16`, moving `Display::open` to `eglGetPlatformDisplay`, which takes pointer attributes. Verify with a Node test, and with `ext-texture-norm16.html` on the Pi and on `linux/amd64`.
 
 ## 3. Linux verification of the code path (Docker, CI image)
 

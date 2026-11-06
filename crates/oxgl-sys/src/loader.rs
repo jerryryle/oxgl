@@ -120,7 +120,7 @@ macro_rules! entry_points {
 }
 
 entry_points! {
-    eglGetPlatformDisplayEXT: PFNEGLGETPLATFORMDISPLAYEXTPROC,
+    eglGetPlatformDisplay: PFNEGLGETPLATFORMDISPLAYPROC,
     eglInitialize: PFNEGLINITIALIZEPROC,
     eglTerminate: PFNEGLTERMINATEPROC,
     eglChooseConfig: PFNEGLCHOOSECONFIGPROC,

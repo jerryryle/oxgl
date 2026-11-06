@@ -53,6 +53,35 @@ test('exact required size', (t) => {
   assert.ok(short.every((byte) => byte === 9));
 });
 
+// A driver's own read format for these can differ from the attachment's, and
+// a read it refuses must not lose the context.
+test('norm16 color buffers read as RGBA/UNSIGNED_SHORT', (t) => {
+  const gl = createContext({ width: 1, height: 1, webgl2: true });
+  const ext = gl.getExtension('EXT_texture_norm16');
+  if (!ext) {
+    gl.destroy();
+    return t.skip('no EXT_texture_norm16');
+  }
+  for (const [internal, format, expected] of [
+    [ext.R16_EXT, gl.RED, [65535, 0, 0, 65535]],
+    [ext.RG16_EXT, gl.RG, [65535, 65535, 0, 65535]],
+    [ext.RGBA16_EXT, gl.RGBA, [65535, 65535, 65535, 65535]],
+  ]) {
+    gl.bindTexture(gl.TEXTURE_2D, gl.createTexture());
+    gl.texImage2D(gl.TEXTURE_2D, 0, internal, 1, 1, 0, format, gl.UNSIGNED_SHORT, null);
+    gl.bindFramebuffer(gl.FRAMEBUFFER, gl.createFramebuffer());
+    gl.framebufferTexture2D(gl.FRAMEBUFFER, gl.COLOR_ATTACHMENT0, gl.TEXTURE_2D, gl.getParameter(gl.TEXTURE_BINDING_2D), 0);
+    gl.clearColor(1, 1, 1, 1);
+    gl.clear(gl.COLOR_BUFFER_BIT);
+    const pixel = new Uint16Array(4);
+    gl.readPixels(0, 0, 1, 1, gl.RGBA, gl.UNSIGNED_SHORT, pixel);
+    assert.equal(gl.isContextLost(), false);
+    assert.deepEqual([...pixel], expected);
+    assert.equal(gl.getError(), gl.NO_ERROR);
+  }
+  gl.destroy();
+});
+
 test('invalid enum', (t) => {
   const gl = context(t);
   const pixels = filled(4, 9);

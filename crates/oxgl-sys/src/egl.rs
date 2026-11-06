@@ -32,12 +32,34 @@ use crate::bindings::{
     EGL_PLATFORM_ANGLE_DEVICE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_DEVICE_TYPE_HARDWARE_ANGLE,
     EGL_PLATFORM_ANGLE_DEVICE_TYPE_SWIFTSHADER_ANGLE, EGL_PLATFORM_ANGLE_TYPE_ANGLE,
     EGL_PLATFORM_ANGLE_TYPE_VULKAN_ANGLE, EGL_RENDERABLE_TYPE,
-    EGL_ROBUST_RESOURCE_INITIALIZATION_ANGLE, EGL_SURFACE_TYPE, EGL_TRUE, EGLConfig, EGLContext,
-    EGLDisplay, EGLint, GLenum, GLsizei,
+    EGL_ROBUST_RESOURCE_INITIALIZATION_ANGLE, EGL_SURFACE_TYPE, EGL_TRUE, EGLAttrib, EGLConfig,
+    EGLContext, EGLDisplay, EGLint, GLenum, GLsizei,
 };
 use crate::loader::Angle;
 
 static LIVE_CONTEXTS: AtomicUsize = AtomicUsize::new(0);
+
+/// `EGL_FEATURE_OVERRIDES_DISABLED_ANGLE`: a null-terminated list of ANGLE
+/// feature names to disable.
+#[cfg(target_os = "linux")]
+const EGL_FEATURE_OVERRIDES_DISABLED_ANGLE: EGLAttrib = 0x3467;
+
+/// A null-terminated list of C strings.
+#[cfg(target_os = "linux")]
+struct FeatureNames([*const c_char; 2]);
+
+// SAFETY: the pointers are to immutable static strings.
+#[cfg(target_os = "linux")]
+unsafe impl Sync for FeatureNames {}
+
+/// ANGLE features the OpenGL ES display disables. This one reads `RG16` as
+/// `RG`/`UNSIGNED_SHORT`, a driver bug's workaround that Mesa refuses, since
+/// Mesa's own read format for it is `RGBA`, and the error loses the context.
+#[cfg(target_os = "linux")]
+static GLES_DISABLED_FEATURES: FeatureNames = FeatureNames([
+    c"readPixelsUsingImplementationColorReadFormatForNorm16".as_ptr(),
+    ptr::null(),
+]);
 
 /// `EGL_DONT_CARE`, `((EGLint)-1)` in the headers: a cast macro bindgen skips.
 const EGL_DONT_CARE: EGLint = -1;
@@ -150,49 +172,59 @@ impl Display {
     /// Returns the failing EGL call and error code.
     pub fn open(angle: &Angle, kind: DisplayKind) -> Result<Self, EglError> {
         let fns = angle.fns();
-        // Only the OpenGL ES backend names a native platform; elsewhere
-        // EGL_NONE in its place ends the list.
-        let (platform, device, native) = match kind {
+        // Only the OpenGL ES backend adds attributes; elsewhere EGL_NONE in
+        // their place ends the list.
+        let none = EGL_NONE as EGLAttrib;
+        let (platform, device, extra) = match kind {
             DisplayKind::Gpu => (
                 GPU_PLATFORM,
                 EGL_PLATFORM_ANGLE_DEVICE_TYPE_HARDWARE_ANGLE,
-                [EGL_NONE, EGL_NONE],
+                [none; 4],
             ),
             DisplayKind::SwiftShader => (
                 EGL_PLATFORM_ANGLE_TYPE_VULKAN_ANGLE,
                 EGL_PLATFORM_ANGLE_DEVICE_TYPE_SWIFTSHADER_ANGLE,
-                [EGL_NONE, EGL_NONE],
+                [none; 4],
             ),
             #[cfg(target_os = "linux")]
             DisplayKind::Gles => (
                 crate::bindings::EGL_PLATFORM_ANGLE_TYPE_OPENGLES_ANGLE,
                 EGL_PLATFORM_ANGLE_DEVICE_TYPE_HARDWARE_ANGLE,
                 [
-                    crate::bindings::EGL_PLATFORM_ANGLE_NATIVE_PLATFORM_TYPE_ANGLE,
-                    crate::bindings::EGL_PLATFORM_SURFACELESS_MESA,
+                    crate::bindings::EGL_PLATFORM_ANGLE_NATIVE_PLATFORM_TYPE_ANGLE as EGLAttrib,
+                    crate::bindings::EGL_PLATFORM_SURFACELESS_MESA as EGLAttrib,
+                    EGL_FEATURE_OVERRIDES_DISABLED_ANGLE,
+                    GLES_DISABLED_FEATURES
+                        .0
+                        .as_ptr()
+                        .expose_provenance()
+                        .cast_signed(),
                 ],
             ),
         };
         let attribs = [
-            EGL_PLATFORM_ANGLE_TYPE_ANGLE,
-            platform,
-            EGL_PLATFORM_ANGLE_DEVICE_TYPE_ANGLE,
-            device,
-            native[0],
-            native[1],
-            EGL_NONE,
+            EGL_PLATFORM_ANGLE_TYPE_ANGLE as EGLAttrib,
+            platform as EGLAttrib,
+            EGL_PLATFORM_ANGLE_DEVICE_TYPE_ANGLE as EGLAttrib,
+            device as EGLAttrib,
+            extra[0],
+            extra[1],
+            extra[2],
+            extra[3],
+            none,
         ];
         // SAFETY: the attribute list is EGL_NONE-terminated and outlives the
-        // call; a null native display is valid for ANGLE platforms.
+        // call, and the feature list it may point to is static, as ANGLE keeps
+        // the pointer; a null native display is valid for ANGLE platforms.
         let raw = unsafe {
-            (fns.eglGetPlatformDisplayEXT)(
+            (fns.eglGetPlatformDisplay)(
                 EGL_PLATFORM_ANGLE_ANGLE.cast_unsigned(),
                 ptr::null_mut(),
                 attribs.as_ptr(),
             )
         };
         if raw.is_null() {
-            return Err(egl_error(angle, "eglGetPlatformDisplayEXT"));
+            return Err(egl_error(angle, "eglGetPlatformDisplay"));
         }
         // SAFETY: `raw` is a display returned above; null version pointers are
         // allowed.
@@ -218,7 +250,7 @@ impl Display {
         if Arc::strong_count(&self.handles) > 1 {
             return;
         }
-        // SAFETY: `raw` is a display returned by eglGetPlatformDisplayEXT.
+        // SAFETY: `raw` is a display returned by eglGetPlatformDisplay.
         // eglTerminate accepts any valid display, initialized or not, and
         // later calls on a terminated display fail with EGL_NOT_INITIALIZED
         // (EGL 1.5 §3.2) rather than misbehave. Its result is ignored: the

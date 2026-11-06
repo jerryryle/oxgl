@@ -119,6 +119,10 @@ A context on the Linux OpenGL ES backend SHALL behave as on the other backends: 
 - **WHEN** `npm test` runs with an addon built with `test-gles`, `OXGL_BACKEND=gles` and Mesa's llvmpipe
 - **THEN** every test passes or skips with a stated reason, as with `OXGL_BACKEND=software`
 
+#### Scenario: Reading a norm16 color buffer
+- **WHEN** a context on the OpenGL ES backend calls `readPixels(0, 0, 1, 1, RGBA, UNSIGNED_SHORT, pixels)` with an `RG16_EXT` framebuffer bound
+- **THEN** the color is returned, no error is generated and the context is not lost (cf. Khronos `conformance2/extensions/ext-texture-norm16.html`)
+
 #### Scenario: Robust initialization on V3D
 - **WHEN** a WebGL 2 context on the Pi's OpenGL ES backend reads back a new texture through a framebuffer, a new renderbuffer, and a new buffer through `getBufferSubData`
 - **THEN** every byte is `0` (cf. Khronos `conformance/misc/uninitialized-test.html`, `conformance2/misc/uninitialized-test-2.html`)

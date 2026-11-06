@@ -16,7 +16,6 @@ webgl2 conformance/rendering/gl-scissor-test.html FAIL [linux-x64-gles] # llvmpi
 webgl2 conformance/rendering/texture-switch-performance.html SKIP # timing: needs the frame rate while switching textures to stay within 80% of the rate without; SwiftShader renders only a few frames in each 2 s window, so other pages sharing the CPU can impact the result, making this a flaky test
 webgl2 conformance/textures/misc/texture-size-limit.html FAIL [linux-x64-gles] # llvmpipe: non-OOM errors while probing the largest texture level; passes on the Pi's V3D
 webgl2 conformance/typedarrays/array-large-array-tests.html FAIL # JS engine: expects new Float32Array(3e9) to throw (old 32-bit byteLength rule); Node's V8 allows >4 GB arrays and allocates lazily
-webgl2 conformance2/extensions/ext-texture-norm16.html FAIL [linux-x64-gles] # OpenGL ES backend: a norm16 read returns the wrong value; also on the Pi's V3D; not yet diagnosed
 webgl2 conformance2/extensions/webgl-clip-cull-distance.html FAIL [linux-x64-gles] # llvmpipe: clip distances not applied (should be red); V3D doesn't expose the extension
 webgl2 conformance2/offscreencanvas/offscreencanvas-transfer-image-bitmap.html TIMEOUT [linux-x64-gles] # OpenGL ES backend: also times out on the Pi's V3D; not yet diagnosed
 webgl2 conformance2/query/occlusion-query-scissor.html FAIL [linux-x64-gles] # llvmpipe: occlusion query ignores the scissor; passes on the Pi's V3D
