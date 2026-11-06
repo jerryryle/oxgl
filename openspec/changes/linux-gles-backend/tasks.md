@@ -67,7 +67,7 @@ Each check names its architecture, and its result stands only for that architect
 - [x] 5.4 Run `npm test` on the Pi with no `OXGL_BACKEND` (WebGL 2 tests on GLES, WebGL 1 on Vulkan), and with `OXGL_BACKEND=gpu`. Fix oxgl defects.
 - [x] 5.5 Run both conformance suites and `npm run threejs` on the Pi with `OXGL_BACKEND=gpu`, so WebGL 2 runs on GLES. Record every failing page and example in design.md's "Results on the Pi" with its reason, marking which are V3D's (they also fail with Mesa's GL directly, or with a V3D-specific cause) and which are oxgl's. Fix oxgl's, or bring them back as findings. Add V3D failures to the README's known issues.
 - [x] 5.6 Add `--webgl1` to `bench/run.mjs`. Run `npm run bench` on the Pi on GLES (WebGL 2, default) and on Vulkan (`--webgl1`), with `OXGL_BACKEND=gpu`, and record both side by side in design.md.
-- [ ] 5.7 Rerun `npm test`, both conformance suites and `npm run threejs` on the Pi with `OXGL_BACKEND=gpu`, and record the results. Verify that `sampler-array-using-loop-index.html` passes, that WebGL 1 under `LIBGL_ALWAYS_SOFTWARE=1` is refused by `'gpu'` and renders on SwiftShader under `'auto'`. Rerun `npm run bench -- --webgl1`.
+- [x] 5.7 Rerun `npm test`, both conformance suites and `npm run threejs` on the Pi with `OXGL_BACKEND=gpu`, and record the results. Verify that `sampler-array-using-loop-index.html` passes, that WebGL 1 under `LIBGL_ALWAYS_SOFTWARE=1` is refused by `'gpu'` and renders on SwiftShader under `'auto'`. Rerun `npm run bench -- --webgl1`.
 
 ## 6. Expectations and CI
 
@@ -90,7 +90,7 @@ Each check names its architecture, and its result stands only for that architect
   - the Platforms table and Known issues carry the Pi results.
 
   Verify by reading the README against the specs.
-- [ ] 7.2 Update the README's backend text, known issues and Pi conformance counts for WebGL 1 on the OpenGL ES backend.
+- [x] 7.2 Update the README's backend text, known issues and Pi conformance counts for WebGL 1 on the OpenGL ES backend.
 
 ## 8. Verification
 

@@ -82,8 +82,9 @@ below.
   first `'gpu'` context comes before SwiftShader. Other platforms are unaffected: their GPU backend is
   Metal or Direct3D 11. To use both on Linux, create the
   other kind in a child process.
-- **WebGL 2 on a Raspberry Pi 5 passes all but a few conformance pages.** On
-  V3D through the OpenGL ES backend, 2851 of 2865 WebGL 2 pages pass. Four
+- **WebGL on a Raspberry Pi 5 passes all but a few conformance pages.** On V3D
+  through the OpenGL ES backend, 966 of 971 WebGL 1 pages and 2852 of 2865
+  WebGL 2 pages pass. Four
   failures are V3D's own: sRGB mipmap generation, a large instance divisor,
   invalidating the default framebuffer's depth and stencil, and transform
   feedback into too-small buffers. The others are shared with the backend on

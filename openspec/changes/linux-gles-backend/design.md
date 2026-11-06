@@ -76,6 +76,7 @@ Release builds and packages never enable the feature, so their `'gpu'` can't acc
 |---|---|---|---|---|
 | Vulkan | 963 | 6 | 1 | 0 |
 | OpenGL ES backend, before the `generateMipmap` fix below | 965 | 3 | 0 | 2 |
+| OpenGL ES backend, final | 966 | 2 | 0 | 2 |
 
 Both were run on `angle-8103.2`, the second with the `test-gles` addon and `OXGL_BACKEND=gles`. With this change built, the Pi gives `ANGLE (Broadcom, V3D 7.1.10.2, OpenGL ES 3.1)` for WebGL 1 and 2 under `'gpu'`, and under `LIBGL_ALWAYS_SOFTWARE=1` both throw `OXGL_GPU_UNAVAILABLE` while `'auto'` renders them on SwiftShader. A `'software'` context after `'gpu'` contexts also renders. A full Pi run with this change is still to do (task 5.7).
 
@@ -153,12 +154,14 @@ Raspberry Pi 5 on Debian 13 (Raspberry Pi OS), Mesa 26.2.2, oxgl built against `
   - `drawing-buffer-storage`'s "over the allocation budget" asks for 8192×8192, above `MAX_RENDERBUFFER_SIZE` on V3DV (7680) and V3D's GLES (4096), so it gets `INVALID_VALUE`. Fixed: the test now sizes the buffer from the limits, and skips where no allowed size exceeds the budget multisampled.
 
 - Conformance and three.js (task 5.5), `OXGL_BACKEND=gpu`, so WebGL 2 runs on V3D through the OpenGL ES backend and WebGL 1 on V3DV through Vulkan. Each page is judged against the software expectations, so the list below is every page whose result differs from them, classified by cross-checking with llvmpipe (the `linux-x64-gles` run, task 6.3) and SwiftShader.
-  - WebGL 2 on V3D (GLES): 2851 pass, 9 fail, 3 timeouts, 2 skipped, of 2865, rebuilt against `angle-8103.2`.
+  - WebGL 2 on V3D (GLES): 2852 pass, 8 fail, 3 timeouts, 2 skipped, of 2865, on the final build (task 5.7).
     - ANGLE: none. `conformance2/reading/read-pixels-from-fbo-test.html` lost its context until `angle-8103.2`, which advertises a read format the driver accepts for `RGBA16UI`.
-    - OpenGL ES backend, not yet diagnosed (also on llvmpipe): `ext-texture-norm16.html`, `deqp/.../draw/random.html` (case 76), and the timeouts of `khr-parallel-shader-compile.html` and both `offscreencanvas-transfer-image-bitmap.html` pages.
+    - OpenGL ES backend, not yet diagnosed (also on llvmpipe): `ext-texture-norm16.html` and the timeouts of `khr-parallel-shader-compile.html` and both `offscreencanvas-transfer-image-bitmap.html` pages.
+    - Fixed: `deqp/.../draw/random.html` (case 76) failed because its indices left `drawRangeElements`' range, and passes on V3D and llvmpipe now that the range is discarded.
     - V3D (passes on llvmpipe and SwiftShader): `deqp/.../fboinvalidate/default.html` (`render_depth_stencil`), `instanced-rendering-large-divisor.html`, `tex-srgb-mipmap.html` (sRGB mipmap generation), `transform_feedback/too-small-buffers.html`.
     - Passing on V3D where SwiftShader fails: `unary_operator_00.html`.
-  - WebGL 1 on V3DV (Vulkan): 963 pass, 6 fail, 1 crash. `sampler-array-using-loop-index.html` crashes the page's process (SIGSEGV), `gl-enable-enum-test.html` accepts `GL_MULTISAMPLE`, and `gl-max-texture-dimensions.html` fails because V3DV's limit, 7680, is not a power of two. The others are `ext-polygon-offset-clamp.html` and `webgl-compressed-texture-size-limit.html`. These are on the Vulkan path, which this change doesn't touch.
+  - WebGL 1 on V3D (GLES), on the final build: 966 pass, 2 fail, 2 timeouts, 1 skipped, of 971.
+  - WebGL 1 on V3DV (Vulkan), before it moved: 963 pass, 6 fail, 1 crash. `sampler-array-using-loop-index.html` crashes the page's process (SIGSEGV), `gl-enable-enum-test.html` accepts `GL_MULTISAMPLE`, and `gl-max-texture-dimensions.html` fails because V3DV's limit, 7680, is not a power of two. The others are `ext-polygon-offset-clamp.html` and `webgl-compressed-texture-size-limit.html`. These are on the Vulkan path, which this change doesn't touch.
   - three.js (WebGL 2 on V3D): 282 pass, 72 fail, 23 skipped of 354. Most failures are small rasterization differences against the Chrome references. The largest are `webgl_read_float_buffer` (78%), `webgl_lightprobes` (63%) and `webgl_lightprobes_complex` (27%). `webgl_clipculldistance` fails because V3D lacks `WEBGL_clip_cull_distance`. `webxr_vr_panorama_depth` throws a type error in the runner's image upload. Not yet diagnosed individually.
 - llvmpipe through the OpenGL ES backend (task 6.3) fails, besides those shared above, pages that pass on V3D, recorded as llvmpipe's in the expectations. Against `angle-8103.2` on `linux/amd64`, it matches them: WebGL 1 964 pass, 4 fail, 2 timeouts; WebGL 2 2849 pass, 10 fail, 3 timeouts, 1 crash; three.js 299 pass, 55 fail. `ext-color-buffer-half-float.html` passes: that release no longer sends WebGL 1's `copyTexImage2D` from a half-float framebuffer to the driver as a float-to-fixed-point copy, which the driver refuses (ES 3.0 §3.8.5).
 
@@ -180,6 +183,8 @@ Raspberry Pi 5 on Debian 13 (Raspberry Pi OS), Mesa 26.2.2, oxgl built against `
   | readPixels 256×256 RGBA8 (MB/s) | 634 | 691 |
   | three.js 1000 meshes (frames/s) | 87.9 | (WebGL 2 only) |
   | three.js 1 mesh, 128×64 segments (frames/s) | 9,368 | (WebGL 2 only) |
+
+  WebGL 1 on GLES, on the final build (`--webgl1`), is close to WebGL 2's column, so moving it from Vulkan costs what that column shows: `getError` 345,202 calls/s against 2,316,912, and `bufferSubData` 24 B + `drawArrays` 88,016 pairs/s against 253,964. The other measures are within 15%.
 
   Most calls are within 15%. `getError` is 5× slower on GLES, which suggests ANGLE's GL backend asks the driver each time, and small `bufferSubData`-then-draw pairs are 2.6× slower.
 
