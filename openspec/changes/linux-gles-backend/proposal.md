@@ -10,6 +10,7 @@ On a Raspberry Pi 5, `createContext({ webgl2: true, backend: 'gpu' })` throws `O
 - **On Linux, a WebGL 2 request uses the OpenGL ES backend when the Vulkan GPU can only give OpenGL ES 2.0.** This is the automatic option (option 1 of the brief), recommended over a new `backend` value; see design.md, "Selection is automatic". It applies to `'gpu'` and `'auto'`, and to `OXGL_BACKEND=gpu`/`auto`. Nothing changes where Vulkan gives OpenGL ES 3.0 or where Vulkan fails. `OXGL_BACKEND` keeps overriding the option as today, and no new public value is added.
 - **WebGL 1 uses the OpenGL ES backend on those GPUs too, and Vulkan serves no context there.** V3DV segfaults the process on a WebGL 1 shader that indexes a sampler array with a loop variable, and the OpenGL ES backend renders it. Without that backend, `'gpu'` throws and `'auto'` uses SwiftShader; see design.md.
 - **`generateMipmap` on a float texture is refused on that backend when the driver can't filter float.** WebGL 1 otherwise loses the context, since ANGLE passes the call to a driver that refuses it.
+- **Each thread on macOS gets its own Metal display.** Threads sharing one read stale pixels and can crash the process, through ANGLE defects outside this change's original scope, found by its worker test.
 - **`drawRangeElements` draws as `drawElements`.** A GLES driver may trust `start` and `end`, and llvmpipe reads outside its vertex data when indices are outside them. The WebGL 2 specification allows discarding them.
 - **`'gpu'` stays GPU-only on the OpenGL ES backend.** A renderer naming llvmpipe, softpipe or a software rasterizer is refused with `OXGL_GPU_UNAVAILABLE`, with the renderer string in the message. This matters because Mesa falls back to llvmpipe without an error when it cannot open the GPU (observed on the Pi as a user outside `render`).
 - **The drawing buffer needs no EGL config change.** It is oxgl's own framebuffer of `RGBA8` and `DEPTH24_STENCIL8` renderbuffers, 4 samples when `antialias` is true, and the context is surfaceless. ANGLE's OpenGL ES backend creates its native context with `EGL_KHR_no_config_context`, which Mesa supports, so no EGL config choice reaches Mesa's drawing surfaces. Tests check `getContextAttributes()` and the `*_BITS`/`SAMPLES` parameters on the new backend.
@@ -35,6 +36,7 @@ None.
 ### Modified Capabilities
 
 - `backend-selection`: on Linux the GPU candidates for a request gain the OpenGL ES backend. The CPU-renderer rule, the GPU-unavailable message, failure memory and `auto` fallback cover it. A test-only `gles` override is added.
+- `backend-selection`: on macOS, each thread uses its own Metal display.
 - `drawing`: `drawRangeElements` discards its range.
 - `textures`: `generateMipmap` on an unfilterable float texture on the OpenGL ES backend.
 - `angle-distribution`: the Linux bundles enable ANGLE's OpenGL ES backend. The no-window-system requirement adds that the system EGL library is opened only at run time, never linked.

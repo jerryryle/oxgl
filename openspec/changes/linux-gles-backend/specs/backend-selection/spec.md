@@ -119,6 +119,10 @@ A context on the Linux OpenGL ES backend SHALL behave as on the other backends: 
 - **WHEN** `npm test` runs with an addon built with `test-gles`, `OXGL_BACKEND=gles` and Mesa's llvmpipe
 - **THEN** every test passes or skips with a stated reason, as with `OXGL_BACKEND=software`
 
+#### Scenario: Contexts on two threads
+- **WHEN** a context on the OpenGL ES backend is in use on the main thread, and a worker creates a context with the same `backend`
+- **THEN** the worker's context renders on the same backend, and neither context is lost (cf. Khronos `conformance/offscreencanvas/offscreencanvas-transfer-image-bitmap.html`)
+
 #### Scenario: Reading a norm16 color buffer
 - **WHEN** a context on the OpenGL ES backend calls `readPixels(0, 0, 1, 1, RGBA, UNSIGNED_SHORT, pixels)` with an `RG16_EXT` framebuffer bound
 - **THEN** the color is returned, no error is generated and the context is not lost (cf. Khronos `conformance2/extensions/ext-texture-norm16.html`)
@@ -165,3 +169,18 @@ A platform GPU display (Vulkan, Metal or D3D11) whose renderer is rejected as a 
 #### Scenario: Software after a Vulkan device rejected as a CPU
 - **WHEN** the only Vulkan device on a Linux machine is Mesa's lavapipe, a context is created with `backend: 'auto'`, and then another with `backend: 'software'`
 - **THEN** both contexts' `GL_RENDERER` names SwiftShader, not llvmpipe
+
+### Requirement: Threads don't share a Metal display
+On macOS, each thread creating GPU contexts SHALL use an ANGLE display of its own, since ANGLE's Metal backend shares its command queue and state caches across a display's contexts without a lock. A display SHALL be reused by a later thread once its thread and contexts are gone, so that their number follows the peak number of threads.
+
+#### Scenario: Threads drawing at once
+- **WHEN** several workers on macOS with `backend: 'gpu'` each clear a context to their own colors in a loop and read them back
+- **THEN** every read returns that thread's latest color, no context is lost and the process doesn't crash
+
+#### Scenario: A context left unflushed
+- **WHEN** a main-thread context on macOS has cleared without a read, and a worker creates a context
+- **THEN** a later read on the main thread returns the main thread's color
+
+#### Scenario: Short-lived workers
+- **WHEN** workers on macOS start, create and destroy a context, and exit, one after another
+- **THEN** the number of displays and the process's memory stay flat

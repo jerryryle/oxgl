@@ -376,7 +376,8 @@ impl BackendProbe for AngleProbe {
         display: &Display,
         request: &ContextRequest,
     ) -> Result<DrawingBuffer, String> {
-        DrawingBuffer::new(display, request)
+        let display = display.for_this_thread().map_err(|e| e.to_string())?;
+        DrawingBuffer::new(&display, request)
     }
 
     fn release(&self, display: Display) {
@@ -385,7 +386,8 @@ impl BackendProbe for AngleProbe {
 }
 
 /// The process-wide backend cache. EGL displays are process-global, so every
-/// Node-API environment (main thread and workers) shares it.
+/// Node-API environment (main thread and workers) shares it. Selection uses
+/// these displays; on Metal, contexts live on a display per thread.
 static BACKENDS: Mutex<Option<Backends<AngleProbe>>> = Mutex::new(None);
 
 /// Creates a drawing buffer through the process-wide cache, loading the ANGLE

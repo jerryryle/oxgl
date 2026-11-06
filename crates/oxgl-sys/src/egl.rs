@@ -18,10 +18,10 @@ use std::ffi::{CStr, c_char};
 use std::fmt;
 use std::marker::PhantomData;
 use std::ptr;
-use std::sync::Arc;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicI32, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, PoisonError};
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 
 use crate::bindings::{
     EGL_CONTEXT_BIND_GENERATES_RESOURCE_CHROMIUM, EGL_CONTEXT_CLIENT_ARRAYS_ENABLED_ANGLE,
@@ -60,6 +60,69 @@ static GLES_DISABLED_FEATURES: FeatureNames = FeatureNames([
     c"readPixelsUsingImplementationColorReadFormatForNorm16".as_ptr(),
     ptr::null(),
 ]);
+
+/// A key for a per-thread display, returned to the pool when dropped. It
+/// starts at 1, since 0 is the null native display [`Display::open`] uses.
+#[derive(Debug)]
+struct DisplayKey(usize);
+
+/// Keys free for reuse. A key's display stays initialized, so a later thread
+/// reuses it: ANGLE leaks a little for each new key, even when terminated.
+static FREE_DISPLAY_KEYS: Mutex<Vec<usize>> = Mutex::new(Vec::new());
+
+/// The next key never used.
+static NEXT_DISPLAY_KEY: AtomicUsize = AtomicUsize::new(1);
+
+impl DisplayKey {
+    fn take() -> Self {
+        let free = FREE_DISPLAY_KEYS
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .pop();
+        Self(free.unwrap_or_else(|| NEXT_DISPLAY_KEY.fetch_add(1, Ordering::Relaxed)))
+    }
+}
+
+impl Drop for DisplayKey {
+    fn drop(&mut self) {
+        FREE_DISPLAY_KEYS
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(self.0);
+    }
+}
+
+thread_local! {
+    /// This thread's display, on backends with one per thread.
+    static THREAD_DISPLAY: RefCell<Option<Display>> = const { RefCell::new(None) };
+}
+
+/// `EGL_CONTEXT_VIRTUALIZATION_GROUP_ANGLE`.
+const EGL_CONTEXT_VIRTUALIZATION_GROUP_ANGLE: EGLint = 0x3481;
+
+/// The next thread's virtualization group.
+static NEXT_VIRTUALIZATION_GROUP: AtomicI32 = AtomicI32::new(1);
+
+thread_local! {
+    /// This thread's virtualization group. ANGLE's OpenGL ES backend puts a
+    /// group's contexts on one native context, which only one thread can have
+    /// current, so a group per thread lets each thread hold contexts.
+    static VIRTUALIZATION_GROUP: EGLint =
+        NEXT_VIRTUALIZATION_GROUP.fetch_add(1, Ordering::Relaxed);
+}
+
+/// Whether `kind` is the OpenGL ES backend's display.
+fn is_gles(kind: DisplayKind) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        matches!(kind, DisplayKind::Gles)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = kind;
+        false
+    }
+}
 
 /// `EGL_DONT_CARE`, `((EGLint)-1)` in the headers: a cast macro bindgen skips.
 const EGL_DONT_CARE: EGLint = -1;
@@ -145,6 +208,17 @@ pub struct Display {
     /// maps to the same display (on Linux, the GPU and `SwiftShader` kinds)
     /// has its own.
     handles: Arc<()>,
+    /// Which display this is.
+    kind: DisplayKind,
+    /// Whether this is the OpenGL ES backend's display.
+    gles: bool,
+    /// Whether each thread needs a display of its own: Metal's are not safe
+    /// to share between threads (see [`Display::for_this_thread`]).
+    per_thread: bool,
+    /// The key this display holds, shared by its clones, which goes back to
+    /// the pool with the last of them; `None` for the key [`Display::open`]
+    /// uses, which is never pooled.
+    _key: Option<Arc<DisplayKey>>,
 }
 
 // SAFETY: an EGLDisplay is a process-global handle, and EGL requires display
@@ -171,7 +245,19 @@ impl Display {
     ///
     /// Returns the failing EGL call and error code.
     pub fn open(angle: &Angle, kind: DisplayKind) -> Result<Self, EglError> {
+        Self::open_keyed(angle, kind, None)
+    }
+
+    /// Opens the display for `key`: ANGLE keeps one display per platform
+    /// attribute list and native display value, and the Metal backend takes
+    /// the value as an opaque key. `None` is the null native display.
+    fn open_keyed(
+        angle: &Angle,
+        kind: DisplayKind,
+        key: Option<Arc<DisplayKey>>,
+    ) -> Result<Self, EglError> {
         let fns = angle.fns();
+        let native_display = ptr::without_provenance_mut(key.as_ref().map_or(0, |key| key.0));
         // Only the OpenGL ES backend adds attributes; elsewhere EGL_NONE in
         // their place ends the list.
         let none = EGL_NONE as EGLAttrib;
@@ -215,11 +301,12 @@ impl Display {
         ];
         // SAFETY: the attribute list is EGL_NONE-terminated and outlives the
         // call, and the feature list it may point to is static, as ANGLE keeps
-        // the pointer; a null native display is valid for ANGLE platforms.
+        // the pointer; ANGLE platforms take any native display value, and use
+        // it only as a key.
         let raw = unsafe {
             (fns.eglGetPlatformDisplay)(
                 EGL_PLATFORM_ANGLE_ANGLE.cast_unsigned(),
-                ptr::null_mut(),
+                native_display,
                 attribs.as_ptr(),
             )
         };
@@ -236,6 +323,36 @@ impl Display {
             angle: angle.clone(),
             raw,
             handles: Arc::new(()),
+            gles: is_gles(kind),
+            per_thread: cfg!(target_os = "macos") && matches!(kind, DisplayKind::Gpu),
+            kind,
+            _key: key,
+        })
+    }
+
+    /// The display this thread creates contexts on. That is `self`, except on
+    /// Metal, where each thread gets its own: ANGLE's Metal backend shares
+    /// its command queue and state caches across a display's contexts without
+    /// a lock. Threads sharing one read stale pixels and can crash the
+    /// process. A thread's display goes back to a pool when the thread and
+    /// its contexts are gone, so the number of displays follows the peak
+    /// number of threads.
+    ///
+    /// # Errors
+    ///
+    /// Returns the failing EGL call and error code.
+    pub fn for_this_thread(&self) -> Result<Self, EglError> {
+        if !self.per_thread {
+            return Ok(self.clone());
+        }
+        THREAD_DISPLAY.with(|slot| {
+            if let Some(display) = slot.borrow().as_ref() {
+                return Ok(display.clone());
+            }
+            let key = Arc::new(DisplayKey::take());
+            let display = Self::open_keyed(&self.angle, self.kind, Some(key))?;
+            *slot.borrow_mut() = Some(display.clone());
+            Ok(display)
         })
     }
 
@@ -286,6 +403,12 @@ impl Display {
             EGL_FALSE,
             EGL_CONTEXT_CLIENT_ARRAYS_ENABLED_ANGLE,
             EGL_FALSE,
+            if self.gles {
+                EGL_CONTEXT_VIRTUALIZATION_GROUP_ANGLE
+            } else {
+                EGL_NONE
+            },
+            VIRTUALIZATION_GROUP.with(|group| *group),
             EGL_NONE,
         ];
         // SAFETY: display and config are valid; the attribute list is

@@ -153,6 +153,8 @@ suppression: it reports the 72-byte allocations for as long as ANGLE makes them.
 
 ### Upstream issues oxgl works around
 
+Each has a report ready to file in `angle/upstream-reports.md`.
+
 Defects oxgl avoids, listed so that an ANGLE or Mesa update can remove the
 workaround.
 
@@ -161,4 +163,5 @@ workaround.
 | On the OpenGL ES backend, ANGLE passes WebGL 1's `generateMipmap` on an unsized float texture to the driver, which refuses it without linear float filtering, and the error loses the context. | `Context::generate_mipmap` generates `INVALID_OPERATION` | ANGLE: `ValidateGenerateMipmapBase`, `src/libANGLE/validationES.cpp` |
 | ANGLE's OpenGL ES backend passes `drawRangeElements`' range to the driver, which may trust it. llvmpipe reads outside its vertex data when an index is outside the range. | oxgl calls `drawElements`, as WebGL 2.0, "Writing to the drawing buffer", allows | ANGLE: `ContextGL::drawRangeElements`, `src/libANGLE/renderer/gl/ContextGL.cpp` |
 | ANGLE's OpenGL ES backend reads `RG16` as `RG`/`UNSIGNED_SHORT` under `readPixelsUsingImplementationColorReadFormatForNorm16`, which Mesa refuses, since its own read format is `RGBA`, and the error loses the context. | The OpenGL ES display disables the feature | ANGLE: `GetReadPixelsFormat`, `src/libANGLE/renderer/gl/formatutilsgl.cpp` |
+| ANGLE's Metal backend shares a command queue and an unlocked state cache across a display's contexts, so threads on one display read stale pixels and can crash the process. | Each thread uses its own display, from a pool of native display keys | `Display::for_this_thread`; ANGLE: `mtl::CommandQueue`, `mtl::StateCache` |
 | ANGLE emits a dynamic sampler array index on a device with `shaderSampledImageArrayDynamicIndexing = false`, and V3DV keeps one descriptor for the array, so a WebGL 1 loop over a sampler array segfaults at the draw. | On a Vulkan GPU with OpenGL ES 2.0 only, no context uses Vulkan: `Backends::opened` refuses the display, and the OpenGL ES backend or SwiftShader serves it | Mesa: `lower_tex_src`, `src/broadcom/vulkan/v3dv_pipeline.c` |
