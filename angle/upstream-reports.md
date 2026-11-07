@@ -323,8 +323,9 @@ checkerboard, `glGenerateMipmap`, then level 1 read through an FBO, gives encode
 ANGLE's `decodeEncodeSRGBForGenerateMipmap` passes the page, for 2D textures only.
 
 **In oxgl:** that feature is enabled on this backend, so cube maps and 2D arrays
-still filter in encoded space on V3D. ES 3.0.6 §3.8.10.5 requires no particular
-filter, so that stays.
+still filter in encoded space on V3D. Three.js's `webgl_materials_cubemap` fails
+for this reason, with 0.24% of pixels differing. ES 3.0.6 §3.8.10.5 requires no
+particular filter, so that stays.
 
 ## Mesa: V3D multisample resolve overtakes draws that read its destination
 

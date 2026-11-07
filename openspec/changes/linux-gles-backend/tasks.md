@@ -76,13 +76,13 @@ Each check names its architecture, and its result stands only for that architect
 ## 6. Expectations and CI
 
 - [x] 6.1 Add `linux-x64-gles` last to `PLATFORMS` in `conformance/expectations.mjs`, chosen when `OXGL_BACKEND=gles` on Linux x64. Verify with `conformance-harness.test.mjs`, `threejs-harness.test.mjs` and `results-page.test.mjs` cases for the new conformance-testing, threejs-examples and results-page scenarios and the unknown-platform error.
-- [ ] 6.2 In `.github/workflows/ci.yml`:
+- [x] 6.2 In `.github/workflows/ci.yml`:
   - the Linux x64 build job, after packing, builds the `test-gles` addon into `dist-gles/` and uploads it as `addon-linux-x64-gles`, unpacked. Its pack check asserts that the packed addon rejects `OXGL_BACKEND=gles`;
   - a new `gles` job installs Mesa, unpacks the run's Linux x64 packages, swaps in that addon, and runs `npm test`, both conformance suites and `npm run threejs` with `OXGL_BACKEND=gles`, uploading reports as the other suite jobs do;
   - the `ci` job needs it.
 
   Update `CONTRIBUTING.md`'s job table. Verify with actionlint and zizmor as the workflow lint job runs them.
-- [ ] 6.3 Record the `linux-x64-gles` entries in `conformance/expectations.txt` and `threejs/expectations.txt`. `--update` writes only the host's own platform and CI never runs it, so run it in a `--platform linux/amd64` `ubuntu:24.04` container. Install the CI job's Mesa packages there, with the run's Linux x64 packages and `addon-linux-x64-gles` unpacked into `dist/`, `export OXGL_BACKEND=gles`, and run `npm run conformance -- --update` and `npm run threejs -- --update` in that shell, so both runs judge and write the `linux-x64-gles` platform. Give each new entry its reason. Emulation can turn slow pages into `TIMEOUT`s that native x64 doesn't have, so check every entry against the CI job's downloaded reports (`gh run download`) and keep only outcomes the CI run shows. Verify that a rerun of the `gles` job passes with no stale entries.
+- [x] 6.3 Record the `linux-x64-gles` entries in `conformance/expectations.txt` and `threejs/expectations.txt`. `--update` writes only the host's own platform and CI never runs it, so run it in a `--platform linux/amd64` `ubuntu:24.04` container. Install the CI job's Mesa packages there, with the run's Linux x64 packages and `addon-linux-x64-gles` unpacked into `dist/`, `export OXGL_BACKEND=gles`, and run `npm run conformance -- --update` and `npm run threejs -- --update` in that shell, so both runs judge and write the `linux-x64-gles` platform. Give each new entry its reason. Emulation can turn slow pages into `TIMEOUT`s that native x64 doesn't have, so check every entry against the CI job's downloaded reports (`gh run download`) and keep only outcomes the CI run shows. Verify that a rerun of the `gles` job passes with no stale entries.
 - [x] 6.4 Remove the `linux-x64-gles` expectation of `draw_range_elements.html`, and confirm that the page passes on `linux/amd64` and `linux/arm64`.
 
 ## 7. Docs
@@ -98,5 +98,5 @@ Each check names its architecture, and its result stands only for that architect
 
 ## 8. Verification
 
-- [ ] 8.1 Run `npm run lint` and `npm test` on macOS arm64. Confirm CI's `ci` check passes on every platform, including the new `gles` job.
-- [ ] 8.2 Confirm each "Done when" item of the brief against its task: 5.1 (1), 5.2 (2), 5.5 (3), 5.6 (4), 3.1 with 5.3 (5), and 6.2 with 8.1 (6). Report the outcome of each with its evidence.
+- [x] 8.1 Run `npm run lint` and `npm test` on macOS arm64. Confirm CI's `ci` check passes on every platform, including the new `gles` job.
+- [x] 8.2 Confirm each "Done when" item of the brief against its task: 5.1 (1), 5.2 (2), 5.5 (3), 5.6 (4), 3.1 with 5.3 (5), and 6.2 with 8.1 (6). Report the outcome of each with its evidence.
