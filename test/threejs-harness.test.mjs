@@ -119,7 +119,7 @@ test('Update on one platform keeps the others\' entries, including the OpenGL ES
   const next = updateExpectations(entries, [result('webgl_shadowmap_viewer', 'PASS', 0.05)], pages, { tolerances: true, platform: 'macos-arm64' });
   assert.equal(
     formatExpectations(next, { suite: 'threejs', header: [] }).trim(),
-    'webgl_shadowmap_viewer DIFF 1% [linux-x64 linux-arm64 windows-x64 windows-arm64 linux-x64-gles] # noise',
+    'webgl_shadowmap_viewer DIFF 1% [linux-x64 linux-arm64 windows-x64 windows-arm64 linux-x64-gles linux-arm64-gles] # noise',
   );
 });
 

@@ -89,8 +89,12 @@ test('the page: rows, columns, marks, counts and missing reports', () => {
   assert.match(row(webgl1, 'regressed.html'), /^<tr>/);
   // The union of rows: a test one platform reported is "not run" elsewhere, and only "not run" doesn't make a row non-PASS.
   const armOnly = cells(row(webgl1, 'arm-only.html'));
-  assert.match(webgl1, /<th class="platform">windows-arm64<\/th><th class="platform">linux-x64-gles<\/th><\/tr>/, 'OpenGL ES backend column');
-  assert.deepEqual(armOnly.map((c) => c.label), ['not run', 'PASS', 'not run', 'not run', 'not run', 'not run']);
+  assert.match(
+    webgl1,
+    /<th class="platform">windows-arm64<\/th><th class="platform">linux-x64-gles<\/th><th class="platform">linux-arm64-gles<\/th><\/tr>/,
+    'OpenGL ES backend columns',
+  );
+  assert.deepEqual(armOnly.map((c) => c.label), ['not run', 'PASS', 'not run', 'not run', 'not run', 'not run', 'not run']);
   assert.equal(armOnly[0].title, 'not run');
   assert.match(row(webgl1, 'arm-only.html'), /^<tr class="passing">/);
 
@@ -99,7 +103,7 @@ test('the page: rows, columns, marks, counts and missing reports', () => {
   assert.match(webgl2, /No report from macos-arm64: those columns read "not run"/);
 
   const three = section(html, 'three.js examples');
-  assert.match(three, /No report from linux-x64, macos-arm64, windows-x64, windows-arm64, linux-x64-gles/);
+  assert.match(three, /No report from linux-x64, macos-arm64, windows-x64, windows-arm64, linux-x64-gles, linux-arm64-gles/);
   assert.deepEqual(cells(row(three, 'video'))[1], { cls: 'SKIP', title: 'upstream: video hangs CI', label: 'SKIP' });
 
   assert.match(html, /Results from oxgl commit <a href="https:\/\/github.com\/oxgl-js\/oxgl\/commit\/0123456789abcdef"><code>0123456<\/code><\/a> · 2026-11-01 12:34 UTC · conformance suite <code>abcdef0<\/code> · three\.js <code>r182<\/code>\./);

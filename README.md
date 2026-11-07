@@ -403,7 +403,7 @@ To build from source:
 - For `npm run conformance`: ffmpeg (with ffprobe), which decodes the
   suite's videos.
 - For the OpenGL ES backend's tests on Linux (the test-only `test-gles` build
-  run with `OXGL_BACKEND=gles`, as CI's `gles` job does): Mesa's EGL and GL
+  run with `OXGL_BACKEND=gles`, as CI's `gles` legs do): Mesa's EGL and GL
   drivers, `libegl1`, `libegl-mesa0` and `libgl1-mesa-dri` on Debian and
   Ubuntu.
 - For the license check: cargo-deny and cargo-about at the versions CI pins

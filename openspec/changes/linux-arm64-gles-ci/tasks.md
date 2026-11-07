@@ -1,0 +1,23 @@
+# Tasks
+
+## 1. The `linux-arm64-gles` platform
+
+- [x] 1.1 In `conformance/expectations.mjs`, add `linux-arm64-gles` to the end of `PLATFORMS`. Have `hostPlatform` append `-gles` for any Linux host with `OXGL_BACKEND=gles`, and have the update rule test for an OpenGL ES backend platform by its `-gles` suffix, not by naming `linux-x64-gles`. Update the comments that name only x64. Verify with `test/conformance-harness.test.mjs`. It gains cases for these: `hostPlatform` on `linux`/`arm64` with `gles` gives `linux-arm64-gles`, and a new arm64-gles failure on a page without entries adds `[linux-arm64-gles]` alone. A failure matching a `FAIL [linux-x64-gles]` entry widens it to both. The cases listing every platform now list seven.
+- [x] 1.2 Update `test/threejs-harness.test.mjs` and `test/results-page.test.mjs` for the seventh platform: the full platform lists, the linux-arm64-gles column after linux-x64-gles, and the "No report from" list. Verify that both pass and that `scripts/results-page.mjs` needs no change beyond reading `PLATFORMS`.
+- [x] 1.3 Update `CONTRIBUTING.md`'s platform names to describe both OpenGL ES backend platforms. Verify by reading it against conformance-testing "Platform of a run".
+- [x] 1.4 Verify the group: `npm run lint` and `npm test` pass on macOS arm64, and `cargo clippy --workspace --all-targets -- -D warnings` stays clean (no Rust changes are expected).
+
+## 2. CI
+
+- [x] 2.1 In `.github/workflows/ci.yml`, have the x64-only `test-gles` build and upload steps run on both Linux build legs, with the artifact named from the leg's architecture: `addon-linux-x64-gles` as now, and `addon-linux-arm64-gles` for `ubuntu-24.04-arm`. Both build after packing, into `dist-gles/`. Update the comments citing continuous-integration "Test addon build" or "OpenGL ES backend job", which becomes "OpenGL ES backend legs". Verify with actionlint and zizmor, as the workflow lint job runs them.
+- [ ] 2.2 Add a `backend: [software]` key to the `node-test`, `conformance` and `threejs` matrices, and `include` entries with `backend: gles` on `ubuntu-24.04` and `ubuntu-24.04-arm`: Node 24 for `node-test`, both suites for `conformance`. Each entry overrides `software`, so it becomes a new leg rather than merging into a software leg. Add `backend: software` to `node-test`'s existing Node 22.22.2 and Node 26 entries: they override `node`, so they are legs of their own, and they wouldn't get the key otherwise. Give them three steps, run only when `matrix.backend == 'gles'`: install Mesa's EGL and llvmpipe, download and swap in `addon-linux-<arch>-gles`, and set `OXGL_BACKEND` to `matrix.backend` in every leg. Keep the lavapipe steps on the x64 software leg only. Name the reports `conformance-results-<runner>-<suite>-gles` and `threejs-results-<runner>-gles`. Remove the `gles` job, and its entries in the `ci` job's `needs` and full-only list and in the results and release jobs' `needs`. Verify with actionlint and zizmor. Confirm in a pull request's quick-check run that every software leg, the Node 22.22.2 and Node 26 legs included, still runs with `OXGL_BACKEND=software` and the two Node test gles legs run beside them, while the conformance and three.js legs are skipped.
+- [x] 2.3 In `CONTRIBUTING.md`'s job table, remove the `gles` row and describe the OpenGL ES backend legs in the `node-test`, `conformance` and `threejs` rows. Update the README's test prerequisites, which name the `gles` job. Verify by reading both against continuous-integration "OpenGL ES backend legs".
+
+## 3. The `linux-arm64-gles` expectations
+
+- [ ] 3.1 Record the `linux-arm64-gles` entries from the first full CI run's reports, not from local runs. For each unexpected result on a `linux-arm64-gles` leg, add the platform to the matching entry or add an entry for it, with its reason from evidence. Where arm64 differs from `linux-x64-gles`, diagnose the cause before recording it, as the `linux-gles-backend` traces did. For each entry without a list reported stale there, give it an explicit list of the six other platforms. Verify that every `git diff` change does one of those things, and that `npm run lint` passes.
+
+## 4. Verification
+
+- [ ] 4.1 Run the full checks on the branch (`workflow_dispatch`). Confirm that all eight OpenGL ES backend legs pass, with no unexpected or stale entries on `linux-arm64-gles` or on any other platform, and that the results page preview shows the linux-arm64-gles column with outcomes. Fix any runner-only difference in the expectations, with its reason.
+- [ ] 4.2 Run `npx openspec validate linux-arm64-gles-ci --strict`, and check that the main specs still pass `npx openspec validate --specs --strict` once the deltas are applied.

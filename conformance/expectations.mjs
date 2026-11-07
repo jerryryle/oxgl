@@ -19,10 +19,13 @@ export const DEFAULT_TOLERANCE = 0.1;
 /** The largest `DIFF` tolerance: beyond it a frame is a failure to triage, not noise. */
 export const MAX_TOLERANCE = 5;
 /**
- * Platform names: those of angle/bundles.toml, then `linux-x64-gles`, a Linux x64 run on ANGLE's
- * OpenGL ES backend (`OXGL_BACKEND=gles`, a test-only addon build, on Mesa's llvmpipe in CI).
+ * Platform names: those of angle/bundles.toml, then the OpenGL ES backend platforms, a Linux run on
+ * ANGLE's OpenGL ES backend (`OXGL_BACKEND=gles`, a test-only addon build, on Mesa's llvmpipe in CI).
  */
-export const PLATFORMS = ['linux-x64', 'linux-arm64', 'macos-arm64', 'windows-x64', 'windows-arm64', 'linux-x64-gles'];
+export const PLATFORMS = ['linux-x64', 'linux-arm64', 'macos-arm64', 'windows-x64', 'windows-arm64', 'linux-x64-gles', 'linux-arm64-gles'];
+
+/** Whether `platform` is an OpenGL ES backend platform, whose outcomes say nothing about the software backend. */
+const isGles = (platform) => platform.endsWith('-gles');
 
 const HEADER = [
   '# Conformance pages not expected to pass, per suite: <suite> <path> <OUTCOME> [<platform> ...] # <reason>',
@@ -37,13 +40,13 @@ export const keyOf = (suite, path) => `${suite} ${path}`;
 const entryKey = (e) => (e.platforms ? `${keyOf(e.suite, e.path)} [${e.platforms.join(' ')}]` : keyOf(e.suite, e.path));
 
 /**
- * This run's platform name, one of PLATFORMS on a supported host: the host's, or `linux-x64-gles`
- * when a Linux x64 run uses `OXGL_BACKEND=gles`.
+ * This run's platform name, one of PLATFORMS on a supported host: the host's, followed by `-gles`
+ * when a Linux run uses `OXGL_BACKEND=gles`.
  */
 export function hostPlatform({ platform = process.platform, arch = process.arch, backend = process.env.OXGL_BACKEND } = {}) {
   const os = { darwin: 'macos', win32: 'windows' }[platform] ?? platform;
   const name = `${os}-${arch}`;
-  return name === 'linux-x64' && backend === 'gles' ? 'linux-x64-gles' : name;
+  return os === 'linux' && backend === 'gles' ? `${name}-gles` : name;
 }
 
 const appliesOn = (e, platform) => e.platforms === undefined || e.platforms.includes(platform);
@@ -224,8 +227,8 @@ function staleEntries(expectations, pages) {
  * matches stay as they are (keeping their reason). Otherwise `platform` is
  * removed from the page's entry (and the entry when no platform remains), and
  * a non-PASS outcome is added to the page's entry with that outcome, to a new
- * entry for `platform` when the page has other entries or `platform` is
- * `linux-x64-gles`, or to a new entry without platforms. On an unfiltered run stale entries are dropped.
+ * entry for `platform` when the page has other entries or `platform` is an
+ * OpenGL ES backend platform, or to a new entry without platforms. On an unfiltered run stale entries are dropped.
  *
  * With `tolerances`, a `DIFF` entry stays while its page is within it and
  * outside DEFAULT_TOLERANCE, and its page counts as passing within that; a
@@ -276,8 +279,8 @@ export function updateExpectations(
       next.delete(entryKey(same));
       const widened = withPlatforms(same, [...same.platforms, platform]);
       next.set(entryKey(widened), widened);
-    } else if (others.length > 0 || platform === 'linux-x64-gles') {
-      // The OpenGL ES backend runs on another driver than the five software
+    } else if (others.length > 0 || isGles(platform)) {
+      // The OpenGL ES backend runs on another driver than the software
       // platforms, so what fails there says nothing about them.
       const listed = withPlatforms(fresh, [platform]);
       next.set(entryKey(listed), listed);
