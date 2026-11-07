@@ -32,7 +32,7 @@ On each platform, CI SHALL install dependencies with `npm ci` and run the JS lin
 
 #### Scenario: Software rendering on every platform
 - **WHEN** the Node test step runs
-- **THEN** `OXGL_BACKEND` is `software` and clear-then-readPixels and soak tests execute (not skip) on every platform in the matrix
+- **THEN** `OXGL_BACKEND` is `software` and clear-then-readPixels and soak tests execute (not skip) in every leg of the matrix other than the OpenGL ES backend legs ("OpenGL ES backend legs")
 
 #### Scenario: Oldest supported Node
 - **WHEN** the Node tests run on Linux arm64 on Node 22.22.2
@@ -198,10 +198,10 @@ In each run, CI SHALL build and pack oxgl once per supported platform, in one bu
 - **THEN** each platform's packages can be downloaded from the run, whether or not the run releases
 
 ### Requirement: Test addon build
-The Linux x64 build job SHALL also build the addon with the Cargo feature `test-gles`, after packing and outside the packed directory, and upload it as a separate artifact, which SHALL NOT be packed into any package or released. The OpenGL ES backend job SHALL replace the Linux x64 addon with that build, its one departure from "Each platform is built once per run".
+The Linux x64 and Linux arm64 build jobs SHALL also build the addon with the Cargo feature `test-gles`, after packing and outside the packed directory, and upload it as a separate artifact per platform, which SHALL NOT be packed into any package or released. The OpenGL ES backend legs SHALL replace their platform's addon with that platform's build, its one departure from "Each platform is built once per run".
 
 #### Scenario: Test addon never packed
-- **WHEN** the Linux x64 build job packs `@oxgl-js/linux-x64-gnu`
+- **WHEN** the Linux x64 or Linux arm64 build job packs its platform package (`@oxgl-js/linux-x64-gnu` or `@oxgl-js/linux-arm64-gnu`)
 - **THEN** the packed addon is the one built without `test-gles`, and with it `OXGL_BACKEND=gles` throws `OXGL_INVALID_BACKEND`
 
 ### Requirement: Events and job sets
@@ -290,17 +290,21 @@ Pull requests and cross-repository dispatches made by automation SHALL use a sho
 - **WHEN** the workflow logs are read
 - **THEN** every App token is created in the job that uses it, immediately before the step that uses it
 
-### Requirement: OpenGL ES backend job
-CI SHALL run a job on Linux x64 that installs Mesa's EGL and GL driver packages and unpacks the run's Linux x64 packages, replacing their addon with the `test-gles` build. With `OXGL_BACKEND=gles`, it SHALL then run the Node test suite, both conformance suites and the three.js examples, judged against the expectations for the `linux-x64-gles` platform. It SHALL be one of the full-only jobs: a pull request's quick checks skip it, and the merge queue runs it. A failure SHALL fail the `ci` check.
+### Requirement: OpenGL ES backend legs
+On Linux x64 and Linux arm64, the Node test, conformance and three.js jobs SHALL each also run a leg on ANGLE's OpenGL ES backend. Such a leg SHALL install Mesa's EGL and GL driver packages, swap its platform's `test-gles` addon into the run's packages, and run its job's suite with `OXGL_BACKEND=gles`, judged against the expectations for its `-gles` platform. It SHALL run, be required and upload reports as its job's other legs do, its report names ending in `-gles`.
 
 #### Scenario: GL code path tested on llvmpipe
-- **WHEN** the OpenGL ES backend job runs
-- **THEN** every context it creates renders through ANGLE's OpenGL ES backend on Mesa's llvmpipe, which the job's log shows in the renderer string
+- **WHEN** an OpenGL ES backend leg runs
+- **THEN** every context it creates renders through ANGLE's OpenGL ES backend on Mesa's llvmpipe, which the leg's log shows in the renderer string
 
 #### Scenario: Regression on the OpenGL ES backend only
 - **WHEN** a change breaks a conformance page only on the OpenGL ES backend
-- **THEN** the OpenGL ES backend job fails and the `ci` check fails, while the software-backend jobs pass
+- **THEN** the conformance job's OpenGL ES backend legs fail and the `ci` check fails, while its software legs pass
 
-#### Scenario: Quick checks skip the OpenGL ES backend job
+#### Scenario: Regression on one architecture only
+- **WHEN** a change breaks a conformance page on the OpenGL ES backend on Linux arm64 only
+- **THEN** the conformance job's Linux arm64 OpenGL ES backend leg fails and the `ci` check fails, while its Linux x64 one passes
+
+#### Scenario: Quick checks run the Node test legs
 - **WHEN** a pull request without `full-ci` runs the quick checks
-- **THEN** the OpenGL ES backend job is skipped and the `ci` check can still succeed
+- **THEN** the Node test job's OpenGL ES backend legs run on both architectures, the conformance and three.js jobs, with their OpenGL ES backend legs, are skipped, and the `ci` check can succeed

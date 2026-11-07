@@ -20,4 +20,4 @@
 ## 4. Verification
 
 - [ ] 4.1 Run the full checks on the branch (`workflow_dispatch`). Confirm that all eight OpenGL ES backend legs pass, with no unexpected or stale entries on `linux-arm64-gles` or on any other platform, and that the results page preview shows the linux-arm64-gles column with outcomes. Fix any runner-only difference in the expectations, with its reason.
-- [ ] 4.2 Run `npx openspec validate linux-arm64-gles-ci --strict`, and check that the main specs still pass `npx openspec validate --specs --strict` once the deltas are applied.
+- [x] 4.2 Run `npx openspec validate linux-arm64-gles-ci --strict`, and check that the main specs still pass `npx openspec validate --specs --strict` once the deltas are applied.

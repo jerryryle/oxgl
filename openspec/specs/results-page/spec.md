@@ -6,7 +6,7 @@ Defines the published results page: one table of the Khronos WebGL conformance s
 ## Requirements
 
 ### Requirement: One row per test, one column per platform
-The page SHALL have three sections: webgl1, webgl2 (conformance-testing) and three.js (threejs-examples). Each section SHALL have one row per page or example that any platform reported, sorted by name, and columns for linux-x64, linux-arm64, macos-arm64, windows-x64, windows-arm64 and linux-x64-gles (ANGLE's OpenGL ES backend on Mesa's llvmpipe, conformance-testing "Platform of a run") in that order. Each platform's column SHALL come from the `platform` its report records.
+The page SHALL have three sections: webgl1, webgl2 (conformance-testing) and three.js (threejs-examples). Each section SHALL have one row per page or example that any platform reported, sorted by name, and columns for linux-x64, linux-arm64, macos-arm64, windows-x64, windows-arm64, linux-x64-gles and linux-arm64-gles in that order (the last two: conformance-testing, "Platform of a run"). Each platform's column SHALL come from the `platform` its report records.
 
 #### Scenario: Union of rows
 - **WHEN** a webgl2 page appears in the Linux arm64 report but not in the Windows x64 report
@@ -14,11 +14,15 @@ The page SHALL have three sections: webgl1, webgl2 (conformance-testing) and thr
 
 #### Scenario: Three.js columns
 - **WHEN** the three.js examples ran only on Linux arm64
-- **THEN** every three.js row shows Linux arm64's outcome and "not run" in the other five columns
+- **THEN** every three.js row shows Linux arm64's outcome and "not run" in the other six columns
 
 #### Scenario: OpenGL ES backend column
 - **WHEN** the webgl2 reports include one whose `platform` is `linux-x64-gles`
 - **THEN** its outcomes appear in a linux-x64-gles column after windows-arm64, separate from linux-x64's
+
+#### Scenario: OpenGL ES backend column on Linux arm64
+- **WHEN** the webgl2 reports include one whose `platform` is `linux-arm64-gles`
+- **THEN** its outcomes appear in a linux-arm64-gles column after linux-x64-gles, separate from linux-arm64's
 
 ### Requirement: Cell labels
 Each cell SHALL show the outcome its platform's report records: `PASS`, `FAIL` or `SKIP`, or one of the failure variants `TIMEOUT`, `CRASH` and `ERROR` (a harness error), each with its own label. A cell whose platform has no result for that row SHALL show "not run". A FAIL cell SHALL look different from a PASS cell and from a SKIP cell, and a failure variant SHALL look like a failure.
