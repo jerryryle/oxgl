@@ -97,8 +97,8 @@ webgl_loader_ttf FAIL # runner: loads a remote asset, refused: https://cdn.jsdel
 webgl_lod DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 0.30% of pixels differ
 webgl_marchingcubes SKIP # upstream: takes too long (1 min)
 webgl_materials_alphahash FAIL [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # noise: hashed alpha under TAA jitter lands on different pixels (5.95% of pixels differ)
-webgl_materials_blending DIFF 1% # rasterization: 0.91% of pixels differ
-webgl_materials_blending_custom DIFF 1% # rasterization: label text drawn by the canvas package (0.37% of pixels differ)
+webgl_materials_blending DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 0.91% of pixels differ
+webgl_materials_blending_custom DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: label text drawn by the canvas package (0.37% of pixels differ)
 webgl_materials_car DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 0.18% of pixels differ
 webgl_materials_car FAIL [linux-x64-gles] # llvmpipe before Mesa 26.2: tile-sized blocks along triangle edges; passes on 26.2.2's llvmpipe and on V3D (11.56% of pixels differ)
 webgl_materials_cubemap_dynamic SKIP # upstream: takes too long (1 min)
@@ -139,7 +139,7 @@ webgl_renderer_pathtracer SKIP # upstream: needs more time to render
 webgl_reversed_depth_buffer DIFF 4% # runner: the HTML labels and note over the canvases are not composited (3.44% of pixels differ)
 webgl_shadowmap SKIP # upstream: timing issues
 webgl_shadowmap_progressive SKIP # upstream: needs more time to render
-webgl_shadowmap_viewer DIFF 1% [linux-arm64 linux-x64-gles] # rasterization: 0.54% of pixels differ
+webgl_shadowmap_viewer DIFF 1% [linux-arm64] # rasterization: 0.54% of pixels differ
 webgl_test_memory2 SKIP # upstream: times out
 webgl_test_wide_gamut DIFF 2% # runner: the HTML labels and slider over the canvas are not composited (1.90% of pixels differ)
 webgl_video_kinect SKIP # upstream: video hangs CI
@@ -147,8 +147,8 @@ webgl_video_panorama_equirectangular SKIP # upstream: video hangs CI
 webgl_volume_instancing DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 0.80% of pixels differ
 webgl_volume_perlin DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 0.26% of pixels differ
 webgl_worker_offscreencanvas FAIL # runner: posting a transferred OffscreenCanvas to a worker fails (DataCloneError)
-webxr_vr_handinput_pointerclick DIFF 1% [linux-arm64 linux-x64-gles] # rasterization: 0.28% of pixels differ
-webxr_vr_handinput_pointerdrag DIFF 1% [linux-arm64 linux-x64-gles] # rasterization: 0.28% of pixels differ
+webxr_vr_handinput_pointerclick DIFF 1% [linux-arm64] # rasterization: 0.28% of pixels differ
+webxr_vr_handinput_pointerdrag DIFF 1% [linux-arm64] # rasterization: 0.28% of pixels differ
 webxr_vr_layers FAIL # runner: jsdom has no Range.getBoundingClientRect
 webxr_vr_sandbox FAIL # runner: jsdom has no Range.getBoundingClientRect
 webxr_vr_teleport DIFF 2% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 1.57% of pixels differ

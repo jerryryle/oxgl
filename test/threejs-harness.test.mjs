@@ -16,6 +16,8 @@ import { backgroundFrame, compare, compositeOnto, halve, matches, parseColor } f
 import { listExamples } from '../threejs/release.mjs';
 import { main as threejsMain, parseThreejsExpectations, runThreejs } from '../threejs/run.mjs';
 
+import { entryOf } from './helpers.mjs';
+
 const FIXTURES = join(import.meta.dirname, 'fixtures', 'threejs');
 const THREE = join(import.meta.dirname, '..', 'node_modules', 'three');
 const EXAMPLE = join(import.meta.dirname, '..', 'threejs', 'example.mjs');
@@ -464,8 +466,8 @@ test('Updating expectations through the command: passes removed, failures and to
   assert.ok(ok);
   const entries = parseThreejsExpectations(written);
   assert.equal(entries.has('threejs solid'), false);
-  assert.equal(entries.get('threejs console-error').reason, 'THREE.WebGLProgram: Shader Error 0 - VALIDATE_STATUS false');
-  assert.match(entries.get('threejs seeded').reason, /no reference screenshot/);
+  assert.equal(entryOf(entries, 'threejs', 'console-error').reason, 'THREE.WebGLProgram: Shader Error 0 - VALIDATE_STATUS false');
+  assert.match(entryOf(entries, 'threejs', 'seeded').reason, /no reference screenshot/);
 });
 
 test('Default parallelism: the command uses the conformance default and records it', async () => {

@@ -23,6 +23,8 @@ import { main, runConformance } from '../conformance/run.mjs';
 import { startServer } from '../conformance/server.mjs';
 import { ensureCheckout, ensureSuite } from '../conformance/suite.mjs';
 
+import { entryOf } from './helpers.mjs';
+
 const FIXTURES = join(import.meta.dirname, 'fixtures', 'conformance');
 
 // --- Test lists -------------------------------------------------------------
@@ -569,7 +571,7 @@ test('page runner: outcomes, early errors, media, canvas shim, crashes, timeouts
   const official = pageOf(report, 'webgl2', 'error-never-completes.html');
   assert.equal(official.outcome, 'TIMEOUT');
   assert.match(official.error, /^TypeError: gl\.bufferData is not a function/);
-  assert.equal(written.get('webgl2 error-never-completes.html').reason, 'no new result within the time limit: TypeError: gl.bufferData is not a function');
+  assert.equal(entryOf(written, 'webgl2', 'error-never-completes.html').reason, 'no new result within the time limit: TypeError: gl.bufferData is not a function');
   // Page recovers from an uncaught exception: PASS, as in the official harness.
   assert.equal(outcome('webgl1', 'recovers.html'), 'PASS');
   assert.match(pageOf(report, 'webgl1', 'recovers.html').error, /error in a side callback/);

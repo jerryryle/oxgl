@@ -96,3 +96,6 @@ export async function gpuSkipReason() {
 
 /** Whether 'gpu' and 'software' contexts exclude each other in one process: on Linux, where both are Vulkan. */
 export const oneVulkanDevice = process.platform === 'linux';
+
+/** The entry for a page, whichever platforms it lists: under OXGL_BACKEND=gles, an update writes one for that platform. */
+export const entryOf = (entries, suite, path) => [...entries.values()].find((e) => e.suite === suite && e.path === path);
