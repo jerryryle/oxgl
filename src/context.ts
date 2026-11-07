@@ -966,7 +966,8 @@ interface CreatedContext {
 
 /** The arguments a context was created with. */
 interface Creation {
-  readonly backend: ContextBackend;
+  /** A `ContextBackend`, or a test-only value such as `gles`, which a restore requests again. */
+  readonly backend: string;
   readonly attributes: NativeAttributes;
   /** The size first requested, used on restore when the canvas has none. */
   readonly width: number;
@@ -3420,17 +3421,24 @@ export function codedError(code: string, message: string): Error {
   return Object.assign(new Error(message), { code });
 }
 
-/** The backend after the `OXGL_BACKEND` override, read from this thread's `process.env` on every call. */
-function resolveBackend(option: ContextBackend): ContextBackend {
+/** Test-only `OXGL_BACKEND` values this addon accepts (`gles` in a `test-gles` build). */
+const TEST_BACKENDS: readonly string[] = native.testBackends();
+
+/**
+ * The backend after the `OXGL_BACKEND` override, read from this thread's `process.env` on every call.
+ * A test-only value is passed to the native side as is.
+ */
+function resolveBackend(option: ContextBackend): string {
   const override = process.env.OXGL_BACKEND;
   if (override === undefined || override === '') return option;
+  if (TEST_BACKENDS.includes(override)) return override;
   if (!BACKENDS.includes(override)) {
     throw codedError(
       'OXGL_INVALID_BACKEND',
       `oxgl: OXGL_BACKEND is '${override}'; expected one of 'auto', 'gpu', 'software'`,
     );
   }
-  return override as ContextBackend;
+  return override;
 }
 
 function validateSize(name: string, value: unknown, method = 'createContext'): number {
@@ -3524,7 +3532,7 @@ export function createContext(options: unknown): WebGLRenderingContext | WebGL2R
   }
   const attributes = convertAttributes(rawAttributes);
   let resolved = resolveBackend(backend as ContextBackend);
-  if (attributes.failIfMajorPerformanceCaveat) {
+  if (attributes.failIfMajorPerformanceCaveat && resolved !== 'gles') {
     // SwiftShader is a major performance caveat (WebGL 1.0 §5.2.1).
     if (resolved === 'software') {
       throw codedError(

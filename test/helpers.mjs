@@ -1,4 +1,7 @@
 // Shared helpers for the context test suites.
+import assert from 'node:assert/strict';
+import { spawnSync } from 'node:child_process';
+
 import { native } from '../dist/native.js';
 
 /** Number of live native contexts in this thread's environment. */
@@ -65,19 +68,34 @@ export function withBackendEnv(value, fn) {
 
 /**
  * Why a forced-GPU test cannot run here, or `undefined` if it can: the
- * environment forces another backend, or no GPU backend is usable.
+ * environment forces another backend, or no GPU backend is usable. It probes
+ * in a child process: on Linux, a GPU context would hold the process's one
+ * Vulkan device and refuse a later 'software' context.
  */
 export async function gpuSkipReason() {
   const forced = process.env.OXGL_BACKEND;
   if (forced !== undefined && forced !== '' && forced !== 'gpu') {
     return `OXGL_BACKEND=${forced} forces another backend`;
   }
-  const { createContext } = await import('@oxgl-js/oxgl');
-  try {
-    createContext({ width: 1, height: 1, backend: 'gpu' }).destroy();
-    return undefined;
-  } catch (error) {
-    if (error.code === 'OXGL_GPU_UNAVAILABLE') return `no usable GPU: ${error.message}`;
-    throw error;
-  }
+  const script = `
+    import { createContext } from '@oxgl-js/oxgl';
+    try {
+      createContext({ width: 1, height: 1, backend: 'gpu' }).destroy();
+      console.log(JSON.stringify({}));
+    } catch (error) {
+      console.log(JSON.stringify({ code: error.code, message: error.message }));
+    }
+  `;
+  const result = spawnSync(process.execPath, ['--input-type=module', '-e', script], { encoding: 'utf8' });
+  assert.equal(result.status, 0, result.stderr);
+  const { code, message } = JSON.parse(result.stdout.trim().split('\n').at(-1));
+  if (code === undefined) return undefined;
+  if (code === 'OXGL_GPU_UNAVAILABLE') return `no usable GPU: ${message}`;
+  throw new Error(`the GPU probe failed: ${code}: ${message}`);
 }
+
+/** Whether 'gpu' and 'software' contexts exclude each other in one process: on Linux, where both are Vulkan. */
+export const oneVulkanDevice = process.platform === 'linux';
+
+/** The entry for a page, whichever platforms it lists: under OXGL_BACKEND=gles, an update writes one for that platform. */
+export const entryOf = (entries, suite, path) => [...entries.values()].find((e) => e.suite === suite && e.path === path);

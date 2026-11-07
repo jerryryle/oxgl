@@ -105,7 +105,8 @@ rechecks it.
 Khronos conformance pages that fail because of ANGLE, or of the SwiftShader it
 bundles. Each is an expected failure in
 `conformance/expectations.txt`, tagged `ANGLE:` or `SwiftShader:`. Last checked
-against `angle_commit` `127e783de334` (`chromium/8078`).
+against `angle_commit` `127e783de334` (`chromium/8078`); on `751417514a52`
+(`chromium/8103`), only through the OpenGL ES backend.
 
 | Page (suites) | Cause | Where |
 | --- | --- | --- |
@@ -149,3 +150,25 @@ against `angle_commit` `127e783de334`; still present on `chromium/8127` and
 After changing `angle_commit`, check that the code above is still in the new
 commit's sources. For the leak, also run the `asan` job without its
 suppression: it reports the 72-byte allocations for as long as ANGLE makes them.
+
+### Upstream issues oxgl works around
+
+Each has a report ready to file in `angle/upstream-reports.md`.
+
+Defects oxgl avoids, listed so that an ANGLE or Mesa update can remove the
+workaround.
+
+| Defect | Workaround | Where |
+| --- | --- | --- |
+| On the OpenGL ES backend, ANGLE passes WebGL 1's `generateMipmap` on an unsized float texture to the driver, which refuses it without linear float filtering, or for `RGB` even with it, and the error loses the context. | `Context::generate_mipmap` generates `INVALID_OPERATION` | ANGLE: `ValidateGenerateMipmapBase`, `src/libANGLE/validationES.cpp` |
+| ANGLE's OpenGL ES backend passes `drawRangeElements`' range to the driver, which may trust it. llvmpipe reads outside its vertex data when an index is outside the range. | oxgl calls `drawElements`, as WebGL 2.0, "Writing to the drawing buffer", allows | ANGLE: `ContextGL::drawRangeElements`, `src/libANGLE/renderer/gl/ContextGL.cpp` |
+| ANGLE's OpenGL ES backend reads `RG16` as `RG`/`UNSIGNED_SHORT` under `readPixelsUsingImplementationColorReadFormatForNorm16`, which Mesa refuses, since its own read format is `RGBA`, and the error loses the context. | The OpenGL ES display disables the feature | ANGLE: `GetReadPixelsFormat`, `src/libANGLE/renderer/gl/formatutilsgl.cpp` |
+| ANGLE's Metal backend shares a command queue and an unlocked state cache across a display's contexts, so threads on one display read stale pixels and can crash the process. | Each thread uses its own display, from a pool of native display keys | `Display::for_this_thread`; ANGLE: `mtl::CommandQueue`, `mtl::StateCache` |
+| V3D's multisample resolve doesn't wait for queued draws that read its destination, so they sample the new contents. | `Context::blit_framebuffer` flushes first on the OpenGL ES backend | Mesa: `v3d_blit` |
+| V3D can lose a color buffer frames after it is invalidated. | `Context::invalidate_framebuffer` drops valid color attachments on the OpenGL ES backend | Mesa: `v3d_invalidate_resource` |
+| V3D applies a divisor above 65535 as 65535, with no bound on the fetch. | `instanced_draw_out_of_range` range-checks draws of more than 65535 instances, with the divisor V3D applies | Mesa: `v3dx_state.c` |
+| V3D filters sRGB mipmaps in encoded space. | The OpenGL ES display enables `decodeEncodeSRGBForGenerateMipmap`, for 2D textures | Mesa, `GLES_ENABLED_FEATURES` in `crates/oxgl-sys/src/egl.rs` |
+| Mesa compiles synchronously, so `KHR_parallel_shader_compile` offers nothing, and its page's shader sizing never stops. | The OpenGL ES display enables `disableNativeParallelCompile` | ANGLE, `GLES_ENABLED_FEATURES` |
+| Mesa before 26 writes blit destinations from outside the source. | The OpenGL ES display enables `clipSrcRegionForBlitFramebuffer` | Mesa, `GLES_ENABLED_FEATURES` |
+| llvmpipe clips with clip distances even after they're disabled. | The OpenGL ES display enables `emulateClipDistanceState` | Mesa, `GLES_ENABLED_FEATURES` |
+| ANGLE emits a dynamic sampler array index on a device with `shaderSampledImageArrayDynamicIndexing = false`, and V3DV keeps one descriptor for the array, so a WebGL 1 loop over a sampler array segfaults at the draw. | On a Vulkan GPU with OpenGL ES 2.0 only, no context uses Vulkan: `Backends::opened` refuses the display, and the OpenGL ES backend or SwiftShader serves it | Mesa: `lower_tex_src`, `src/broadcom/vulkan/v3dv_pipeline.c` |

@@ -16,6 +16,8 @@ import { backgroundFrame, compare, compositeOnto, halve, matches, parseColor } f
 import { listExamples } from '../threejs/release.mjs';
 import { main as threejsMain, parseThreejsExpectations, runThreejs } from '../threejs/run.mjs';
 
+import { entryOf } from './helpers.mjs';
+
 const FIXTURES = join(import.meta.dirname, 'fixtures', 'threejs');
 const THREE = join(import.meta.dirname, '..', 'node_modules', 'three');
 const EXAMPLE = join(import.meta.dirname, '..', 'threejs', 'example.mjs');
@@ -109,6 +111,16 @@ test('Tolerance entries and judging: within the tolerance passes, beyond it regr
   assert.deepEqual(verdict([result('a', 'PASS', 0.1), result('b', 'PASS', 0)]), ['a DIFF 2%', 'b FAIL']);
   assert.deepEqual(judge(entries, [], new Map([['threejs', ['a']]])).stale.map((e) => e.path), ['b']);
   assert.deepEqual(judge(entries, [], new Map([['threejs', ['a']]]), { filtered: true }).stale, []);
+});
+
+test('Update on one platform keeps the others\' entries, including the OpenGL ES backend\'s', () => {
+  const entries = parse('webgl_shadowmap_viewer DIFF 1% # noise\n');
+  const pages = new Map([['threejs', ['webgl_shadowmap_viewer']]]);
+  const next = updateExpectations(entries, [result('webgl_shadowmap_viewer', 'PASS', 0.05)], pages, { tolerances: true, platform: 'macos-arm64' });
+  assert.equal(
+    formatExpectations(next, { suite: 'threejs', header: [] }).trim(),
+    'webgl_shadowmap_viewer DIFF 1% [linux-x64 linux-arm64 windows-x64 windows-arm64 linux-x64-gles linux-arm64-gles] # noise',
+  );
 });
 
 test('Updating expectations: tolerances kept, never raised, given to new and fixed image-only failures', () => {
@@ -454,8 +466,8 @@ test('Updating expectations through the command: passes removed, failures and to
   assert.ok(ok);
   const entries = parseThreejsExpectations(written);
   assert.equal(entries.has('threejs solid'), false);
-  assert.equal(entries.get('threejs console-error').reason, 'THREE.WebGLProgram: Shader Error 0 - VALIDATE_STATUS false');
-  assert.match(entries.get('threejs seeded').reason, /no reference screenshot/);
+  assert.equal(entryOf(entries, 'threejs', 'console-error').reason, 'THREE.WebGLProgram: Shader Error 0 - VALIDATE_STATUS false');
+  assert.match(entryOf(entries, 'threejs', 'seeded').reason, /no reference screenshot/);
 });
 
 test('Default parallelism: the command uses the conformance default and records it', async () => {

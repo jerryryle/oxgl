@@ -28,8 +28,8 @@ libraries. To build from source, see Prerequisites below and
 
 | Platform | Package | GPU backend |
 |---|---|---|
-| Linux x64 (glibc) | `@oxgl-js/linux-x64-gnu` | Vulkan |
-| Linux arm64 (glibc) | `@oxgl-js/linux-arm64-gnu` | Vulkan |
+| Linux x64 (glibc) | `@oxgl-js/linux-x64-gnu` | Vulkan, or OpenGL ES (see Backends) |
+| Linux arm64 (glibc) | `@oxgl-js/linux-arm64-gnu` | Vulkan, or OpenGL ES (see Backends) |
 | macOS arm64 | `@oxgl-js/darwin-arm64` | Metal |
 | Windows x64 | `@oxgl-js/win32-x64-msvc` | Direct3D 11 |
 | Windows arm64 | `@oxgl-js/win32-arm64-msvc` | Direct3D 11 |
@@ -40,10 +40,11 @@ for any other platform; importing oxgl there throws an error with
 `code === 'OXGL_NATIVE_MISSING'`.
 
 CI runs the Rust and Node tests, both Khronos conformance suites and three.js's
-examples on all five platforms, with the software backend; it does not yet test
-the GPU backends. The [results page](https://oxgl-js.github.io/oxgl/) shows
-every conformance page's and three.js example's result on each platform for
-the latest release, with the reason for each one that doesn't pass.
+examples on all five platforms with the software backend, and on Linux x64 with
+ANGLE's OpenGL ES backend on Mesa's llvmpipe; it does not yet test on GPUs. The
+[results page](https://oxgl-js.github.io/oxgl/) shows every conformance page's
+and three.js example's result on each platform for the latest release, with the
+reason for each one that doesn't pass.
 The results are the same on every platform, apart from the x64 pages listed
 under Known issues and the three.js examples noted in the three.js section
 below.
@@ -71,6 +72,20 @@ below.
   other threads. The cause is ANGLE's `ScopedVkLoaderEnvironment`, and the issue
   will go away when the pinned ANGLE stops doing this (tracked in
   `angle/README.md`, "Known upstream issues").
+- **On Linux, a process uses either a Vulkan GPU or SwiftShader, not both.**
+  Both are ANGLE's Vulkan backend there, and ANGLE gives them one display, so
+  the first to open holds it for the process. After a `'gpu'` context on a
+  Vulkan GPU, `'software'` throws `OXGL_CONTEXT_CREATION_FAILED`. After a
+  `'software'` context, `'gpu'` throws `OXGL_GPU_UNAVAILABLE` and `'auto'` uses
+  SwiftShader. Both messages name the backend in use. On a GPU that uses the
+  OpenGL ES backend, such as a Raspberry Pi 5, a process can use both if its
+  first `'gpu'` context comes before SwiftShader. Other platforms are unaffected: their GPU backend is
+  Metal or Direct3D 11. To use both on Linux, create the
+  other kind in a child process.
+- **WebGL on a Raspberry Pi 5 passes all but a few conformance pages.** On V3D
+  through the OpenGL ES backend, 968 of 971 WebGL 1 pages and 2858 of 2865
+  WebGL 2 pages pass. Two failures are V3D's own: a large instance divisor, and
+  transform feedback into too-small buffers. The others fail on every platform.
 - **SwiftShader can get the depth of a near-clipped triangle wrong.** With the
   software backend, a large triangle that the near plane clips can be drawn
   with depths that are too near, hiding geometry in front of it. A typical
@@ -284,8 +299,20 @@ destroyed context the promise rejects with `OXGL_CONTEXT_LOST`.
 | `'gpu'` | the GPU backend only; throws `OXGL_GPU_UNAVAILABLE` if it fails |
 | `'software'` | SwiftShader (CPU), which works without a GPU or GPU drivers |
 
-A CPU driver (SwiftShader, llvmpipe, lavapipe, WARP) never counts as a GPU. If
-the GPU backend fails to initialize, it is not retried until the process
+On Linux, a WebGL 2 context uses ANGLE's OpenGL ES backend on the system's
+EGL driver when the Vulkan GPU offers only OpenGL ES 2.0, as on a Raspberry Pi
+5, whose V3D GPU gets OpenGL ES 3.1 from Mesa's GL driver. This applies to
+`'auto'` and `'gpu'` alike, and nothing changes where Vulkan gives OpenGL ES 3.0.
+WebGL 1 contexts on such a GPU use the same backend, since Vulkan can crash the
+process there. It needs Mesa's EGL (`libegl1` and
+`libegl-mesa0` on Debian and Ubuntu), opened only when such a context is first
+created; without it, `'gpu'` throws `OXGL_GPU_UNAVAILABLE`, whose message says
+the backend needs `libEGL.so.1`, and `'auto'` uses SwiftShader. The user needs access to the GPU (on Raspberry Pi OS,
+membership of the `render` group); otherwise Mesa falls back to llvmpipe, which
+is refused the same way.
+
+A CPU driver (SwiftShader, llvmpipe, lavapipe, softpipe, WARP) never counts as a
+GPU. If a GPU backend fails to initialize, it is not retried until the process
 restarts. A failure to create one GPU context, such as running out of GPU
 memory, affects only that call.
 
@@ -330,7 +357,7 @@ Invalid options throw a `TypeError` or `RangeError`. Other failures throw an
 
 | `code` | Cause |
 |---|---|
-| `OXGL_GPU_UNAVAILABLE` | `backend: 'gpu'` (option or `OXGL_BACKEND`) could not create a context |
+| `OXGL_GPU_UNAVAILABLE` | `backend: 'gpu'` (option or `OXGL_BACKEND`) could not create a context, including when the only driver renders on a CPU; the message names each GPU backend tried and why it failed, with the refused renderer |
 | `OXGL_INVALID_BACKEND` | `OXGL_BACKEND` has a value other than `auto`, `gpu`, `software`, or empty |
 | `OXGL_CONTEXT_CREATION_FAILED` | no backend could create the context, for example WebGL 2 on a backend without OpenGL ES 3.0, or `failIfMajorPerformanceCaveat` with the software backend |
 | `OXGL_NATIVE_MISSING` | the native addon or its ANGLE libraries are missing or failed to load |
@@ -351,7 +378,9 @@ They measure state calls, uniform updates, draws, buffer and texture uploads,
 `readPixels`, and two three.js scenes, and report operations per second or
 bytes per second for each. They use the backend `OXGL_BACKEND` selects (the
 default is `auto`) and run each case for 1 second; to run longer, set
-`OXGL_BENCH_MS` to a time in milliseconds. Results vary widely between
+`OXGL_BENCH_MS` to a time in milliseconds. `npm run bench -- --webgl1` measures
+WebGL 1 contexts instead of WebGL 2, skipping the three.js scenes, which need
+WebGL 2. Results vary widely between
 machines and backends, so compare them on one machine.
 
 Oxgl adds little overhead of its own: about 100 ns per WebGL call on Linux
@@ -373,6 +402,10 @@ To build from source:
   LLVM on Windows. Set `LIBCLANG_PATH` if it is not found.
 - For `npm run conformance`: ffmpeg (with ffprobe), which decodes the
   suite's videos.
+- For the OpenGL ES backend's tests on Linux (the test-only `test-gles` build
+  run with `OXGL_BACKEND=gles`, as CI's `gles` legs do): Mesa's EGL and GL
+  drivers, `libegl1`, `libegl-mesa0` and `libgl1-mesa-dri` on Debian and
+  Ubuntu.
 - For the license check: cargo-deny and cargo-about at the versions CI pins
   (`CARGO_DENY_VERSION` and `CARGO_ABOUT_VERSION` in
   `.github/workflows/ci.yml`), installed with

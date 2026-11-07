@@ -47,11 +47,12 @@ export function finishAll(refs) {
  * An OffscreenCanvas class for a realm: `globals` gives its EventTarget,
  * TypeError, DOMException and Blob; `oxgl` is the JS layer (createContext,
  * canvasPixels, presentDrawingBuffer); `ImageBitmap` is the realm's class;
- * `onContext(canvas, context)`, when given, hears of each WebGL context.
+ * `onContext(canvas, context)`, when given, hears of each WebGL context, and
+ * `onContext2d(context)` of each 2D one.
  * `transferToImageBitmap` takes the drawing buffer's pixels and clears it;
  * `convertToBlob` writes a PNG.
  */
-export function offscreenCanvasClass(globals, oxgl, ImageBitmap, onContext = () => {}) {
+export function offscreenCanvasClass(globals, oxgl, ImageBitmap, onContext = () => {}, onContext2d = () => {}) {
   const { EventTarget, TypeError, DOMException, Blob } = globals;
   const { createContext, canvasPixels, presentDrawingBuffer } = oxgl;
   const size = (value) => {
@@ -117,6 +118,7 @@ export function offscreenCanvasClass(globals, oxgl, ImageBitmap, onContext = () 
         this.#context = this.#canvas2d.getContext('2d');
         // The context's canvas is this one, as pages resize it through it.
         Object.defineProperty(this.#context, 'canvas', { value: this, configurable: true });
+        onContext2d(this.#context);
       } else {
         try {
           this.#context = createContext({ width: this.#width, height: this.#height, webgl2: version === 2, canvas: this, attributes });

@@ -12,6 +12,7 @@ use oxgl_sys::{
     ByteSource, CompressedData, Current, TexImage, Upload, UploadData, ValueType, Values, ViewKind,
 };
 
+use crate::backend::Backend;
 use crate::codec::{self, Codec, HALF_FLOAT_OES, Unpack};
 use crate::color::{self, ColorSpace};
 use crate::context::{Context, Object, ObjectKey, current};
@@ -310,6 +311,42 @@ fn rgba8_pixels(
     }
 }
 
+/// `GL_TEXTURE_RED_SIZE` and `GL_TEXTURE_ALPHA_SIZE`, OpenGL ES 3.1 names the
+/// bindings lack.
+const TEXTURE_CHANNEL_SIZES: [u32; 2] = [0x805C, 0x805F];
+
+/// `GL_TEXTURE_WIDTH`, `GL_TEXTURE_HEIGHT` and `GL_TEXTURE_INTERNAL_FORMAT`.
+const TEXTURE_LEVEL_SHAPE: [u32; 3] = [0x1000, 0x1001, 0x1003];
+
+/// `GL_MEMORY_SIZE_ANGLE`.
+const MEMORY_SIZE: u32 = 0x93AD;
+
+/// Whether an OpenGL ES driver would refuse `generateMipmap` on WebGL 1's
+/// `target`: the base level has 32-bit float channels, the only 32-bit ones
+/// WebGL 1 has (its internal format is unsized, so doesn't say), and the
+/// driver can't filter them (`linear` false), or they are `RGB`, which can't
+/// be rendered to. ANGLE has no luminance size to query, so an unsized
+/// `LUMINANCE` level is told by its 4 bytes per texel. A driver refuses a
+/// format it can't filter and render to (OpenGL ES 3.0.6 §3.8.10), and ANGLE
+/// turns that into a context loss.
+fn driver_refuses_mipmaps(current: &Current<'_>, target: u32, linear: bool) -> bool {
+    let level = match target {
+        GL_TEXTURE_2D => GL_TEXTURE_2D,
+        GL_TEXTURE_CUBE_MAP => GL_TEXTURE_CUBE_MAP_POSITIVE_X,
+        _ => return false,
+    };
+    let parameter = |pname| current.tex_level_parameter(level, 0, pname);
+    let [red, alpha] = TEXTURE_CHANNEL_SIZES.map(parameter);
+    if linear {
+        return red == 32 && alpha == 0;
+    }
+    let [width, height, format] = TEXTURE_LEVEL_SHAPE.map(parameter);
+    red == 32
+        || alpha == 32
+        || (format.cast_unsigned() == GL_LUMINANCE
+            && i64::from(parameter(MEMORY_SIZE)) == 4 * i64::from(width) * i64::from(height))
+}
+
 impl Context {
     /// Whether a buffer is bound to `PIXEL_UNPACK_BUFFER` (WebGL 2).
     fn unpack_buffer_bound(&self, current: &Current<'_>) -> bool {
@@ -441,10 +478,20 @@ impl Context {
 
     /// `generateMipmap`.
     pub fn generate_mipmap(&mut self, target: u32) {
+        // ANGLE's other backends generate these mipmaps themselves.
+        let float = !self.webgl2
+            && self.backend == Backend::Gles
+            && self.extensions.is_enabled("OES_texture_float");
+        let linear = float
+            && self
+                .supported_extensions()
+                .is_some_and(|names| names.contains(&"OES_texture_float_linear"));
         let Some(current) = current(&self.buffer, &mut self.errors) else {
             return;
         };
-        if texture_missing(&current, self.webgl2, target, TargetUse::Binding) {
+        if texture_missing(&current, self.webgl2, target, TargetUse::Binding)
+            || (float && driver_refuses_mipmaps(&current, target, linear))
+        {
             self.errors.synthesize(GL_INVALID_OPERATION);
             return;
         }

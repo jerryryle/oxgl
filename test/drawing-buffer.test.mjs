@@ -412,3 +412,19 @@ test('oxgl methods outside WebIDL are not enumerable', () => {
   assert.ok(!names.includes('resize') && !names.includes('destroy'));
   gl.destroy();
 });
+
+test('attributes and bits describe the allocated buffer', () => {
+  for (const webgl2 of [false, true]) {
+    for (const antialias of [false, true]) {
+      const gl = createContext({ width: 8, height: 8, webgl2, attributes: { antialias, stencil: true } });
+      const attributes = gl.getContextAttributes();
+      const bits = ['RED_BITS', 'GREEN_BITS', 'BLUE_BITS', 'ALPHA_BITS'].map((name) => gl.getParameter(gl[name]));
+      assert.deepEqual(bits, [8, 8, 8, 8], `RGBA8 (WebGL ${webgl2 ? 2 : 1}, antialias ${antialias})`);
+      assert.ok(gl.getParameter(gl.DEPTH_BITS) >= 16);
+      assert.ok(gl.getParameter(gl.STENCIL_BITS) >= 8);
+      assert.equal(attributes.antialias, gl.getParameter(gl.SAMPLES) > 0);
+      if (!antialias) assert.equal(gl.getParameter(gl.SAMPLES), 0);
+      gl.destroy();
+    }
+  }
+});

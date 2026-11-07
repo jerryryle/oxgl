@@ -129,12 +129,22 @@ test('drawingBufferStorage errors', (t) => {
   assert.deepEqual([gl.drawingBufferWidth, gl.drawingBufferHeight], size);
 });
 
+// The budget is 1 GiB across renderbuffers and samples; the default buffer
+// has RGBA8 color and 24-bit depth, plus an RGBA8 resolve when multisampled.
+const BUDGET = 2 ** 30;
+
 test('over the allocation budget', (t) => {
   const gl = context(t);
-  assert.ok(gl.getParameter(gl.SAMPLES) > 0);
-  gl.drawingBufferStorage(RGBA8, 8192, 8192);
+  const samples = gl.getParameter(gl.SAMPLES);
+  assert.ok(samples > 0);
+  const side = Math.min(8192, gl.getParameter(gl.MAX_RENDERBUFFER_SIZE), ...gl.getParameter(gl.MAX_VIEWPORT_DIMS));
+  if (side ** 2 * (samples * 8 + 4) <= BUDGET) {
+    t.skip(`a ${side}x${side} buffer fits the budget multisampled`);
+    return;
+  }
+  gl.drawingBufferStorage(RGBA8, side, side);
   assert.equal(gl.getError(), gl.NO_ERROR);
-  assert.deepEqual([gl.drawingBufferWidth, gl.drawingBufferHeight], [8192, 8192]);
+  assert.deepEqual([gl.drawingBufferWidth, gl.drawingBufferHeight], [side, side]);
   assert.equal(gl.getParameter(gl.SAMPLES), 0);
 });
 

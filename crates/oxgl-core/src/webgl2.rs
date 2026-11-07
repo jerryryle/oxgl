@@ -3,12 +3,14 @@
 //! §3.7.3, §3.7.9, §3.7.12–§3.7.17). ANGLE validates the rules; oxgl
 //! resolves handles and shapes results.
 
+use oxgl_sys::Current;
 #[allow(
     clippy::wildcard_imports,
     reason = "this module names many GL_ constants"
 )]
 use oxgl_sys::bindings::*;
 
+use crate::backend::Backend;
 use crate::context::{Context, Object, ObjectKey, accepted, current};
 use crate::parameters::Parameter;
 use crate::rendering::{BufferKind, target_allowed};
@@ -17,7 +19,31 @@ use crate::rendering::{BufferKind, target_allowed};
 /// §3.7.14).
 pub const TIMEOUT_IGNORED: i64 = -1;
 
+/// The largest vertex attribute divisor V3D's hardware takes.
+const V3D_MAX_DIVISOR: u32 = 0xffff;
+
+/// Whether the context renders on Mesa's V3D driver.
+fn is_v3d(current: &Current<'_>) -> bool {
+    current
+        .get_string(GL_RENDERER)
+        .is_some_and(|renderer| renderer.contains("V3D"))
+}
+
 impl Context {
+    /// Whether an instanced draw reads an attribute past its buffer, which is
+    /// `INVALID_OPERATION`. WebGL 2 draws need the check only past V3D's
+    /// divisor limit: V3D applies no bound to that fetch, and ANGLE doesn't
+    /// check it on a robust context.
+    pub(crate) fn instanced_draw_out_of_range(
+        &self,
+        current: &Current<'_>,
+        instances: i32,
+    ) -> bool {
+        let gles = self.backend == Backend::Gles;
+        (!self.webgl2 || (gles && instances.cast_unsigned() > V3D_MAX_DIVISOR && is_v3d(current)))
+            && instanced_attribute_out_of_range(current, instances, gles)
+    }
+
     fn named(&self, key: Option<ObjectKey>, pick: fn(&Object) -> Option<u32>) -> Result<u32, ()> {
         match key {
             None => Ok(0),
@@ -48,10 +74,10 @@ impl Context {
     /// `drawArraysInstanced`.
     pub fn draw_arrays_instanced(&mut self, mode: u32, first: i32, count: i32, instances: i32) {
         if let Some(current) = current(&self.buffer, &mut self.errors) {
-            if self.webgl2 {
-                current.draw_arrays_instanced(mode, first, count, instances);
-            } else if instanced_attribute_out_of_range(&current, instances) {
+            if count > 0 && self.instanced_draw_out_of_range(&current, instances) {
                 self.errors.synthesize(GL_INVALID_OPERATION);
+            } else if self.webgl2 {
+                current.draw_arrays_instanced(mode, first, count, instances);
             } else {
                 current.draw_arrays_instanced_angle(mode, first, count, instances);
             }
@@ -74,10 +100,10 @@ impl Context {
             self.errors.synthesize(GL_INVALID_VALUE);
             return;
         }
-        if self.webgl2 {
-            current.draw_elements_instanced(mode, count, ty, offset, instances);
-        } else if instanced_attribute_out_of_range(&current, instances) {
+        if count > 0 && self.instanced_draw_out_of_range(&current, instances) {
             self.errors.synthesize(GL_INVALID_OPERATION);
+        } else if self.webgl2 {
+            current.draw_elements_instanced(mode, count, ty, offset, instances);
         } else {
             current.draw_elements_instanced_angle(mode, count, ty, offset, instances);
         }
@@ -537,14 +563,18 @@ pub(crate) fn linked(current: &oxgl_sys::Current<'_>, program: u32) -> bool {
         .is_some_and(|status| status != 0)
 }
 
-/// WebGL 1's `ANGLE_instanced_arrays`: whether an instanced attribute the
-/// current program reads would be fetched past the end of its buffer, which
-/// is `INVALID_OPERATION` (WebGL 1.0 §6.6; Khronos
+/// Whether an instanced attribute the current program reads would be fetched
+/// past the end of its buffer, which is `INVALID_OPERATION` in WebGL 1 (WebGL
+/// 1.0 §6.6; Khronos
 /// `conformance/extensions/angle-instanced-arrays-out-of-bounds.html`).
 /// ANGLE checks this itself only on backends without robust buffer access;
 /// with Vulkan's, the fetch is safe but reports no error. A pass over the
 /// attributes' divisors; the rest is looked at only for instanced ones.
-fn instanced_attribute_out_of_range(current: &oxgl_sys::Current<'_>, instances: i32) -> bool {
+fn instanced_attribute_out_of_range(
+    current: &oxgl_sys::Current<'_>,
+    instances: i32,
+    gles: bool,
+) -> bool {
     use crate::drawing_buffer::integers;
     use oxgl_sys::AttribQuery;
     let Ok(instances) = u64::try_from(instances) else {
@@ -564,12 +594,19 @@ fn instanced_attribute_out_of_range(current: &oxgl_sys::Current<'_>, instances: 
         if divisor == 0 || buffer == 0 || int(index, GL_VERTEX_ATTRIB_ARRAY_ENABLED) == 0 {
             return false;
         }
-        let element = u64::from(int(index, GL_VERTEX_ATTRIB_ARRAY_SIZE))
-            * match int(index, GL_VERTEX_ATTRIB_ARRAY_TYPE) {
-                GL_BYTE | GL_UNSIGNED_BYTE => 1,
-                GL_SHORT | GL_UNSIGNED_SHORT => 2,
-                _ => 4,
-            };
+        let size = u64::from(int(index, GL_VERTEX_ATTRIB_ARRAY_SIZE));
+        let element = match int(index, GL_VERTEX_ATTRIB_ARRAY_TYPE) {
+            GL_BYTE | GL_UNSIGNED_BYTE => size,
+            GL_SHORT | GL_UNSIGNED_SHORT | GL_HALF_FLOAT => size * 2,
+            GL_INT_2_10_10_10_REV | GL_UNSIGNED_INT_2_10_10_10_REV => 4,
+            _ => size * 4,
+        };
+        // V3D silently applies a larger divisor as its limit.
+        let divisor = if gles && divisor > V3D_MAX_DIVISOR && is_v3d(current) {
+            V3D_MAX_DIVISOR
+        } else {
+            divisor
+        };
         let stride = match u64::from(int(index, GL_VERTEX_ATTRIB_ARRAY_STRIDE)) {
             0 => element,
             stride => stride,

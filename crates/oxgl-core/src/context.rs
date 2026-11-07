@@ -13,6 +13,7 @@ use oxgl_sys::{
 };
 use slotmap::{SlotMap, new_key_type};
 
+use crate::backend::Backend;
 pub use crate::drawing_buffer::{Attributes, DrawingBuffer, clamp_size};
 use crate::error::ErrorState;
 use crate::parameters::{self, Kind, Parameter};
@@ -96,6 +97,8 @@ pub struct Context {
     pub(crate) objects: SlotMap<ObjectKey, Object>,
     pub(crate) unpack: UnpackState,
     pub(crate) webgl2: bool,
+    /// The backend the context runs on.
+    pub(crate) backend: Backend,
     /// The renderbuffer bound to `RENDERBUFFER`, for the `DEPTH_STENCIL`
     /// format alias.
     pub(crate) bound_renderbuffer: Option<ObjectKey>,
@@ -178,7 +181,7 @@ pub(crate) fn check_reset(current: &Current<'_>, errors: &mut ErrorState) {
 impl Context {
     /// Wraps a drawing buffer.
     #[must_use]
-    pub fn new(buffer: DrawingBuffer, webgl2: bool) -> Self {
+    pub fn new(buffer: DrawingBuffer, webgl2: bool, backend: Backend) -> Self {
         // WebGL 2 always restarts primitives at the fixed index (WebGL 2.0
         // §5.18), and pages cannot toggle it (see `set_state`).
         if webgl2 && let Ok(current) = buffer.context().make_current() {
@@ -190,6 +193,7 @@ impl Context {
             objects: SlotMap::with_key(),
             unpack: UnpackState::default(),
             webgl2,
+            backend,
             bound_renderbuffer: None,
             extensions: crate::extensions::ExtensionState::default(),
             flagged: Vec::new(),

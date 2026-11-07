@@ -1,0 +1,19 @@
+# Sets up an OpenGL ES backend leg (openspec continuous-integration, "OpenGL ES
+# backend legs"): installs Mesa's EGL and llvmpipe, then copies this platform's
+# test-gles addon (addon-linux-<arch>-gles, see build) over the addon
+# use-packages unpacked. Runs after use-packages, on Linux only.
+name: Use the test-gles addon
+description: Installs Mesa's EGL and llvmpipe and swaps this platform's test-gles addon into dist/.
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      run: |
+        sudo apt-get update -q
+        sudo apt-get install -y -q --no-install-recommends libegl1 libegl-mesa0 libgl1-mesa-dri
+    - uses: actions/download-artifact@9000827ccba6bdab643e8b6fd33ac0654aef8333 # v8.0.2
+      with:
+        name: addon-linux-${{ runner.arch == 'ARM64' && 'arm64' || 'x64' }}-gles
+        path: ${{ runner.temp }}/addon-gles
+    - shell: bash
+      run: cp "$RUNNER_TEMP"/addon-gles/*.node dist/

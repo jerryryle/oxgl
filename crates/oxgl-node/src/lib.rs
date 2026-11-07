@@ -36,7 +36,19 @@ use oxgl_sys::{ReadPixels, StateCall};
 #[napi]
 #[must_use]
 pub fn native_abi_version() -> u32 {
-    14
+    15
+}
+
+/// Test-only backends this build accepts: `gles` in a Linux build with the
+/// `test-gles` feature, none otherwise.
+#[napi]
+#[must_use]
+pub fn test_backends() -> Vec<String> {
+    if cfg!(all(feature = "test-gles", target_os = "linux")) {
+        vec!["gles".to_owned()]
+    } else {
+        Vec::new()
+    }
 }
 
 /// The environment's runtime, created by [`init`]. Node-API instance data is
@@ -136,8 +148,9 @@ impl From<Attributes> for ContextAttributes {
     }
 }
 
-/// Creates a context. `backend` is `auto`, `gpu`, or `software`, already
-/// resolved against `OXGL_BACKEND` and validated in TS.
+/// Creates a context. `backend` is `auto`, `gpu`, `software` or one of
+/// [`test_backends`], already resolved against `OXGL_BACKEND` and validated in
+/// TS.
 #[napi]
 #[allow(
     clippy::needless_pass_by_value,
@@ -154,6 +167,7 @@ pub fn create_context(
     let requested = match backend.as_str() {
         "gpu" => RequestedBackend::Gpu,
         "software" => RequestedBackend::Software,
+        "gles" if cfg!(all(feature = "test-gles", target_os = "linux")) => RequestedBackend::Gles,
         _ => RequestedBackend::Auto,
     };
     let runtime = runtime(env)?;

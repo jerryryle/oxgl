@@ -23,6 +23,8 @@ import { main, runConformance } from '../conformance/run.mjs';
 import { startServer } from '../conformance/server.mjs';
 import { ensureCheckout, ensureSuite } from '../conformance/suite.mjs';
 
+import { entryOf } from './helpers.mjs';
+
 const FIXTURES = join(import.meta.dirname, 'fixtures', 'conformance');
 
 // --- Test lists -------------------------------------------------------------
@@ -259,8 +261,8 @@ test('Updating expectations: reasons kept, passes narrow entries, new reasons no
   ];
   const run = concludeRun(exp, results, all, { update: true, platform: 'linux-arm64' });
   assert.equal(run.ok, true, 'an --update run with differences succeeds');
-  // An entry without platforms counts as listing all five, so the other platforms keep theirs.
-  const others = '[linux-x64 macos-arm64 windows-x64 windows-arm64]';
+  // An entry without platforms counts as listing all seven, so the other platforms keep theirs.
+  const others = '[linux-x64 macos-arm64 windows-x64 windows-arm64 linux-x64-gles linux-arm64-gles]';
   assert.deepEqual(entryLines(run.written), [
     'webgl1 abort.html CRASH # crashed',
     `webgl1 changed.html FAIL ${others} # old reason`,
@@ -283,8 +285,67 @@ test('platform lists parse, format in platform order, and round-trip', () => {
   const entries = parseExpectations(`webgl2 p.html FAIL [windows-x64 linux-x64] # x64 only\nwebgl2 p.html TIMEOUT [macos-arm64] # slow`);
   assert.deepEqual(entryLines(entries), [X64, 'webgl2 p.html TIMEOUT [macos-arm64] # slow']);
   assert.equal(formatExpectations(parseExpectations(formatExpectations(entries))), formatExpectations(entries));
-  const all = parseExpectations('webgl2 p.html FAIL [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # x');
-  assert.deepEqual(entryLines(all), ['webgl2 p.html FAIL # x'], 'a list of all five is written without one');
+  const all = parseExpectations('webgl2 p.html FAIL [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64 linux-x64-gles linux-arm64-gles] # x');
+  assert.deepEqual(entryLines(all), ['webgl2 p.html FAIL # x'], 'a list of all seven is written without one');
+});
+
+test('The OpenGL ES backend is its own platform on each Linux architecture', () => {
+  assert.equal(hostPlatform({ platform: 'linux', arch: 'x64', backend: 'gles' }), 'linux-x64-gles');
+  assert.equal(hostPlatform({ platform: 'linux', arch: 'x64', backend: 'software' }), 'linux-x64');
+  assert.equal(hostPlatform({ platform: 'linux', arch: 'x64', backend: '' }), 'linux-x64', 'OXGL_BACKEND empty');
+  assert.equal(hostPlatform({ platform: 'linux', arch: 'arm64', backend: 'gles' }), 'linux-arm64-gles');
+  assert.equal(hostPlatform({ platform: 'linux', arch: 'arm64', backend: 'gpu' }), 'linux-arm64');
+  assert.equal(hostPlatform({ platform: 'darwin', arch: 'arm64', backend: 'gles' }), 'macos-arm64');
+});
+
+test('OpenGL ES backend judged on its own platform', () => {
+  const all = pages({ webgl2: ['p.html'] });
+  const exp = parseExpectations('webgl2 p.html FAIL [linux-x64] # software only');
+  const run = concludeRun(exp, [result('webgl2', 'p.html', 'PASS')], all, { platform: 'linux-x64-gles', update: true });
+  assert.equal(run.ok, true, 'the linux-x64 entry does not apply');
+  assert.deepEqual(entryLines(run.written), ['webgl2 p.html FAIL [linux-x64] # software only']);
+});
+
+test('Update on the OpenGL ES backend keeps the entry for the six other platforms', () => {
+  const all = pages({ webgl2: ['p.html'] });
+  const exp = parseExpectations('webgl2 p.html FAIL # everywhere');
+  const run = concludeRun(exp, [result('webgl2', 'p.html', 'PASS')], all, { platform: 'linux-x64-gles', update: true });
+  assert.deepEqual(entryLines(run.written), [
+    'webgl2 p.html FAIL [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64 linux-arm64-gles] # everywhere',
+  ]);
+});
+
+test('Update on the OpenGL ES backend adds a failure for that platform alone', () => {
+  const run = concludeRun(new Map(), [result('webgl2', 'p.html', 'FAIL')], pages({ webgl2: ['p.html'] }), {
+    platform: 'linux-x64-gles',
+    update: true,
+  });
+  assert.deepEqual(entryLines(run.written), ['webgl2 p.html FAIL [linux-x64-gles] # failed']);
+});
+
+test('OpenGL ES backend on Linux arm64: a linux-x64-gles entry does not apply', () => {
+  const all = pages({ webgl2: ['p.html'] });
+  const exp = parseExpectations('webgl2 p.html FAIL [linux-x64-gles] # x64 llvmpipe');
+  const run = concludeRun(exp, [result('webgl2', 'p.html', 'PASS')], all, { platform: 'linux-arm64-gles', update: true });
+  assert.equal(run.ok, true, 'the page is expected to pass there');
+  assert.deepEqual(entryLines(run.written), ['webgl2 p.html FAIL [linux-x64-gles] # x64 llvmpipe']);
+});
+
+test('Update on Linux arm64 OpenGL ES adds a new failure for that platform alone', () => {
+  const run = concludeRun(new Map(), [result('webgl2', 'p.html', 'FAIL')], pages({ webgl2: ['p.html'] }), {
+    platform: 'linux-arm64-gles',
+    update: true,
+  });
+  assert.deepEqual(entryLines(run.written), ['webgl2 p.html FAIL [linux-arm64-gles] # failed']);
+});
+
+test('Same failure on both OpenGL ES backend platforms: one entry lists both', () => {
+  const exp = parseExpectations('webgl2 p.html FAIL [linux-x64-gles] # llvmpipe');
+  const run = concludeRun(exp, [result('webgl2', 'p.html', 'FAIL')], pages({ webgl2: ['p.html'] }), {
+    platform: 'linux-arm64-gles',
+    update: true,
+  });
+  assert.deepEqual(entryLines(run.written), ['webgl2 p.html FAIL [linux-x64-gles linux-arm64-gles] # llvmpipe']);
 });
 
 test('Unknown platform: parsing fails naming the entry', () => {
@@ -357,7 +418,7 @@ test('Update after a platform starts passing: the platform leaves the entry', ()
 });
 
 test('an update that completes a list writes the entry without platforms', () => {
-  const exp = parseExpectations('webgl2 p.html FAIL [linux-x64 linux-arm64 macos-arm64 windows-x64] # x');
+  const exp = parseExpectations('webgl2 p.html FAIL [linux-x64 linux-arm64 macos-arm64 windows-x64 linux-x64-gles linux-arm64-gles] # x');
   const run = concludeRun(exp, [result('webgl2', 'p.html', 'FAIL')], pages({ webgl2: ['p.html'] }), { platform: 'windows-arm64', update: true });
   assert.deepEqual(entryLines(run.written), ['webgl2 p.html FAIL # x']);
 });
@@ -536,7 +597,7 @@ test('page runner: outcomes, early errors, media, canvas shim, crashes, timeouts
   const official = pageOf(report, 'webgl2', 'error-never-completes.html');
   assert.equal(official.outcome, 'TIMEOUT');
   assert.match(official.error, /^TypeError: gl\.bufferData is not a function/);
-  assert.equal(written.get('webgl2 error-never-completes.html').reason, 'no new result within the time limit: TypeError: gl.bufferData is not a function');
+  assert.equal(entryOf(written, 'webgl2', 'error-never-completes.html').reason, 'no new result within the time limit: TypeError: gl.bufferData is not a function');
   // Page recovers from an uncaught exception: PASS, as in the official harness.
   assert.equal(outcome('webgl1', 'recovers.html'), 'PASS');
   assert.match(pageOf(report, 'webgl1', 'recovers.html').error, /error in a side callback/);
@@ -617,9 +678,9 @@ test('page runner: outcomes, early errors, media, canvas shim, crashes, timeouts
   assert.equal(ok, false);
   assert.deepEqual(report.harnessErrors.map((h) => h.path), ['missing.html']);
   assert.equal(outcome('webgl1', 'missing.html'), 'HARNESS_ERROR');
-  assert.ok(!written.has('webgl1 missing.html'));
-  assert.equal(written.get('webgl1 abort.html').outcome, 'CRASH');
-  assert.equal(written.get('webgl1 hang.html').outcome, 'TIMEOUT');
+  assert.equal(entryOf(written, 'webgl1', 'missing.html'), undefined);
+  assert.equal(entryOf(written, 'webgl1', 'abort.html').outcome, 'CRASH');
+  assert.equal(entryOf(written, 'webgl1', 'hang.html').outcome, 'TIMEOUT');
 
   // Results report fields.
   for (const field of ['commit', 'backend', 'idleTimeoutSeconds', 'jobs', 'platform', 'timestamp']) {

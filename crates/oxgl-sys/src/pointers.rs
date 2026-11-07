@@ -501,22 +501,6 @@ impl Current<'_> {
         unsafe { (self.fns().glDrawElements)(mode, count, ty, offset as *const c_void) };
     }
 
-    /// `glDrawRangeElements` (OpenGL ES 3.0) with a buffer offset.
-    pub fn draw_range_elements(
-        &self,
-        mode: GLenum,
-        start: GLuint,
-        end: GLuint,
-        count: GLsizei,
-        ty: GLenum,
-        offset: GLintptr,
-    ) {
-        // SAFETY: as for `draw_elements`.
-        unsafe {
-            (self.fns().glDrawRangeElements)(mode, start, end, count, ty, offset as *const c_void);
-        };
-    }
-
     /// One of the robust `glGetVertexAttrib*v` queries, up to four values.
     #[must_use]
     pub fn vertex_attrib(&self, index: GLuint, pname: GLenum, query: AttribQuery) -> Quad {

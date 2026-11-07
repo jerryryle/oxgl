@@ -315,6 +315,14 @@ export function installShim(window, state, { sameOriginOnly = false, onRefused }
     const ref = new WeakRef(gl);
     live.add(ref);
     if (placeholders.has(canvas)) own.add(ref);
+  }, (context) => {
+    // jsdom's drawImage takes its elements; this context is the package's own.
+    const draw = context.drawImage;
+    context.drawImage = function (image, ...rest) {
+      const impl = implForWrapper(image);
+      return draw.call(this, impl?._image ?? impl?._getCanvas?.() ?? image, ...rest);
+    };
+    wrapContext2d(context);
   });
   // jsdom's own getContext gives 2D contexts (through the canvas package).
   // It does not know oxgl's contexts, so one type per canvas is enforced here

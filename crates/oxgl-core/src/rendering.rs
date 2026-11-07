@@ -1144,9 +1144,15 @@ impl Context {
             | GL_VERTEX_ATTRIB_ARRAY_TYPE => Some(Parameter::Number(f64::from(
                 read(AttribQuery::Int)?.bits[0].cast_signed(),
             ))),
-            GL_VERTEX_ATTRIB_ARRAY_DIVISOR if webgl2 || instanced => Some(Parameter::Number(
-                f64::from(read(AttribQuery::Int)?.bits[0].cast_signed()),
-            )),
+            GL_VERTEX_ATTRIB_ARRAY_DIVISOR if webgl2 => {
+                // The `Int` query clamps a divisor to `i32::MAX`.
+                Some(Parameter::Number(f64::from(
+                    read(AttribQuery::IntegerUint)?.bits[0],
+                )))
+            }
+            GL_VERTEX_ATTRIB_ARRAY_DIVISOR if instanced => Some(Parameter::Number(f64::from(
+                read(AttribQuery::Int)?.bits[0],
+            ))),
             _ => {
                 self.errors.synthesize(GL_INVALID_ENUM);
                 None
@@ -1173,7 +1179,9 @@ impl Context {
         }
     }
 
-    /// `drawElements`, or WebGL 2's `drawRangeElements` with `range`.
+    /// `drawElements`, or WebGL 2's `drawRangeElements` with `range`, which
+    /// is discarded after its check: a GLES driver may trust it and read
+    /// outside its vertex data for an index outside it.
     pub fn draw_elements(
         &mut self,
         mode: u32,
@@ -1185,14 +1193,11 @@ impl Context {
         let Some(current) = current(&self.buffer, &mut self.errors) else {
             return;
         };
-        if offset < 0 {
+        if offset < 0 || range.is_some_and(|(start, end)| end < start) {
             self.errors.synthesize(GL_INVALID_VALUE);
             return;
         }
-        match range {
-            None => current.draw_elements(mode, count, ty, offset),
-            Some((start, end)) => current.draw_range_elements(mode, start, end, count, ty, offset),
-        }
+        current.draw_elements(mode, count, ty, offset);
     }
 }
 

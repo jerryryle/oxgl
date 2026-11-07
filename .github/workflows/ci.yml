@@ -194,6 +194,20 @@ jobs:
             rm "$main"
           fi
           echo "platform-tarball=$RUNNER_TEMP/packages/oxgl-js-$platform-$version.tgz" >> "$GITHUB_OUTPUT"
+      # The test-only addon the OpenGL ES backend legs use (openspec
+      # continuous-integration, "Test addon build"): built after packing and
+      # into dist-gles/, so the packed addon, which the step above checked
+      # rejects OXGL_BACKEND=gles, is never this one.
+      - name: Build the test-gles addon (Linux)
+        if: runner.os == 'Linux'
+        run: npx napi build --platform --release --manifest-path crates/oxgl-node/Cargo.toml --output-dir dist-gles --no-js --features test-gles
+      - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        if: runner.os == 'Linux'
+        with:
+          name: addon-linux-${{ runner.arch == 'ARM64' && 'arm64' || 'x64' }}-gles
+          path: dist-gles/*.node
+          if-no-files-found: error
+          retention-days: ${{ needs.changes.outputs.release == 'true' && 7 || 3 }}
       - name: Require glibc 2.34 at most (Linux)
         if: runner.os == 'Linux'
         env:
@@ -293,6 +307,11 @@ jobs:
   # The Node test suite with the build's packages, on every platform on Node
   # 24, and on Linux arm64 also on both ends of `engines`. N-API makes the
   # addon independent of the Node version, so Linux alone covers the range.
+  # On Linux it also runs on ANGLE's OpenGL ES backend (openspec
+  # continuous-integration, "OpenGL ES backend legs"). `backend` is a matrix
+  # key, so each gles entry overrides it and makes a leg of its own instead of
+  # merging into a software leg; an entry that already makes its own leg names
+  # it, since it gets no key it doesn't name.
   node-test:
     needs: [changes, build]
     # Explicit, since the default success() would also see the skipped
@@ -303,11 +322,20 @@ jobs:
       matrix:
         os: [ubuntu-24.04-arm, ubuntu-24.04, macos-15, windows-2025, windows-11-arm]
         node: [24]
+        backend: [software]
         include:
           - os: ubuntu-24.04-arm
             node: 22.22.2
+            backend: software
           - os: ubuntu-24.04-arm
             node: 26
+            backend: software
+          - os: ubuntu-24.04
+            node: 24
+            backend: gles
+          - os: ubuntu-24.04-arm
+            node: 24
+            backend: gles
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -327,9 +355,24 @@ jobs:
       - uses: ./.github/actions/use-packages
         with:
           runner: ${{ matrix.os }}
+      - uses: ./.github/actions/use-gles-addon
+        if: matrix.backend == 'gles'
       - run: npm test
         env:
-          OXGL_BACKEND: software
+          OXGL_BACKEND: ${{ matrix.backend }}
+      # With Mesa's lavapipe as the only Vulkan device, 'auto' opens the GPU
+      # display, rejects it as a CPU and terminates it, and SwiftShader then
+      # initializes the display it shares (openspec backend-selection, "A GPU
+      # display rejected as a CPU holds nothing"). Only a run without
+      # OXGL_BACKEND reaches that path.
+      - name: Install Mesa's Vulkan driver (Linux x64)
+        if: matrix.os == 'ubuntu-24.04' && matrix.backend == 'software'
+        run: |
+          sudo apt-get update -q
+          sudo apt-get install -y -q --no-install-recommends mesa-vulkan-drivers
+      - name: Backend selection over lavapipe (Linux x64)
+        if: matrix.os == 'ubuntu-24.04' && matrix.backend == 'software'
+        run: node --test test/backend-selection.test.mjs
 
   # Rust test suites under AddressSanitizer + LeakSanitizer, on both Linux
   # architectures (README.md, CONTRIBUTING.md). Part of the full checks; on a
@@ -419,6 +462,13 @@ jobs:
       matrix:
         os: [ubuntu-24.04-arm, ubuntu-24.04, macos-15, windows-2025, windows-11-arm]
         suite: [webgl1, webgl2]
+        # A matrix key, so each gles entry makes a leg of its own (see node-test).
+        backend: [software]
+        include:
+          - { os: ubuntu-24.04, suite: webgl1, backend: gles }
+          - { os: ubuntu-24.04, suite: webgl2, backend: gles }
+          - { os: ubuntu-24.04-arm, suite: webgl1, backend: gles }
+          - { os: ubuntu-24.04-arm, suite: webgl2, backend: gles }
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -448,18 +498,21 @@ jobs:
       # macos-15 runners are slow and variable: passing pages went up to 53 s
       # between results there, so macOS gets a longer limit, which costs time
       # only for pages that stop without finishing.
+      - uses: ./.github/actions/use-gles-addon
+        if: matrix.backend == 'gles'
       - run: |
           args=(--suite "$SUITE")
           [ "$RUNNER_OS" = macOS ] && args+=(--timeout 180)
           npm run conformance -- "${args[@]}"
         env:
           SUITE: ${{ matrix.suite }}
-          OXGL_BACKEND: software
-      # Artifact names must be unique within a run, hence the platform and suite suffix.
+          OXGL_BACKEND: ${{ matrix.backend }}
+      # Artifact names must be unique within a run, hence the platform, suite
+      # and backend suffix.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
-          name: conformance-results-${{ matrix.os }}-${{ matrix.suite }}
+          name: conformance-results-${{ matrix.os }}-${{ matrix.suite }}${{ matrix.backend == 'gles' && '-gles' || '' }}
           path: conformance-results.json
 
   # three.js r186's own WebGL examples on every supported platform, each frame
@@ -474,6 +527,11 @@ jobs:
       fail-fast: false
       matrix:
         os: [ubuntu-24.04-arm, ubuntu-24.04, macos-15, windows-2025, windows-11-arm]
+        # A matrix key, so each gles entry makes a leg of its own (see node-test).
+        backend: [software]
+        include:
+          - { os: ubuntu-24.04, backend: gles }
+          - { os: ubuntu-24.04-arm, backend: gles }
     runs-on: ${{ matrix.os }}
     defaults:
       run:
@@ -500,14 +558,17 @@ jobs:
       - uses: ./.github/actions/use-packages
         with:
           runner: ${{ matrix.os }}
+      - uses: ./.github/actions/use-gles-addon
+        if: matrix.backend == 'gles'
       - run: npm run threejs
         env:
-          OXGL_BACKEND: software
-      # Artifact names must be unique within a run, hence the platform suffix.
+          OXGL_BACKEND: ${{ matrix.backend }}
+      # Artifact names must be unique within a run, hence the platform and
+      # backend suffix.
       - uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         if: always()
         with:
-          name: threejs-results-${{ matrix.os }}
+          name: threejs-results-${{ matrix.os }}${{ matrix.backend == 'gles' && '-gles' || '' }}
           path: |
             threejs-results.json
             threejs-output/

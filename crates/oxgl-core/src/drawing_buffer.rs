@@ -207,6 +207,9 @@ impl DrawingBuffer {
                 current.request_extension(c"GL_OES_rgb8_rgba8");
                 current.request_extension(c"GL_ANGLE_framebuffer_multisample");
                 current.request_extension(c"GL_ANGLE_framebuffer_blit");
+                // For `generateMipmap`'s check of float textures.
+                current.request_extension(c"GL_ANGLE_get_tex_level_parameter");
+                current.request_extension(c"GL_ANGLE_memory_size");
             }
             let limits = Limits::read(&current, request.webgl2)
                 .ok_or("cannot query the drawing buffer size limits")?;

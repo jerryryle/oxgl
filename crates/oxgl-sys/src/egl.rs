@@ -18,9 +18,10 @@ use std::ffi::{CStr, c_char};
 use std::fmt;
 use std::marker::PhantomData;
 use std::ptr;
-use std::sync::atomic::{AtomicUsize, Ordering};
+use std::sync::atomic::{AtomicI32, AtomicUsize, Ordering};
+use std::sync::{Arc, Mutex, PoisonError};
 
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 
 use crate::bindings::{
     EGL_CONTEXT_BIND_GENERATES_RESOURCE_CHROMIUM, EGL_CONTEXT_CLIENT_ARRAYS_ENABLED_ANGLE,
@@ -31,12 +32,119 @@ use crate::bindings::{
     EGL_PLATFORM_ANGLE_DEVICE_TYPE_ANGLE, EGL_PLATFORM_ANGLE_DEVICE_TYPE_HARDWARE_ANGLE,
     EGL_PLATFORM_ANGLE_DEVICE_TYPE_SWIFTSHADER_ANGLE, EGL_PLATFORM_ANGLE_TYPE_ANGLE,
     EGL_PLATFORM_ANGLE_TYPE_VULKAN_ANGLE, EGL_RENDERABLE_TYPE,
-    EGL_ROBUST_RESOURCE_INITIALIZATION_ANGLE, EGL_TRUE, EGLConfig, EGLContext, EGLDisplay, EGLint,
-    GLenum, GLsizei,
+    EGL_ROBUST_RESOURCE_INITIALIZATION_ANGLE, EGL_SURFACE_TYPE, EGL_TRUE, EGLAttrib, EGLConfig,
+    EGLContext, EGLDisplay, EGLint, GLenum, GLsizei,
 };
 use crate::loader::Angle;
 
 static LIVE_CONTEXTS: AtomicUsize = AtomicUsize::new(0);
+
+/// `EGL_FEATURE_OVERRIDES_DISABLED_ANGLE`: a null-terminated list of ANGLE
+/// feature names to disable.
+#[cfg(target_os = "linux")]
+const EGL_FEATURE_OVERRIDES_DISABLED_ANGLE: EGLAttrib = 0x3467;
+
+/// `EGL_FEATURE_OVERRIDES_ENABLED_ANGLE`: as above, to enable.
+#[cfg(target_os = "linux")]
+const EGL_FEATURE_OVERRIDES_ENABLED_ANGLE: EGLAttrib = 0x3466;
+
+/// A null-terminated list of C strings.
+#[cfg(target_os = "linux")]
+struct FeatureNames<const N: usize>([*const c_char; N]);
+
+// SAFETY: the pointers are to immutable static strings.
+#[cfg(target_os = "linux")]
+unsafe impl<const N: usize> Sync for FeatureNames<N> {}
+
+/// ANGLE features the OpenGL ES display disables. This one reads `RG16` as
+/// `RG`/`UNSIGNED_SHORT`, a driver bug's workaround that Mesa refuses, since
+/// Mesa's own read format for it is `RGBA`, and the error loses the context.
+#[cfg(target_os = "linux")]
+static GLES_DISABLED_FEATURES: FeatureNames<2> = FeatureNames([
+    c"readPixelsUsingImplementationColorReadFormatForNorm16".as_ptr(),
+    ptr::null(),
+]);
+
+/// ANGLE features the OpenGL ES display enables, for defects in Mesa or in
+/// this backend (`angle/upstream-reports.md`).
+#[cfg(target_os = "linux")]
+static GLES_ENABLED_FEATURES: FeatureNames<5> = FeatureNames([
+    // V3D filters sRGB mipmaps in encoded space.
+    c"decodeEncodeSRGBForGenerateMipmap".as_ptr(),
+    // Mesa compiles synchronously here, so the extension offers nothing.
+    c"disableNativeParallelCompile".as_ptr(),
+    // Mesa before 26 writes blit destinations from outside the source.
+    c"clipSrcRegionForBlitFramebuffer".as_ptr(),
+    // llvmpipe clips with clip distances even after they're disabled.
+    c"emulateClipDistanceState".as_ptr(),
+    ptr::null(),
+]);
+
+/// A key for a per-thread display, returned to the pool when dropped. It
+/// starts at 1, since 0 is the null native display [`Display::open`] uses.
+#[derive(Debug)]
+struct DisplayKey(usize);
+
+/// Keys free for reuse. A key's display stays initialized, so a later thread
+/// reuses it: ANGLE leaks a little for each new key, even when terminated.
+static FREE_DISPLAY_KEYS: Mutex<Vec<usize>> = Mutex::new(Vec::new());
+
+/// The next key never used.
+static NEXT_DISPLAY_KEY: AtomicUsize = AtomicUsize::new(1);
+
+impl DisplayKey {
+    fn take() -> Self {
+        let free = FREE_DISPLAY_KEYS
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .pop();
+        Self(free.unwrap_or_else(|| NEXT_DISPLAY_KEY.fetch_add(1, Ordering::Relaxed)))
+    }
+}
+
+impl Drop for DisplayKey {
+    fn drop(&mut self) {
+        FREE_DISPLAY_KEYS
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(self.0);
+    }
+}
+
+thread_local! {
+    /// This thread's display, on backends with one per thread.
+    static THREAD_DISPLAY: RefCell<Option<Display>> = const { RefCell::new(None) };
+}
+
+/// `EGL_CONTEXT_VIRTUALIZATION_GROUP_ANGLE`.
+const EGL_CONTEXT_VIRTUALIZATION_GROUP_ANGLE: EGLint = 0x3481;
+
+/// The next thread's virtualization group.
+static NEXT_VIRTUALIZATION_GROUP: AtomicI32 = AtomicI32::new(1);
+
+thread_local! {
+    /// This thread's virtualization group. ANGLE's OpenGL ES backend puts a
+    /// group's contexts on one native context, which only one thread can have
+    /// current, so a group per thread lets each thread hold contexts.
+    static VIRTUALIZATION_GROUP: EGLint =
+        NEXT_VIRTUALIZATION_GROUP.fetch_add(1, Ordering::Relaxed);
+}
+
+/// Whether `kind` is the OpenGL ES backend's display.
+fn is_gles(kind: DisplayKind) -> bool {
+    #[cfg(target_os = "linux")]
+    {
+        matches!(kind, DisplayKind::Gles)
+    }
+    #[cfg(not(target_os = "linux"))]
+    {
+        let _ = kind;
+        false
+    }
+}
+
+/// `EGL_DONT_CARE`, `((EGLint)-1)` in the headers: a cast macro bindgen skips.
+const EGL_DONT_CARE: EGLint = -1;
 
 thread_local! {
     /// The context this crate last made current on this thread, or null.
@@ -85,6 +193,11 @@ pub enum DisplayKind {
     Gpu,
     /// `SwiftShader` through ANGLE's Vulkan backend.
     SwiftShader,
+    /// ANGLE's OpenGL ES backend on the system's EGL driver, reached through
+    /// Mesa's surfaceless platform. ANGLE opens `libEGL.so.1` only when this
+    /// display is initialized.
+    #[cfg(target_os = "linux")]
+    Gles,
 }
 
 #[cfg(target_os = "macos")]
@@ -108,12 +221,25 @@ pub enum ClientVersion {
 pub struct Display {
     angle: Angle,
     raw: EGLDisplay,
+    /// Shared by every clone of this handle, contexts' included, so
+    /// [`Display::terminate`] can tell whether it holds the only one. It
+    /// counts this open's handles only: another `Display::open` that ANGLE
+    /// maps to the same display (on Linux, the GPU and `SwiftShader` kinds)
+    /// has its own.
+    handles: Arc<()>,
+    /// Which display this is.
+    kind: DisplayKind,
+    /// The key this display holds, shared by its clones, which goes back to
+    /// the pool with the last of them; `None` for the key [`Display::open`]
+    /// uses, which is never pooled.
+    _key: Option<Arc<DisplayKey>>,
 }
 
 // SAFETY: an EGLDisplay is a process-global handle, and EGL requires display
 // functions to be callable from any thread (EGL 1.5 §2.6), and an initialized
 // display is usable from every thread of the process (§3.2); ANGLE locks
-// internally. `Angle` is an `Arc` of immutable function pointers.
+// internally. `Angle` is an `Arc` of immutable function pointers, and
+// `handles` an `Arc<()>`.
 unsafe impl Send for Display {}
 // SAFETY: as above; no method mutates `Display` itself.
 unsafe impl Sync for Display {}
@@ -133,32 +259,81 @@ impl Display {
     ///
     /// Returns the failing EGL call and error code.
     pub fn open(angle: &Angle, kind: DisplayKind) -> Result<Self, EglError> {
+        Self::open_keyed(angle, kind, None)
+    }
+
+    /// Opens the display for `key`: ANGLE keeps one display per platform
+    /// attribute list and native display value, and the Metal backend takes
+    /// the value as an opaque key. `None` is the null native display.
+    fn open_keyed(
+        angle: &Angle,
+        kind: DisplayKind,
+        key: Option<Arc<DisplayKey>>,
+    ) -> Result<Self, EglError> {
         let fns = angle.fns();
-        let (platform, device) = match kind {
-            DisplayKind::Gpu => (GPU_PLATFORM, EGL_PLATFORM_ANGLE_DEVICE_TYPE_HARDWARE_ANGLE),
+        let native_display = ptr::without_provenance_mut(key.as_ref().map_or(0, |key| key.0));
+        // Only the OpenGL ES backend adds attributes; elsewhere EGL_NONE in
+        // their place ends the list.
+        let none = EGL_NONE as EGLAttrib;
+        let (platform, device, extra) = match kind {
+            DisplayKind::Gpu => (
+                GPU_PLATFORM,
+                EGL_PLATFORM_ANGLE_DEVICE_TYPE_HARDWARE_ANGLE,
+                [none; 6],
+            ),
             DisplayKind::SwiftShader => (
                 EGL_PLATFORM_ANGLE_TYPE_VULKAN_ANGLE,
                 EGL_PLATFORM_ANGLE_DEVICE_TYPE_SWIFTSHADER_ANGLE,
+                [none; 6],
+            ),
+            #[cfg(target_os = "linux")]
+            DisplayKind::Gles => (
+                crate::bindings::EGL_PLATFORM_ANGLE_TYPE_OPENGLES_ANGLE,
+                EGL_PLATFORM_ANGLE_DEVICE_TYPE_HARDWARE_ANGLE,
+                [
+                    crate::bindings::EGL_PLATFORM_ANGLE_NATIVE_PLATFORM_TYPE_ANGLE as EGLAttrib,
+                    crate::bindings::EGL_PLATFORM_SURFACELESS_MESA as EGLAttrib,
+                    EGL_FEATURE_OVERRIDES_DISABLED_ANGLE,
+                    GLES_DISABLED_FEATURES
+                        .0
+                        .as_ptr()
+                        .expose_provenance()
+                        .cast_signed(),
+                    EGL_FEATURE_OVERRIDES_ENABLED_ANGLE,
+                    GLES_ENABLED_FEATURES
+                        .0
+                        .as_ptr()
+                        .expose_provenance()
+                        .cast_signed(),
+                ],
             ),
         };
         let attribs = [
-            EGL_PLATFORM_ANGLE_TYPE_ANGLE,
-            platform,
-            EGL_PLATFORM_ANGLE_DEVICE_TYPE_ANGLE,
-            device,
-            EGL_NONE,
+            EGL_PLATFORM_ANGLE_TYPE_ANGLE as EGLAttrib,
+            platform as EGLAttrib,
+            EGL_PLATFORM_ANGLE_DEVICE_TYPE_ANGLE as EGLAttrib,
+            device as EGLAttrib,
+            extra[0],
+            extra[1],
+            extra[2],
+            extra[3],
+            extra[4],
+            extra[5],
+            none,
         ];
         // SAFETY: the attribute list is EGL_NONE-terminated and outlives the
-        // call; a null native display is valid for ANGLE platforms.
+        // call, and the feature list it may point to is static, as ANGLE keeps
+        // the pointer; ANGLE platforms take any native display value, and use
+        // it only as a key.
         let raw = unsafe {
-            (fns.eglGetPlatformDisplayEXT)(
+            (fns.eglGetPlatformDisplay)(
                 EGL_PLATFORM_ANGLE_ANGLE.cast_unsigned(),
-                ptr::null_mut(),
+                native_display,
                 attribs.as_ptr(),
             )
         };
         if raw.is_null() {
-            return Err(egl_error(angle, "eglGetPlatformDisplayEXT"));
+            return Err(egl_error(angle, "eglGetPlatformDisplay"));
         }
         // SAFETY: `raw` is a display returned above; null version pointers are
         // allowed.
@@ -169,7 +344,56 @@ impl Display {
         Ok(Self {
             angle: angle.clone(),
             raw,
+            handles: Arc::new(()),
+            kind,
+            _key: key,
         })
+    }
+
+    /// The display this thread creates contexts on. That is `self`, except on
+    /// Metal, where each thread gets its own: ANGLE's Metal backend shares
+    /// its command queue and state caches across a display's contexts without
+    /// a lock. Threads sharing one read stale pixels and can crash the
+    /// process. A thread's display goes back to a pool when the thread and
+    /// its contexts are gone, so the number of displays follows the peak
+    /// number of threads.
+    ///
+    /// # Errors
+    ///
+    /// Returns the failing EGL call and error code.
+    pub fn for_this_thread(&self) -> Result<Self, EglError> {
+        // Metal's displays are not safe to share between threads.
+        if !(cfg!(target_os = "macos") && matches!(self.kind, DisplayKind::Gpu)) {
+            return Ok(self.clone());
+        }
+        THREAD_DISPLAY.with(|slot| {
+            if let Some(display) = slot.borrow().as_ref() {
+                return Ok(display.clone());
+            }
+            let key = Arc::new(DisplayKey::take());
+            let display = Self::open_keyed(&self.angle, self.kind, Some(key))?;
+            *slot.borrow_mut() = Some(display.clone());
+            Ok(display)
+        })
+    }
+
+    /// Terminates the display, so that it holds no device. ANGLE keeps the
+    /// display itself, and initializes it again, possibly on another device,
+    /// when it is next opened. Does nothing while another handle from the
+    /// same open exists, such as a clone or a live context's. Handles from
+    /// another open of the same ANGLE display are not seen, so the caller
+    /// must ensure none is in use (on Linux, `oxgl-core`'s backend cache
+    /// never opens the GPU kind while `SwiftShader` holds the display).
+    pub fn terminate(self) {
+        if Arc::strong_count(&self.handles) > 1 {
+            return;
+        }
+        // SAFETY: `raw` is a display returned by eglGetPlatformDisplay.
+        // eglTerminate accepts any valid display, initialized or not, and
+        // later calls on a terminated display fail with EGL_NOT_INITIALIZED
+        // (EGL 1.5 §3.2) rather than misbehave. Its result is ignored: the
+        // only failure is EGL_BAD_DISPLAY, which `raw` rules out.
+        unsafe { (self.angle.fns().eglTerminate)(self.raw) };
     }
 
     /// Creates a WebGL-compatible, surfaceless context for `version`.
@@ -200,6 +424,12 @@ impl Display {
             EGL_FALSE,
             EGL_CONTEXT_CLIENT_ARRAYS_ENABLED_ANGLE,
             EGL_FALSE,
+            if is_gles(self.kind) {
+                EGL_CONTEXT_VIRTUALIZATION_GROUP_ANGLE
+            } else {
+                EGL_NONE
+            },
+            VIRTUALIZATION_GROUP.with(|group| *group),
             EGL_NONE,
         ];
         // SAFETY: display and config are valid; the attribute list is
@@ -217,11 +447,30 @@ impl Display {
         })
     }
 
+    /// Whether the display offers a config for `version`. ANGLE offers no
+    /// OpenGL ES 3 config on a device it caps at OpenGL ES 2.0.
+    #[must_use]
+    pub fn supports(&self, version: ClientVersion) -> bool {
+        let renderable = match version {
+            ClientVersion::Es2 => EGL_OPENGL_ES2_BIT,
+            ClientVersion::Es3 => EGL_OPENGL_ES3_BIT,
+        };
+        self.choose_config(renderable).is_ok()
+    }
+
     /// Picks a config that can create a context of the `renderable` API. The
     /// context is used surfaceless, so the config's buffers are irrelevant.
+    /// `EGL_SURFACE_TYPE` defaults to `EGL_WINDOW_BIT`, which no config of
+    /// the OpenGL ES display has: Mesa's surfaceless configs are pbuffer-only.
     fn choose_config(&self, renderable: EGLint) -> Result<EGLConfig, EglError> {
         let fns = self.angle.fns();
-        let attribs = [EGL_RENDERABLE_TYPE, renderable, EGL_NONE];
+        let attribs = [
+            EGL_RENDERABLE_TYPE,
+            renderable,
+            EGL_SURFACE_TYPE,
+            EGL_DONT_CARE,
+            EGL_NONE,
+        ];
         let mut configs: [EGLConfig; 64] = [ptr::null_mut(); 64];
         let mut count: EGLint = 0;
         // SAFETY: `configs` has room for the 64 entries the call may write and

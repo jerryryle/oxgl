@@ -298,4 +298,4 @@ The three.js runner SHALL accept an expectations entry that lists, after its exp
 
 #### Scenario: Update on one platform keeps the others' entries
 - **WHEN** `webgl_shadowmap_viewer` is listed as `DIFF 1%` with no platforms, it matches within 0.1% on macOS arm64, and the developer runs the update there
-- **THEN** the entry becomes `DIFF 1% [linux-x64 linux-arm64 windows-x64 windows-arm64]` with its reason kept, so runs on the other platforms still allow 1%
+- **THEN** the entry becomes `DIFF 1% [linux-x64 linux-arm64 windows-x64 windows-arm64 linux-x64-gles linux-arm64-gles]` with its reason kept, so runs on the other platforms still allow 1%

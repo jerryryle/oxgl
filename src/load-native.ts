@@ -66,6 +66,8 @@ export interface NativeTexArgs {
  */
 export interface NativeBinding {
   nativeAbiVersion(): number;
+  /** Test-only backends this build accepts for `OXGL_BACKEND` (`gles` in a `test-gles` build). */
+  testBackends(): string[];
   init(libDir: string): void;
   createContext(
     backend: string,
@@ -237,7 +239,7 @@ export interface NativeBinding {
 }
 
 /** Version of the JS ↔ native interface this package was built for. */
-export const NATIVE_ABI_VERSION = 14;
+export const NATIVE_ABI_VERSION = 15;
 
 /** An `Error` with `code: 'OXGL_NATIVE_MISSING'` naming the host and `detail`. */
 export function nativeMissing(
