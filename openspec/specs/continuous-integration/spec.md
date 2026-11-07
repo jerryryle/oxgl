@@ -28,7 +28,7 @@ On each platform, CI SHALL run `cargo fmt --check`, `cargo clippy --workspace --
 - **THEN** CI fails rather than updating the lockfile
 
 ### Requirement: Node checks in software mode
-On each platform, CI SHALL install dependencies with `npm ci` and run the JS lint and type check. It SHALL run the Node test suite (including the soak test) with `OXGL_BACKEND=software` against that platform's packages from the run's build (Each platform is built once per run), on Node 24 on every platform and on both ends of `engines` on Linux arm64.
+On each platform, CI SHALL install dependencies with `npm ci` and run the JS lint and type check. It SHALL run the Node test suite (including the soak test) with `OXGL_BACKEND=software` against that platform's packages from the run's build (Each platform is built once per run), on Node 24 on every platform and on both ends of `engines` on Linux arm64. On Linux x64 it SHALL then install Mesa's Vulkan driver (`mesa-vulkan-drivers`) and run the backend-selection tests without `OXGL_BACKEND`.
 
 #### Scenario: Software rendering on every platform
 - **WHEN** the Node test step runs
@@ -37,6 +37,10 @@ On each platform, CI SHALL install dependencies with `npm ci` and run the JS lin
 #### Scenario: Oldest supported Node
 - **WHEN** the Node tests run on Linux arm64 on Node 22.22.2
 - **THEN** they use the same Linux arm64 packages as the Node 24 leg, and pass
+
+#### Scenario: A Vulkan GPU display rejected as a CPU
+- **WHEN** the Linux x64 leg runs the backend-selection tests with lavapipe as the only Vulkan device
+- **THEN** the test that creates an `'auto'` context and then a `'software'` one runs (not skips), and both render on SwiftShader
 
 ### Requirement: AddressSanitizer job
 CI SHALL include Linux arm64 and Linux x64 jobs that build and run the Rust test suites, including the SwiftShader integration and soak tests, with AddressSanitizer and LeakSanitizer enabled. Any sanitizer report SHALL fail the job.
@@ -193,6 +197,13 @@ In each run, CI SHALL build and pack oxgl once per supported platform, in one bu
 - **WHEN** a pull request's run finishes
 - **THEN** each platform's packages can be downloaded from the run, whether or not the run releases
 
+### Requirement: Test addon build
+The Linux x64 build job SHALL also build the addon with the Cargo feature `test-gles`, after packing and outside the packed directory, and upload it as a separate artifact, which SHALL NOT be packed into any package or released. The OpenGL ES backend job SHALL replace the Linux x64 addon with that build, its one departure from "Each platform is built once per run".
+
+#### Scenario: Test addon never packed
+- **WHEN** the Linux x64 build job packs `@oxgl-js/linux-x64-gnu`
+- **THEN** the packed addon is the one built without `test-gles`, and with it `OXGL_BACKEND=gles` throws `OXGL_INVALID_BACKEND`
+
 ### Requirement: Events and job sets
 CI SHALL run on every pull request targeting `main`, every merge group of its merge queue, every push to `main` and every manual run, cancelling only superseded runs of a pull request or of manual runs off `main`. A pull request runs the quick checks, a merge group the full checks, and a push to `main` publishes what the merge group run for its commit produced, building only to warm caches. Which build and test jobs run SHALL NOT depend on which files changed.
 
@@ -278,3 +289,18 @@ Pull requests and cross-repository dispatches made by automation SHALL use a sho
 #### Scenario: Token created where it's used
 - **WHEN** the workflow logs are read
 - **THEN** every App token is created in the job that uses it, immediately before the step that uses it
+
+### Requirement: OpenGL ES backend job
+CI SHALL run a job on Linux x64 that installs Mesa's EGL and GL driver packages and unpacks the run's Linux x64 packages, replacing their addon with the `test-gles` build. With `OXGL_BACKEND=gles`, it SHALL then run the Node test suite, both conformance suites and the three.js examples, judged against the expectations for the `linux-x64-gles` platform. It SHALL be one of the full-only jobs: a pull request's quick checks skip it, and the merge queue runs it. A failure SHALL fail the `ci` check.
+
+#### Scenario: GL code path tested on llvmpipe
+- **WHEN** the OpenGL ES backend job runs
+- **THEN** every context it creates renders through ANGLE's OpenGL ES backend on Mesa's llvmpipe, which the job's log shows in the renderer string
+
+#### Scenario: Regression on the OpenGL ES backend only
+- **WHEN** a change breaks a conformance page only on the OpenGL ES backend
+- **THEN** the OpenGL ES backend job fails and the `ci` check fails, while the software-backend jobs pass
+
+#### Scenario: Quick checks skip the OpenGL ES backend job
+- **WHEN** a pull request without `full-ci` runs the quick checks
+- **THEN** the OpenGL ES backend job is skipped and the `ci` check can still succeed

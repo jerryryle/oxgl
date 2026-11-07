@@ -20,6 +20,14 @@ Covers texture and sampler objects, texture uploads from views, pixel unpack buf
 - **WHEN** `texParameteri(TEXTURE_2D, TEXTURE_MIN_FILTER, NEAREST)` is called
 - **THEN** `getTexParameter(TEXTURE_2D, TEXTURE_MIN_FILTER)` is `NEAREST` (cf. Khronos `conformance/textures/misc/texture-mips.html`)
 
+#### Scenario: Mipmaps of a float texture without linear filtering
+- **WHEN** a WebGL 1 context on the OpenGL ES backend, on a driver without `OES_texture_float_linear`, enables `OES_texture_float` and calls `generateMipmap` on a float texture with mipmap levels to generate, of any format
+- **THEN** `INVALID_OPERATION` is generated and the context is not lost (cf. Khronos `conformance/extensions/oes-texture-float-linear.html`)
+
+#### Scenario: Mipmaps of an RGB float texture with linear filtering
+- **WHEN** a WebGL 1 context on the OpenGL ES backend, on a driver with `OES_texture_float_linear`, enables `OES_texture_float` and calls `generateMipmap` on an `RGB` float texture
+- **THEN** `INVALID_OPERATION` is generated and the context is not lost, as the format can't be rendered to
+
 ### Requirement: Uploads from views
 `texImage2D`, `texSubImage2D` and, on WebGL 2, `texImage3D` and `texSubImage3D` SHALL accept an `ArrayBufferView` (or `null` for zero-filled storage) whose type matches the pixel type, and SHALL generate `INVALID_OPERATION` for a mismatched type or a view smaller than the unpack parameters require (WebGL 1.0 §5.14.8, WebGL 2.0 §3.7.6). On WebGL 2 the `srcOffset` forms and, with a pixel unpack buffer bound, the `pboOffset` forms SHALL be supported.
 
