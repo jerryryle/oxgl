@@ -15,7 +15,7 @@
 
 ## 3. The `linux-arm64-gles` expectations
 
-- [ ] 3.1 Record the `linux-arm64-gles` entries from the first full CI run's reports, not from local runs. For each unexpected result on a `linux-arm64-gles` leg, add the platform to the matching entry or add an entry for it, with its reason from evidence. Where arm64 differs from `linux-x64-gles`, diagnose the cause before recording it, as the `linux-gles-backend` traces did. For each entry without a list reported stale there, give it an explicit list of the six other platforms. Verify that every `git diff` change does one of those things, and that `npm run lint` passes.
+- [x] 3.1 Record the `linux-arm64-gles` entries from the first full CI run's reports, not from local runs. For each unexpected result on a `linux-arm64-gles` leg, add the platform to the matching entry or add an entry for it, with its reason from evidence. Where arm64 differs from `linux-x64-gles`, diagnose the cause before recording it, as the `linux-gles-backend` traces did. For each entry without a list reported stale there, give it an explicit list of the six other platforms. Verify that every `git diff` change does one of those things, and that `npm run lint` passes.
 
 ## 4. Verification
 

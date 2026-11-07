@@ -15,11 +15,12 @@ misc_controls_arcball FAIL # runner: the page's CSS gradient background is not c
 misc_controls_fly DIFF 1% # rasterization: 0.17% of pixels differ
 misc_controls_pointerlock FAIL # runner: the HTML start overlay is not composited (99.76% of pixels differ)
 misc_exporter_draco FAIL # runner: loads a remote asset, refused: https://cdn.jsdelivr.net/gh/google/draco@1.5.7/javascript/draco_encoder.js
-misc_exporter_exr DIFF 2% [linux-x64-gles] # llvmpipe: the PMREM background differs at high-contrast edges, on Mesa 26.2.2 too; not antialiasing or filtering shortcuts, cause unknown; passes on V3D (1.04% of pixels differ)
+misc_exporter_exr DIFF 2% [linux-x64-gles linux-arm64-gles] # llvmpipe: the PMREM background differs at high-contrast edges, on Mesa 26.2.2 too; not antialiasing or filtering shortcuts, cause unknown; passes on V3D (1.04% of pixels differ)
 misc_exporter_gcode FAIL # runner: loads a remote asset, refused: https://cdn.jsdelivr.net/npm/@jgphilpott/polyslice@26.4.0/dist/index.browser.esm.js
 misc_exporter_gltf DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 0.33% of pixels differ
 misc_exporter_gltf FAIL [linux-x64-gles] # llvmpipe before Mesa 26.2: tile-sized blocks along triangle edges; passes on 26.2.2's llvmpipe and on V3D (1.99% of pixels differ)
-misc_exporter_ktx2 DIFF 1% [linux-x64-gles] # llvmpipe: the PMREM background differs at high-contrast edges, on Mesa 26.2.2 too; not antialiasing or filtering shortcuts, cause unknown; passes on V3D (0.21% of pixels differ)
+misc_exporter_gltf DIFF 2% [linux-arm64-gles] # arm64 llvmpipe, Mesa 25.2.8: tile-sized blocks along triangle edges; passes on x64 llvmpipe, Mesa 26.2.2's arm64 llvmpipe and V3D (1.99% of pixels differ)
+misc_exporter_ktx2 DIFF 1% [linux-x64-gles linux-arm64-gles] # llvmpipe: the PMREM background differs at high-contrast edges, on Mesa 26.2.2 too; not antialiasing or filtering shortcuts, cause unknown; passes on V3D (0.21% of pixels differ)
 misc_exporter_ply DIFF 1% # rasterization: 0.36% of pixels differ
 misc_exporter_stl DIFF 1% # rasterization: 0.19% of pixels differ
 misc_raycaster_helper FAIL # runner: loads a remote asset, refused: https://cdn.jsdelivr.net/npm/@gsimone/three-raycaster-helper@0.1.0/dist/gsimone-three-raycaster-helper.esm.js
@@ -45,18 +46,18 @@ webaudio_timing FAIL # runner: jsdom has no AudioContext
 webaudio_visualizer SKIP # upstream: timing issues
 webgl_animation_keyframes DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 0.26% of pixels differ
 webgl_animation_skinning_morph DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 0.86% of pixels differ
-webgl_animation_skinning_morph FAIL [linux-x64-gles] # llvmpipe before Mesa 26.2: tile-sized blocks along triangle edges; passes on 26.2.2's llvmpipe and on V3D (5.94% of pixels differ)
+webgl_animation_skinning_morph FAIL [linux-x64-gles linux-arm64-gles] # llvmpipe before Mesa 26.2: tile-sized blocks along triangle edges; passes on 26.2.2's llvmpipe and on V3D (5.94% of pixels differ)
 webgl_batch_lod_bvh FAIL # runner: loads a remote asset, refused: https://cdn.jsdelivr.net/npm/three-mesh-bvh@0.9.10/build/index.module.js
 webgl_buffergeometry_custom_attributes_particles DIFF 2% # rasterization: 1.23% of pixels differ
 webgl_buffergeometry_glbufferattribute FAIL [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # timing: swaps its positions on a 2 s wall-clock interval, so the frame depends on how long the runner waits (0.104% of pixels differ)
 webgl_buffergeometry_instancing DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 0.23% of pixels differ
-webgl_buffergeometry_instancing_billboards DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 0.54% of pixels differ
+webgl_buffergeometry_instancing_billboards DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64 linux-arm64-gles] # rasterization: 0.54% of pixels differ
 webgl_buffergeometry_lines DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 0.26% of pixels differ
 webgl_buffergeometry_lines_indexed DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 0.16% of pixels differ
 webgl_buffergeometry_points DIFF 2% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 1.73% of pixels differ
 webgl_buffergeometry_points_interleaved DIFF 2% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 1.70% of pixels differ
 webgl_camera_logarithmicdepthbuffer DIFF 3% [linux-x64 windows-x64] # runner: the HTML labels and split border over the canvases are not composited, and on x64 more of the normal z-buffer view's z-fighting differs (2.20% of pixels differ)
-webgl_camera_logarithmicdepthbuffer DIFF 2% [linux-arm64 macos-arm64 windows-arm64 linux-x64-gles] # runner: the HTML labels and split border over the canvases are not composited (1.73% of pixels differ)
+webgl_camera_logarithmicdepthbuffer DIFF 2% [linux-arm64 macos-arm64 windows-arm64 linux-x64-gles linux-arm64-gles] # runner: the HTML labels and split border over the canvases are not composited (1.73% of pixels differ)
 webgl_custom_attributes_points DIFF 2% # rasterization: 1.45% of pixels differ
 webgl_effects_ascii FAIL # runner: no WebGL canvas in the document (renders with CSS, SVG or 2D)
 webgl_framebuffer_texture DIFF 1% # rasterization: 0.36% of pixels differ
@@ -81,9 +82,10 @@ webgl_loader_gcode DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 window
 webgl_loader_gltf FAIL # runner: loads a remote asset, refused: https://raw.githubusercontent.com/KhronosGroup/glTF-Sample-Assets/main/Models/model-index.json
 webgl_loader_gltf_animation_pointer FAIL # runner: loads a remote asset, refused: https://cdn.jsdelivr.net/npm/@needle-tools/three-animation-pointer@1.0.7
 webgl_loader_gltf_dispersion DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 1.00% of pixels differ
-webgl_loader_gltf_instancing DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 0.11% of pixels differ
+webgl_loader_gltf_instancing DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64 linux-arm64-gles] # rasterization: 0.11% of pixels differ
 webgl_loader_gltf_progressive_lod FAIL # runner: loads a remote asset, refused: https://cdn.jsdelivr.net/npm/@needle-tools/gltf-progressive@3.2.0/gltf-progressive.min.js
 webgl_loader_gltf_transmission DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 0.36% of pixels differ
+webgl_loader_gltf_transmission DIFF 2% [linux-arm64-gles] # arm64 llvmpipe, Mesa 25.2.8: 1.70% of pixels differ; passes on x64 llvmpipe, Mesa 26.2.2's arm64 llvmpipe and V3D
 webgl_loader_ifc FAIL # runner: loads a remote asset, refused: https://cdn.jsdelivr.net/npm/web-ifc@0.0.77/web-ifc-api.js
 webgl_loader_kmz DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 0.26% of pixels differ
 webgl_loader_ldraw FAIL # runner: the HTML logo overlay is not composited (5.20% of pixels differ)
@@ -97,15 +99,16 @@ webgl_loader_ttf FAIL # runner: loads a remote asset, refused: https://cdn.jsdel
 webgl_lod DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 0.30% of pixels differ
 webgl_marchingcubes SKIP # upstream: takes too long (1 min)
 webgl_materials_alphahash FAIL [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # noise: hashed alpha under TAA jitter lands on different pixels (5.95% of pixels differ)
-webgl_materials_blending DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 0.91% of pixels differ
-webgl_materials_blending_custom DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: label text drawn by the canvas package (0.37% of pixels differ)
+webgl_materials_blending DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64 linux-arm64-gles] # rasterization: 0.91% of pixels differ
+webgl_materials_blending_custom DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64 linux-arm64-gles] # rasterization: label text drawn by the canvas package (0.37% of pixels differ)
 webgl_materials_car DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 0.18% of pixels differ
-webgl_materials_car FAIL [linux-x64-gles] # llvmpipe before Mesa 26.2: tile-sized blocks along triangle edges; passes on 26.2.2's llvmpipe and on V3D (11.56% of pixels differ)
+webgl_materials_car FAIL [linux-x64-gles linux-arm64-gles] # llvmpipe before Mesa 26.2: tile-sized blocks along triangle edges; passes on 26.2.2's llvmpipe and on V3D (11.56% of pixels differ)
 webgl_materials_cubemap_dynamic SKIP # upstream: takes too long (1 min)
 webgl_materials_cubemap_render_to_mipmaps DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 0.47% of pixels differ
 webgl_materials_displacementmap SKIP # upstream: takes too long (1 min)
 webgl_materials_envmaps_fasthdr FAIL # runner: loads a remote asset, refused: https://cdn.needle.tools/static/hdris/ballroom_2k.pmrem.ktx2
 webgl_materials_envmaps_hdr SKIP # upstream: takes too long (1 min)
+webgl_materials_physical_clearcoat DIFF 1% [linux-arm64-gles] # arm64 llvmpipe, Mesa 25.2.8: 0.16% of pixels differ; passes on x64 llvmpipe, Mesa 26.2.2's arm64 llvmpipe and V3D
 webgl_materials_physical_transmission_alpha FAIL # runner: the page's HTML table behind the transparent canvas is not rendered (27.98% of pixels differ)
 webgl_materials_texture_anisotropy FAIL [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # SwiftShader: anisotropic filtering differs from the reference GPU (9.38% of pixels differ)
 webgl_materials_texture_canvas DIFF 5% # runner: the page's own 2D canvas element is not composited (4.11% of pixels differ)
@@ -125,7 +128,7 @@ webgl_multiple_views DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 wind
 webgl_multisampled_renderbuffers DIFF 2% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: wireframe line edges (1.43% of pixels differ)
 webgl_points_billboards DIFF 1% # rasterization: 0.17% of pixels differ
 webgl_points_dynamic DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 0.43% of pixels differ
-webgl_postprocessing_3dlut DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 0.18% of pixels differ
+webgl_postprocessing_3dlut DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64 linux-arm64-gles] # rasterization: 0.18% of pixels differ
 webgl_postprocessing_advanced DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 0.16% of pixels differ
 webgl_postprocessing_glitch FAIL [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # noise: the glitch noise differs from Chrome's run (31.59% of pixels differ)
 webgl_postprocessing_godrays FAIL # runner: loads a remote asset, refused: https://cdn.jsdelivr.net/npm/postprocessing@6.39.1/build/index.js
@@ -139,16 +142,18 @@ webgl_renderer_pathtracer SKIP # upstream: needs more time to render
 webgl_reversed_depth_buffer DIFF 4% # runner: the HTML labels and note over the canvases are not composited (3.44% of pixels differ)
 webgl_shadowmap SKIP # upstream: timing issues
 webgl_shadowmap_progressive SKIP # upstream: needs more time to render
-webgl_shadowmap_viewer DIFF 1% [linux-arm64] # rasterization: 0.54% of pixels differ
+webgl_shadowmap_viewer DIFF 1% [linux-arm64 linux-arm64-gles] # rasterization: 0.54% of pixels differ
 webgl_test_memory2 SKIP # upstream: times out
 webgl_test_wide_gamut DIFF 2% # runner: the HTML labels and slider over the canvas are not composited (1.90% of pixels differ)
+webgl_tsl_clearcoat DIFF 1% [linux-arm64-gles] # arm64 llvmpipe, Mesa 25.2.8: 0.16% of pixels differ; passes on x64 llvmpipe, Mesa 26.2.2's arm64 llvmpipe and V3D
 webgl_video_kinect SKIP # upstream: video hangs CI
 webgl_video_panorama_equirectangular SKIP # upstream: video hangs CI
 webgl_volume_instancing DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 0.80% of pixels differ
-webgl_volume_perlin DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 0.26% of pixels differ
+webgl_volume_perlin DIFF 1% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64 linux-arm64-gles] # rasterization: 0.26% of pixels differ
+webgl_watch DIFF 1% [linux-arm64-gles] # arm64 llvmpipe, Mesa 25.2.8: 0.10% of pixels differ; passes on x64 llvmpipe, Mesa 26.2.2's arm64 llvmpipe and V3D
 webgl_worker_offscreencanvas FAIL # runner: posting a transferred OffscreenCanvas to a worker fails (DataCloneError)
-webxr_vr_handinput_pointerclick DIFF 1% [linux-arm64] # rasterization: 0.28% of pixels differ
-webxr_vr_handinput_pointerdrag DIFF 1% [linux-arm64] # rasterization: 0.28% of pixels differ
+webxr_vr_handinput_pointerclick DIFF 1% [linux-arm64 linux-arm64-gles] # rasterization: 0.28% of pixels differ
+webxr_vr_handinput_pointerdrag DIFF 1% [linux-arm64 linux-arm64-gles] # rasterization: 0.28% of pixels differ
 webxr_vr_layers FAIL # runner: jsdom has no Range.getBoundingClientRect
 webxr_vr_sandbox FAIL # runner: jsdom has no Range.getBoundingClientRect
 webxr_vr_teleport DIFF 2% [linux-x64 linux-arm64 macos-arm64 windows-x64 windows-arm64] # rasterization: 1.57% of pixels differ
