@@ -652,9 +652,9 @@ test('page runner: outcomes, early errors, media, canvas shim, crashes, timeouts
   assert.equal(ok, false);
   assert.deepEqual(report.harnessErrors.map((h) => h.path), ['missing.html']);
   assert.equal(outcome('webgl1', 'missing.html'), 'HARNESS_ERROR');
-  assert.ok(!written.has('webgl1 missing.html'));
-  assert.equal(written.get('webgl1 abort.html').outcome, 'CRASH');
-  assert.equal(written.get('webgl1 hang.html').outcome, 'TIMEOUT');
+  assert.equal(entryOf(written, 'webgl1', 'missing.html'), undefined);
+  assert.equal(entryOf(written, 'webgl1', 'abort.html').outcome, 'CRASH');
+  assert.equal(entryOf(written, 'webgl1', 'hang.html').outcome, 'TIMEOUT');
 
   // Results report fields.
   for (const field of ['commit', 'backend', 'idleTimeoutSeconds', 'jobs', 'platform', 'timestamp']) {
